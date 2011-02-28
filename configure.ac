@@ -71,7 +71,7 @@ AM_CONDITIONAL([USE_LIBXML2], [test -n "${LIBXML2_LIBS}"])
 PKG_CHECK_MODULES([LUA], [lua >= 5.1.0], [:], [:])
 AM_CONDITIONAL([HAVE_LUA], [test -n "${LUA_LIBS}"])
 ## check for unserding
-PKG_CHECK_MODULES([unserding], [unserding])
+PKG_CHECK_MODULES([unserding], [unserding >= 0.1.1])
 
 ## just so we know what to build
 AC_ARG_ENABLE([server], [
