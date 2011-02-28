@@ -64,6 +64,15 @@ if test "$with_mysql" != "no"; then
 fi
 AM_CONDITIONAL([USE_MYSQL], [test "$with_mysql" != "no" -a "${MYSQL_CONFIG}" != ":"])
 
+## check for libxml to process fixml
+PKG_CHECK_MODULES([LIBXML2], [libxml-2.0 >= 2.7])
+AM_CONDITIONAL([USE_LIBXML2], [test -n "${LIBXML2_LIBS}"])
+## check for lua
+PKG_CHECK_MODULES([LUA], [lua >= 5.1.0], [:], [:])
+AM_CONDITIONAL([HAVE_LUA], [test -n "${LUA_LIBS}"])
+## check for unserding
+PKG_CHECK_MODULES([unserding], [unserding])
+
 ## just so we know what to build
 AC_ARG_ENABLE([server], [
 AS_HELP_STRING([--enable-server], [Build the server component, default: no.])],
@@ -74,12 +83,6 @@ AS_HELP_STRING([--enable-client], [Build the client apps, default: yes.])],
 	[enable_cliapps="${enableval}"], [enable_cliapps="yes"])
 AM_CONDITIONAL([BUILD_CLIAPPS], [test "${enable_cliapps}" = "yes"])
 AM_CONDITIONAL([BUILD_LIBRARY], [test "yes" = "yes"])
-
-PKG_CHECK_MODULES([LIBXML2], [libxml-2.0 >= 2.7])
-PKG_CHECK_MODULES([LUA], [lua >= 5.1.0], [:], [:])
-
-AM_CONDITIONAL([HAVE_LUA], [test -n "${LUA_LIBS}"])
-AM_CONDITIONAL([USE_LIBXML2], [test -n "${LIBXML2_LIBS}"])
 
 AC_CONFIG_FILES([Makefile])
 AC_CONFIG_FILES([cli/Makefile])
