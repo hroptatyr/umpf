@@ -71,6 +71,20 @@ CREATE TABLE IF NOT EXISTS `aou_pfd_position` (
 		ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE InnoDB CHARSET ASCII;
 
+-- last portfolio
+-- keeps track of the last tag in chronological order
+CREATE TABLE IF NOT EXISTS `aou_pfd_last` (
+	portfolio_id INTEGER NOT NULL,
+	tag_id INTEGER NOT NULL,
+	UNIQUE KEY (`portfolio_id`, `tag_id`),
+	FOREIGN KEY (`portfolio_id`)
+		REFERENCES `aou_pfd_portfolio` (`portfolio_id`)
+		ON DELETE CASCADE ON UPDATE CASCADE,
+	FOREIGN KEY (`tag_id`)
+		REFERENCES `aou_pfd_tag` (`tag_id`)
+		ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE InnoDB CHARSET ASCII;
+
 -- just some getters
 DROP FUNCTION IF EXISTS `aou_pfd_get_security`;
 DELIMITER $$
