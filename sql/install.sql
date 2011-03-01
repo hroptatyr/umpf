@@ -61,7 +61,8 @@ CREATE TABLE IF NOT EXISTS `aou_pfd_security` (
 CREATE TABLE IF NOT EXISTS `aou_pfd_position` (
 	tag_id INTEGER NOT NULL,
 	security_id INTEGER NOT NULL,
-	position DECIMAL(18,9),
+	long_qty DECIMAL(18,9),
+	short_qty DECIMAL(18,9),
 	PRIMARY KEY (`tag_id`, `security_id`),
 	FOREIGN KEY (`tag_id`)
 		REFERENCES `aou_pfd_tag` (`tag_id`)
