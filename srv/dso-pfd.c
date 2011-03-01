@@ -1,10 +1,10 @@
-/*** dso-unsermarkt.c -- settlement and clearing house plus order queue
+/*** dso-pfd.c -- portfolio daemon
  *
- * Copyright (C) 2010 Sebastian Freundt
+ * Copyright (C) 2011 Sebastian Freundt
  *
  * Author:  Sebastian Freundt <sebastian.freundt@ga-group.nl>
  *
- * This file is part of unsermarkt.
+ * This file is part of the army of unserding daemons.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
