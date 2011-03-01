@@ -85,10 +85,8 @@ handle_close(int fd)
 
 static volatile int pfd_sock_net = -1;
 static volatile int pfd_sock_uds = -1;
-/* should be configurable */
-static const char pfd_sock_path[] = "/tmp/.s.pfd";
-/* should be configurable? */
-#define PFD_PORT	(8642)
+/* path to unix domain socket */
+const char *pfd_sock_path;
 
 
 /* unserding bindings */
@@ -97,21 +95,36 @@ init(void *clo)
 {
 	ud_ctx_t ctx = clo;
 	void *settings;
+	/* port to assign to */
+	int port;
 
 	PFD_DEBUG(MOD_PRE ": loading ...");
-	/* open a network sock and a unix domain sock */
-	pfd_sock_net = listener_net(PFD_PORT);
-	pfd_sock_uds = listener_uds(pfd_sock_path);
-	/* set up the IO watcher and timer */
-	init_watchers(ctx->mainloop, pfd_sock_net);
-	init_watchers(ctx->mainloop, pfd_sock_uds);
-	PFD_DBGCONT("loaded\n");
 
-	/* initialising the order queue */
-	if ((settings = udctx_get_setting(ctx)) != NULL) {
-		const char *dbpath = NULL;
-		udcfg_tbl_lookup_s(&dbpath, ctx, settings, "dbpath");
+	/* glue to lua settings */
+	if ((settings = udctx_get_setting(ctx)) == NULL) {
+		PFD_DBGCONT("failed\n");
+		return;
 	}
+	PFD_DBGCONT("\n");
+	/* obtain the unix domain sock from our settings */
+	udcfg_tbl_lookup_s(&pfd_sock_path, ctx, settings, "sock");
+	if (pfd_sock_path != NULL &&
+	    (pfd_sock_uds = listener_uds(pfd_sock_path)) > 0) {
+		/* set up the IO watcher and timer */
+		init_watchers(ctx->mainloop, pfd_sock_uds);
+	} else {
+		/* make sure we don't accidentally delete arbitrary files */
+		pfd_sock_path = NULL;
+	}
+	/* obtain port number for our network socket */
+	port = udcfg_tbl_lookup_i(ctx, settings, "port");
+	if (port &&
+	    (pfd_sock_net = listener_net(port)) > 0) {
+		/* set up the IO watcher and timer */
+		init_watchers(ctx->mainloop, pfd_sock_net);
+	}
+	PFD_DEBUG(MOD_PRE ": ... loaded\n");
+
 	/* clean up */
 	udctx_set_setting(ctx, NULL);
 	return;
@@ -133,6 +146,10 @@ deinit(void *clo)
 	deinit_watchers(ctx->mainloop);
 	pfd_sock_net = -1;
 	pfd_sock_uds = -1;
+	/* unlink the unix domain socket */
+	if (pfd_sock_path != NULL) {
+		unlink(pfd_sock_path);
+	}
 	PFD_DBGCONT("done\n");
 	return;
 }

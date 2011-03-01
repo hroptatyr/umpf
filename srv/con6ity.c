@@ -161,9 +161,11 @@ listener_uds(const char *sock_path)
 	   size = SUN_LEN (&name); */
 	sz = offsetof(struct sockaddr_un, sun_path) + strlen(__s.sun_path) + 1;
 
+	/* just unlink the socket */
+	unlink(sock_path);
 	/* we used to retry upon failure, but who cares */
 	if (bind(s, (struct sockaddr*)&__s, sz) < 0) {
-		PFD_DEBUG(MOD_PRE ": bind() failed, errno %d\n", errno);
+		PFD_DEBUG(MOD_PRE ": bind() failed: %s\n", strerror(errno));
 		close(s);
 		return -1;
 	}
