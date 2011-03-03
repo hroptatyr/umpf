@@ -11,18 +11,27 @@ noinst_PROGRAMS =
 lib_LTLIBRARIES =
 BUILT_SOURCES =
 CLEANFILES = $(BUILT_SOURCES)
+EXTRA_DIST =
 
 lib_LTLIBRARIES += libaou-pfd.la
 aouhdr_HEADERS += pfd.h
 libaou_pfd_la_SOURCES =
+EXTRA_libaou_pfd_la_SOURCES =
 libaou_pfd_la_SOURCES += proto-fixml.c
 libaou_pfd_la_SOURCES += print-fixml.c
 libaou_pfd_la_CPPFLAGS = $(AM_CPPFLAGS) $(LIBXML2_CFLAGS) -I$(top_srcdir)/srv
 libaou_pfd_la_LDFLAGS = $(AM_LDFLAGS) $(LIBXML2_LIBS)
 BUILT_SOURCES += proto-fixml-tag.c proto-fixml-attr.c
+EXTRA_libaou_pfd_la_SOURCES += proto-fixml-tag.gperf proto-fixml-attr.gperf
+EXTRA_libaou_pfd_la_SOURCES += $(BUILT_SOURCES)
 
 noinst_PROGRAMS += testlib
 testlib_LDFLAGS = libaou-pfd.la
+
+## serves documentation purposes
+EXTRA_DIST += example-msg-01.xml
+EXTRA_DIST += example-msg-02.xml
+EXTRA_DIST += example-msg-03.xml
 
 ## our rule for gperf
 %.c: %.gperf

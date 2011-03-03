@@ -3,24 +3,28 @@
 AM_CPPFLAGS = -D_GNU_SOURCE -D_POSIX_C_SOURCE=201001L -D__USE_XOPEN2K8
 AM_LDFLAGS =
 
-headerdir = $(includedir)/unserding
 moddir = $(libdir)/unserding
 
 bin_PROGRAMS =
 noinst_PROGRAMS =
+noinst_HEADERS =
 mod_LTLIBRARIES =
+BUILT_SOURCES =
+CLEANFILES = $(BUILT_SOURCES)
 
 if BUILD_SERVER
 mod_LTLIBRARIES += dso-pfd.la
+dso_pfd_la_SOURCES =
+EXTRA_dso_pfd_la_SOURCES =
 dso_pfd_la_LDFLAGS = -module
 dso_pfd_la_LDFLAGS += $(unserding_LDFLAGS) $(MYSQL_LIBS) $(LIBXML2_LIBS)
 dso_pfd_la_CPPFLAGS = $(AM_CPPFLAGS) $(unserding_CFLAGS)
 dso_pfd_la_CPPFLAGS += $(MYSQL_CPPFLAGS) $(LIBXML2_CFLAGS)
-dso_pfd_la_SOURCES = dso-pfd.c
+dso_pfd_la_SOURCES += dso-pfd.c
+EXTRA_dso_pfd_la_SOURCES += con6ity.c
+noinst_HEADERS += nifty.h
 endif
 
-BUILT_SOURCES =
-CLEANFILES = $(BUILT_SOURCES)
 
 # 
 # Help the developers get nice post-processed source files
