@@ -36,16 +36,16 @@ dnl This file is part of SXEmacs.
 AC_DEFUN([SXE_CHECK_LIBEV], [
 	## defines sxe_cv_feat_libev
 	SXE_CHECK_HEADERS([ev.h])
-	SXE_CHECK_LIB_FUNCS([ev], [ev_loop])
+	## we dont need a lib, so fuck this
+	dnl SXE_CHECK_LIB_FUNCS([ev], [ev_loop])
 
-	if test "$ac_cv_header_ev_h" = "yes" -a \
-		"$ac_cv_lib_ev___ev_loop" = "yes"; then
+	if test "$ac_cv_header_ev_h" = "yes"; then
 		AC_DEFINE([HAVE_LIBEV], [1], [Whether libev is fully functional])
 		sxe_cv_feat_libev="yes"
 		have_libev="yes"
 		LIBEV_CPPFLAGS=
 		LIBEV_LDFLAGS=
-		LIBEV_LIBS="-lev"
+		LIBEV_LIBS=""
 	else
 		sxe_cv_feat_libev="no"
 		have_libev="no"
