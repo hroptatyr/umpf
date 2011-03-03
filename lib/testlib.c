@@ -1,3 +1,4 @@
+#include <string.h>
 #include "pfd.h"
 
 #define countof(x)	(sizeof(x) / sizeof(*x))
@@ -43,6 +44,8 @@ main(int argc, const char *argv[])
 {
 	pfd_doc_t doc;
 	pfd_ctx_t ctx;
+	char altogether[4096] = {0};
+	size_t len;
 	size_t i;
 
 	doc = pfd_parse_file(argv[1]);
@@ -82,6 +85,32 @@ main(int argc, const char *argv[])
 			fprintf(stderr, "error in reentrant blob parsing\n");
 		}
 		/* otherwise everything's ok */
+	}
+
+	/* send 'em altogether now */
+	strcat(altogether, blob1);
+	strcat(altogether, blob2);
+	strcat(altogether, blob3);
+	len = strlen(altogether);
+
+	ctx = NULL;
+	doc = pfd_parse_blob(&ctx, altogether, len);
+	if (doc == NULL) {
+		fprintf(stderr, "no doc %p\n", ctx);
+	} else if (ctx != NULL) {
+		fprintf(stderr, "wants more data we haven't got\n");
+	} else {
+		pfd_free_doc(doc);
+	}
+
+	ctx = NULL;
+	doc = pfd_parse_blob_r(&ctx, altogether, len);
+	if (doc == NULL) {
+		fprintf(stderr, "no doc %p\n", ctx);
+	} else if (ctx != NULL) {
+		fprintf(stderr, "wants more data we haven't got\n");
+	} else {
+		pfd_free_doc(doc);
 	}
 	return 0;
 }

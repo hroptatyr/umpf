@@ -952,16 +952,17 @@ final_blob_p(__ctx_t ctx)
 }
 
 static void
-parse_blob(__ctx_t ctx, const char *buf, size_t bsz)
+parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
-	ctx->pp = xmlCreatePushParserCtxt(ctx->hdl, ctx, buf, bsz, NULL);
+	xmlParseChunk(ctx->pp, buf, bsz, bsz == 0);
 	return;
 }
 
 static void
-parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
+parse_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
-	xmlParseChunk(ctx->pp, buf, bsz, bsz == 0);
+	ctx->pp = xmlCreatePushParserCtxt(ctx->hdl, ctx, buf, 0, NULL);
+	parse_more_blob(ctx, buf, bsz);
 	return;
 }
 
