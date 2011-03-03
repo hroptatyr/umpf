@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<FIXML xmlns="http://www.fixprotocol.org/FIXML-4-4"
+	r="20030618" s="20040109" v="4.4">
+	<ReqForPossAck RptID="1234567"
+		BizDt="2009-10-27"
+		ReqTyp="0"
+		TotRpts="0"
+		Rslt="0"
+		Stat="0"
+		SetSesID="ITD"
+		TxnTm="2010-02-25T14:40:31">
+		<Pty ID="my_currencies" R="4">
+			<Sub ID="C" Typ="26" />
+		</Pty>
+	</ReqForPossAck>
+</FIXML>

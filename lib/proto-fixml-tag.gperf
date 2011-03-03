@@ -1,0 +1,28 @@
+%{
+typedef struct pfd_tag_s *pfd_tag_t;
+%}
+%7bit
+%readonly-tables
+%struct-type
+%define slot-name tag
+%define hash-function-name __tid_hash
+%define lookup-function-name __tiddify
+%null-strings
+%enum
+
+struct pfd_tag_s {
+	const char *tag;
+	pfd_tid_t tid;
+};
+
+%%
+Amt,	PFD_TAG_AMT
+Batch,	PFD_TAG_BATCH
+FIXML,	PFD_TAG_FIXML
+Instrmt,	PFD_TAG_INSTRMT
+PosRpt,	PFD_TAG_POS_RPT
+Pty,	PFD_TAG_PTY
+Qty,	PFD_TAG_QTY
+ReqForPoss,	PFD_TAG_REQ_FOR_POSS
+ReqForPossAck,	PFD_TAG_REQ_FOR_POSS_ACK
+Sub,	PFD_TAG_SUB

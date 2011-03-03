@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<FIXML xmlns="http://www.fixprotocol.org/FIXML-4-4"
+	r="20030618" s="20040109" v="4.4">
+	<ReqForPoss BizDt="2009-10-02"
+		ReqTyp="0" ReqID="1234567"
+		TxnTm="2009-10-02T09:59:24"
+		SetSesID="ITD">
+		<!-- name of the portfolio -->
+		<Pty ID="my_currencies" R="4"/>
+	</ReqForPoss>
+</FIXML>

@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<FIXML xmlns="http://www.fixprotocol.org/FIXML-4-4"
+	r="20030618" s="20040109" v="4.4">
+	<Batch>
+		<ReqForPossAck RptID="1234567"
+			BizDt="2009-10-27"
+			ReqTyp="0"
+			TotRpts="2"
+			Rslt="0"
+			Stat="0"
+			SetSesID="ITD"
+			TxnTm=" 2010-02-25T14:40:31">
+			<Pty ID="my_currencies" R="4">
+				<Sub ID="C" Typ="26"/>
+			</Pty>
+		</ReqForPossAck>
+
+		<PosRpt RptID="1234567"
+			BizDt="2009-10-27"
+			ReqTyp="0"
+			SetSesID="ITD">
+			<Pty ID="my_currencies" R="4">
+				<Sub ID="F" Typ="26"/>
+			</Pty>
+			<Instrmt Sym="EUR"/>
+			<Qty Typ="SOD" Long="0" Short="142550.00"/>
+			<Qty Typ="ITD" Long="100000.00" Short="0"/>
+		</PosRpt>
+
+		<PosRpt RptID="1234567"
+			BizDt="2009-10-27"
+			ReqTyp="0"
+			SetSesID="ITD">
+			<Pty ID="my_currencies" R="4">
+				<Sub ID="C" Typ="26"/>
+			</Pty>
+			<Instrmt Sym="GBP"/>
+			<Qty Typ="SOD" Long="97488.88" Short="80700.25"/>
+			<Qty Typ="ITD" Long="7474.20" Short="80700.25"/>
+		</PosRpt>
+	</Batch>
+</FIXML>

@@ -1,0 +1,86 @@
+%{
+typedef struct pfd_attr_s *pfd_attr_t;
+
+typedef enum {
+	/* must be first */
+	PFD_ATTR_UNK,
+	/* alphabetic list of tags */
+	PFD_ATTR_AMT,
+	PFD_ATTR_BIZ_DT,
+	PFD_ATTR_CCY,
+	PFD_ATTR_CFI,
+	PFD_ATTR_ID,
+
+	PFD_ATTR_LONG,
+	PFD_ATTR_MAT_DT,
+	PFD_ATTR_MMY,
+	PFD_ATTR_QTY_DT,
+	PFD_ATTR_R,
+
+	PFD_ATTR_REQ_ID,
+	PFD_ATTR_REQ_TYP,
+	PFD_ATTR_RPT_ID,
+	PFD_ATTR_RSLT,
+	PFD_ATTR_S,
+
+	PFD_ATTR_SCHEMA_LOCATION,
+	PFD_ATTR_SET_SES_ID,
+	PFD_ATTR_SHORT,
+	PFD_ATTR_STAT,
+	PFD_ATTR_SYM,
+
+	PFD_ATTR_TOT_RPTS,
+	PFD_ATTR_TXN_TM,
+	PFD_ATTR_TYP,
+	PFD_ATTR_V,
+	PFD_ATTR_XMLNS,
+
+	PFD_ATTR_XR,
+	PFD_ATTR_XV,
+
+} pfd_aid_t;
+
+%}
+%7bit
+%readonly-tables
+%struct-type
+%define slot-name attr
+%define hash-function-name __aid_hash
+%define lookup-function-name __aiddify
+%null-strings
+%enum
+
+struct pfd_attr_s {
+	const char *attr;
+	pfd_aid_t aid;
+};
+
+%%
+Amt,	PFD_ATTR_AMT
+BizDt,	PFD_ATTR_BIZ_DT
+Ccy,	PFD_ATTR_CCY
+CFI,	PFD_ATTR_CFI
+ID,	PFD_ATTR_ID
+Long,	PFD_ATTR_LONG
+MMY,	PFD_ATTR_MMY
+MatDt,	PFD_ATTR_MAT_DT
+QtyDt,	PFD_ATTR_QTY_DT
+R,	PFD_ATTR_R
+ReqID,	PFD_ATTR_REQ_ID
+ReqTyp,	PFD_ATTR_REQ_TYP
+RptID,	PFD_ATTR_RPT_ID
+Rslt,	PFD_ATTR_RSLT
+SetSesID,	PFD_ATTR_SET_SES_ID
+Short,	PFD_ATTR_SHORT
+Stat,	PFD_ATTR_STAT
+Sym,	PFD_ATTR_SYM
+TotRpts,	PFD_ATTR_TOT_RPTS
+TxnTm,	PFD_ATTR_TXN_TM
+Typ,	PFD_ATTR_TYP
+r,	PFD_ATTR_R
+s,	PFD_ATTR_S
+schemaLocation,	PFD_ATTR_SCHEMA_LOCATION
+v,	PFD_ATTR_V
+xmlns,	PFD_ATTR_XMLNS
+xr,	PFD_ATTR_XR
+xv,	PFD_ATTR_XV
