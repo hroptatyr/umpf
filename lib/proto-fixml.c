@@ -888,6 +888,10 @@ sax_eo_elt(__ctx_t ctx, const char *name)
 	if (LIKELY(tid == get_state_otype(ctx))) {
 		pop_state(ctx);
 	}
+	if (UNLIKELY(tid == PFD_TAG_FIXML)) {
+		/* finalise the document */
+		pop_state(ctx);
+	}
 	return;
 }
 
@@ -939,9 +943,7 @@ static int
 final_blob_p(__ctx_t ctx)
 {
 /* return 1 if we need more blobs, 0 if this was the final blob, -1 on error */
-	if (ctx->doc != NULL &&
-	    (ctx->state == NULL ||
-	     get_state_otype(ctx) == PFD_TAG_FIXML)) {
+	if (ctx->doc != NULL && ctx->state == NULL) {
 		/* we're ready */
 		PFD_DEBUG(PFIXML_PRE ": seems ready\n");
 		return xmlParseChunk(ctx->pp, ctx->sbuf, 0, 1);
