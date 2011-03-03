@@ -46,39 +46,60 @@
 #include <unserding/unserding-cfg.h>
 #include <unserding/module.h>
 
+#include "pfd.h"
 #include "nifty.h"
 
 #define MOD_PRE		"mod/pfd"
 
-/* some forwards and globals */
-static int handle_data(int fd, char *msg, size_t msglen);
-static void handle_close(int fd);
-
 
-/* message buffer */
-static char mbuf[1048576], *mptr;
-
-static void
-reset(void)
-{
-	mptr = mbuf;
-	return;
-}
+/* forwards, resolved through con6ity to abstract from libev guts */
+static int get_fd(void *ctx);
+static void *get_fd_data(void *ctx);
+static void put_fd_data(void *ctx, void *data);
 
 /**
  * Take the stuff in MSG of size MSGLEN coming from FD and process it.
  * Return values <0 cause the handler caller to close down the socket. */
 static int
-handle_data(int fd, char *msg, size_t msglen)
+handle_data(void *ctx, char *msg, size_t msglen)
 {
+	pfd_ctx_t p = get_fd_data(ctx);
+	pfd_doc_t doc;
+
+	msg[msglen] = '\0';
+	PFD_DEBUG(MOD_PRE "/ctx: %p %zu\n%s\n", ctx, msglen, msg);
+
+	if ((doc = pfd_parse_blob_r(&p, msg, msglen)) != NULL) {
+		/* definite success */
+		pfd_print_doc(doc, stdout);
+		pfd_free_doc(doc);
+
+	} else if (/* doc == NULL && */ctx == NULL) {
+		/* error occurred */
+		PFD_DEBUG(MOD_PRE ": ERROR\n");
+	} else {
+		PFD_DEBUG(MOD_PRE ": need more grub\n");
+	}
+	put_fd_data(ctx, p);
 	return 0;
 }
 
 static void
-handle_close(int fd)
+handle_close(void *ctx)
 {
-	/* delete fd from our htpush cache */
-	PFD_DEBUG("forgetting about %d\n", fd);
+	pfd_ctx_t p;
+
+	PFD_DEBUG("forgetting about %d\n", get_fd(ctx));
+	if ((p = get_fd_data(ctx)) != NULL) {
+		/* finalise the push parser to avoid mem leaks */
+		pfd_doc_t doc = pfd_parse_blob_r(&p, ctx, 0);
+
+		if (UNLIKELY(doc != NULL)) {
+			/* sigh */
+			pfd_free_doc(doc);
+		}
+	}
+	put_fd_data(ctx, NULL);
 	return;
 }
 

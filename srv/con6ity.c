@@ -17,6 +17,33 @@
 #pragma warning (disable:2259)
 #endif	/* __INTEL_COMPILER */
 
+
+/* services for includers that need not know about libev */
+#define FD_MAP_TYPE	ev_io*
+
+static int __attribute__((unused))
+get_fd(void *ctx)
+{
+	FD_MAP_TYPE io = ctx;
+	return io->fd;
+}
+
+static void* __attribute__((unused))
+get_fd_data(void *ctx)
+{
+	FD_MAP_TYPE io = ctx;
+	return io->data;
+}
+
+static void __attribute__((unused))
+put_fd_data(void *ctx, void *data)
+{
+	FD_MAP_TYPE io = ctx;
+	io->data = data;
+	return;
+}
+
+
 /* connection mumbo-jumbo */
 size_t nwio = 0;
 static ev_io __wio[2];
@@ -181,14 +208,14 @@ data_cb(EV_P_ ev_io *w, int re)
 
 	if ((nrd = read(w->fd, buf, sizeof(buf))) <= 0) {
 		PFD_DEBUG(MOD_PRE ": no data, closing socket %d %d\n", w->fd, re);
-		handle_close(w->fd);
+		handle_close(w);
 		clo_wio(EV_A_ w);
 		return;
 	}
 	PFD_DEBUG(MOD_PRE ": new data in sock %d\n", w->fd);
-	if (handle_data(w->fd, buf, nrd) < 0) {
+	if (handle_data(w, buf, nrd) < 0) {
 		PFD_DEBUG(MOD_PRE ": negative, closing down\n");
-		handle_close(w->fd);
+		handle_close(w);
 		clo_wio(EV_A_ w);
 	}
 	return;
@@ -212,6 +239,7 @@ inco_cb(EV_P_ ev_io *w, int UNUSED(re))
         /* make an io watcher and watch the accepted socket */
 	aw = xnew(ev_io);
         ev_io_init(aw, data_cb, ns, EV_READ);
+	aw->data = NULL;
         ev_io_start(EV_A_ aw);
 	PFD_DBGCONT("success, new sock %d\n", ns);
 	return;
