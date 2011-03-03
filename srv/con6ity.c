@@ -1,4 +1,5 @@
 /*** just to focus on the essential stuff in the dso-oq module */
+#include <stddef.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/socket.h>
