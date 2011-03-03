@@ -19,6 +19,7 @@ EXTRA_dso_pfd_la_SOURCES =
 dso_pfd_la_LDFLAGS = -module
 dso_pfd_la_LDFLAGS += $(unserding_LDFLAGS) $(MYSQL_LIBS) $(LIBXML2_LIBS)
 dso_pfd_la_CPPFLAGS = $(AM_CPPFLAGS) $(unserding_CFLAGS)
+dso_pfd_la_CPPFLAGS += -I$(top_srcdir)/lib
 dso_pfd_la_CPPFLAGS += $(MYSQL_CPPFLAGS) $(LIBXML2_CFLAGS)
 dso_pfd_la_SOURCES += dso-pfd.c
 EXTRA_dso_pfd_la_SOURCES += con6ity.c
