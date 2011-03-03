@@ -324,19 +324,19 @@ stuff_buf_reset(__ctx_t ctx)
 
 
 /* structure aware helpers, move to lib? */
-#define ADDF(__sup, __str, __slot)				\
-static __str*							\
-__sup##_add_##__slot(struct __##__sup##_s *o)			\
-{								\
-	size_t idx = (o)->n##__slot##++;			\
-	__str *res;						\
-	(o)->##__slot = realloc(				\
-		(o)->##__slot,					\
-		(o)->n##__slot## * sizeof(*(o)->##__slot));	\
-	res = (o)->##__slot + idx;				\
-	/* rinse */						\
-	memset(res, 0, sizeof(*res));				\
-	return res;						\
+#define ADDF(__sup, __str, __slot)			\
+static __str*						\
+__sup##_add_##__slot(struct __##__sup##_s *o)		\
+{							\
+	size_t idx = (o)->n##__slot++;			\
+	__str *res;					\
+	(o)->__slot = realloc(				\
+		(o)->__slot,				\
+		(o)->n##__slot * sizeof(*(o)->__slot));	\
+	res = (o)->__slot + idx;			\
+	/* rinse */					\
+	memset(res, 0, sizeof(*res));			\
+	return res;					\
 }
 
 ADDF(batch, struct __g_msg_s, msg);
