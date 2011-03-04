@@ -417,13 +417,9 @@ proc_REQ_FOR_POSS_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
 	const umpf_aid_t aid = sax_aid_from_attr(attr);
-	umpf_msg_t msg;
+	umpf_msg_t msg = ctx->doc;
 
-	if (UNLIKELY((msg = ctx->doc) == NULL)) {
-		return;
-	} else if (UNLIKELY(msg->hdr.mt != UMPF_MSG_GET_PF)) {
-		return;
-	} else if (!umpf_pref_p(ctx, attr, rattr - attr)) {
+	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
 		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
 		return;
@@ -457,13 +453,9 @@ proc_REQ_FOR_POSS_ACK_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
 	const umpf_aid_t aid = sax_aid_from_attr(attr);
-	umpf_msg_t msg;
+	umpf_msg_t msg = ctx->doc;
 
-	if (UNLIKELY((msg = ctx->doc) == NULL)) {
-		return;
-	} else if (UNLIKELY(msg->hdr.mt != UMPF_MSG_SET_PF)) {
-		return;
-	} else if (!umpf_pref_p(ctx, attr, rattr - attr)) {
+	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
 		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
 		return;
@@ -668,14 +660,12 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		struct __ins_qty_s *iq;
 
 		if (UNLIKELY((msg = ctx->doc) == NULL)) {
-			break;
+			iq = NULL;
 		} else if (UNLIKELY(get_state_otype(ctx) != UMPF_TAG_FIXML)) {
-			break;
-		} else if (UNLIKELY(msg->hdr.mt != UMPF_MSG_SET_PF)) {
-			break;
+			iq = NULL;
+		} else {
+			iq = msg->pf.poss + get_state_objint(ctx);
 		}
-
-		iq = msg->pf.poss + get_state_objint(ctx);
 		(void)push_state(ctx, tid, iq);
 		break;
 	}
@@ -797,6 +787,7 @@ sax_eo_elt(__ctx_t ctx, const char *name)
 		/* finalise the document */
 		pop_state(ctx);
 	}
+	UMPF_DEBUG(PFIXML_PRE " STATE: %s -> %u\n", name, get_state_otype(ctx));
 	return;
 }
 
