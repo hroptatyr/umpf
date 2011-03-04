@@ -14,3 +14,4 @@ lib/config.h.in
 =build*
 build*
 depcomp
+++*
