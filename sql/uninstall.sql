@@ -1,7 +1,7 @@
-DROP FUNCTION IF EXISTS `aou_pfd_get_security`;
+DROP FUNCTION IF EXISTS `aou_umpf_get_security`;
 
-DROP TABLE IF EXISTS `aou_pfd_last`;
-DROP TABLE IF EXISTS `aou_pfd_position`;
-DROP TABLE IF EXISTS `aou_pfd_security`;
-DROP TABLE IF EXISTS `aou_pfd_tag`;
-DROP TABLE IF EXISTS `aou_pfd_portfolio`;
+DROP TABLE IF EXISTS `aou_umpf_last`;
+DROP TABLE IF EXISTS `aou_umpf_position`;
+DROP TABLE IF EXISTS `aou_umpf_security`;
+DROP TABLE IF EXISTS `aou_umpf_tag`;
+DROP TABLE IF EXISTS `aou_umpf_portfolio`;
