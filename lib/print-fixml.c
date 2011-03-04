@@ -442,7 +442,7 @@ print_msg(umpf_msg_t msg, FILE *out, size_t indent)
 			print_pos_rpt(msg, i, out, indent + 4);
 		}
 
-		print_indent(out, indent);
+		print_indent(out, indent + 2);
 		fputs("</Batch>\n", out);
 		break;
 	default:
