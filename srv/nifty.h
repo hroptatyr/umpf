@@ -78,6 +78,7 @@
 #endif	/* !xfree */
 
 #if defined DEBUG_FLAG
+# include <stdio.h>
 # define PFD_DEBUG(args...)			\
 	fprintf(logout, "[pfd] " args)
 # define PFD_DBGCONT(args...)			\

@@ -7,36 +7,39 @@
 #include <netinet/in.h>
 #include <net/if.h>
 #include <arpa/inet.h>
+#include <errno.h>
+/* we just need the headers hereof and hope that unserding used the same ones */
 #include <ev.h>
 #include "nifty.h"
-
-#undef EV_P
-#define EV_P	struct ev_loop *loop __attribute__((unused))
+#include "con6ity.h"
 
 #if defined __INTEL_COMPILER
-#pragma warning (disable:2259)
+# pragma warning (disable:2259)
+# pragma warning (disable:177)
 #endif	/* __INTEL_COMPILER */
+
+#define C10Y_PRE	"mod/pfd/con6ity"
 
 
 /* services for includers that need not know about libev */
 #define FD_MAP_TYPE	ev_io*
 
-static int __attribute__((unused))
-get_fd(void *ctx)
+DEFUN int __attribute__((unused))
+get_fd(pfd_conn_t ctx)
 {
 	FD_MAP_TYPE io = ctx;
 	return io->fd;
 }
 
-static void* __attribute__((unused))
-get_fd_data(void *ctx)
+DEFUN void* __attribute__((unused))
+get_fd_data(pfd_conn_t ctx)
 {
 	FD_MAP_TYPE io = ctx;
 	return io->data;
 }
 
-static void __attribute__((unused))
-put_fd_data(void *ctx, void *data)
+DEFUN void __attribute__((unused))
+put_fd_data(pfd_conn_t ctx, void *data)
 {
 	FD_MAP_TYPE io = ctx;
 	io->data = data;
@@ -107,8 +110,8 @@ setsock_reuseport(int __attribute__((unused)) s)
 }
 
 /* we could take args like listen address and port number */
-static int
-listener_net(uint16_t port)
+DEFUN int
+conn_listener_net(uint16_t port)
 {
 #if defined IPPROTO_IPV6
 	static struct sockaddr_in6 __sa6 = {
@@ -124,7 +127,7 @@ listener_net(uint16_t port)
 		/* likely case upfront */
 		;
 	} else {
-		PFD_DEBUG(MOD_PRE ": socket() failed ... I'm clueless now\n");
+		PFD_DEBUG(C10Y_PRE ": socket() failed ... I'm clueless now\n");
 		return s;
 	}
 
@@ -149,7 +152,7 @@ listener_net(uint16_t port)
 	/* we used to retry upon failure, but who cares */
 	if (bind(s, (struct sockaddr*)&__sa6, sizeof(__sa6)) < 0 ||
 	    listen(s, 2) < 0) {
-		PFD_DEBUG(MOD_PRE ": bind() failed, errno %d\n", errno);
+		PFD_DEBUG(C10Y_PRE ": bind() failed, errno %d\n", errno);
 		close(s);
 		return -1;
 	}
@@ -160,8 +163,8 @@ listener_net(uint16_t port)
 #endif	/* IPPROTO_IPV6 */
 }
 
-static int
-listener_uds(const char *sock_path)
+DEFUN int
+conn_listener_uds(const char *sock_path)
 {
 	static struct sockaddr_un __s = {
 		.sun_family = AF_LOCAL,
@@ -173,7 +176,7 @@ listener_uds(const char *sock_path)
 		/* likely case upfront */
 		;
 	} else {
-		PFD_DEBUG(MOD_PRE ": socket() failed ... I'm clueless now\n");
+		PFD_DEBUG(C10Y_PRE ": socket() failed ... I'm clueless now\n");
 		return s;
 	}
 
@@ -193,28 +196,46 @@ listener_uds(const char *sock_path)
 	unlink(sock_path);
 	/* we used to retry upon failure, but who cares */
 	if (bind(s, (struct sockaddr*)&__s, sz) < 0) {
-		PFD_DEBUG(MOD_PRE ": bind() failed: %s\n", strerror(errno));
+		PFD_DEBUG(C10Y_PRE ": bind() failed: %s\n", strerror(errno));
 		close(s);
 		return -1;
 	}
 	return s;
 }
 
+
+/* weak functions first */
+#if !defined HAVE_handle_data
+DEFUN_W int
+handle_data(pfd_conn_t UNUSED(c), char *UNUSED(msg), size_t UNUSED(msglen))
+{
+	return 0;
+}
+#endif	/* !HAVE_handle_data */
+
+#if !defined HAVE_handle_close
+DEFUN_W void
+handle_close(pfd_conn_t UNUSED(c))
+{
+	return;
+}
+#endif	/* !HAVE_handle_close */
+
 static void
-data_cb(EV_P_ ev_io *w, int re)
+data_cb(EV_P_ ev_io *w, int UNUSED(re))
 {
 	char buf[4096];
 	ssize_t nrd;
 
 	if ((nrd = read(w->fd, buf, sizeof(buf))) <= 0) {
-		PFD_DEBUG(MOD_PRE ": no data, closing socket %d %d\n", w->fd, re);
+		PFD_DEBUG(C10Y_PRE ": no data, closing socket %d\n", w->fd);
 		handle_close(w);
 		clo_wio(EV_A_ w);
 		return;
 	}
-	PFD_DEBUG(MOD_PRE ": new data in sock %d\n", w->fd);
+	PFD_DEBUG(C10Y_PRE ": new data in sock %d\n", w->fd);
 	if (handle_data(w, buf, nrd) < 0) {
-		PFD_DEBUG(MOD_PRE ": negative, closing down\n");
+		PFD_DEBUG(C10Y_PRE ": negative, closing down\n");
 		handle_close(w);
 		clo_wio(EV_A_ w);
 	}
@@ -230,7 +251,7 @@ inco_cb(EV_P_ ev_io *w, int UNUSED(re))
 	struct sockaddr_storage sa;
 	socklen_t sa_size = sizeof(sa);
 
-	PFD_DEBUG(MOD_PRE ": they got back to us...");
+	PFD_DEBUG(C10Y_PRE ": they got back to us...");
 	if ((ns = accept(w->fd, (struct sockaddr*)&sa, &sa_size)) < 0) {
 		PFD_DBGCONT("accept() failed\n");
 		return;
@@ -257,8 +278,9 @@ clo_evsock(EV_P_ int UNUSED(type), void *w)
 	return;
 }
 
-static void
-init_watchers(EV_P_ int s)
+
+DEFUN void
+init_conn_watchers(void *loop, int s)
 {
 	struct ev_io *wio = __wio + nwio++;
 
@@ -272,8 +294,8 @@ init_watchers(EV_P_ int s)
 	return;
 }
 
-static void
-deinit_watchers(EV_P)
+DEFUN void
+deinit_conn_watchers(void *UNUSED(loop))
 {
 #if defined EV_WALK_ENABLE && EV_WALK_ENABLE
 	/* properly close all sockets */

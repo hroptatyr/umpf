@@ -23,7 +23,7 @@ dso_pfd_la_CPPFLAGS = $(AM_CPPFLAGS) $(unserding_CFLAGS)
 dso_pfd_la_CPPFLAGS += -I$(top_srcdir)/lib
 dso_pfd_la_CPPFLAGS += $(MYSQL_CPPFLAGS) $(LIBXML2_CFLAGS)
 dso_pfd_la_SOURCES += dso-pfd.c
-EXTRA_dso_pfd_la_SOURCES += con6ity.c
+dso_pfd_la_SOURCES += con6ity.c con6ity.h
 noinst_HEADERS += nifty.h
 endif
 

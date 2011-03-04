@@ -49,19 +49,28 @@
 #include "pfd.h"
 #include "nifty.h"
 
+/* get rid of libev guts */
+#if defined HARD_INCLUDE_con6ity
+# undef DECLF
+# undef DECLF_W
+# undef DEFUN
+# undef DEFUN_W
+# define DECLF		static
+# define DEFUN		static
+# define DECLF_W	static
+# define DEFUN_W	static
+#endif	/* HARD_INCLUDE_con6ity */
+#include "con6ity.h"
+
 #define MOD_PRE		"mod/pfd"
 
 
-/* forwards, resolved through con6ity to abstract from libev guts */
-static int get_fd(void *ctx);
-static void *get_fd_data(void *ctx);
-static void put_fd_data(void *ctx, void *data);
-
+/* connexion<->proto glue */
 /**
  * Take the stuff in MSG of size MSGLEN coming from FD and process it.
  * Return values <0 cause the handler caller to close down the socket. */
-static int
-handle_data(void *ctx, char *msg, size_t msglen)
+DEFUN int
+handle_data(pfd_conn_t ctx, char *msg, size_t msglen)
 {
 	pfd_ctx_t p = get_fd_data(ctx);
 	pfd_doc_t doc;
@@ -83,9 +92,10 @@ handle_data(void *ctx, char *msg, size_t msglen)
 	put_fd_data(ctx, p);
 	return 0;
 }
+#define HAVE_handle_data
 
-static void
-handle_close(void *ctx)
+DEFUN void
+handle_close(pfd_conn_t ctx)
 {
 	pfd_ctx_t p;
 
@@ -102,10 +112,13 @@ handle_close(void *ctx)
 	put_fd_data(ctx, NULL);
 	return;
 }
+#define HAVE_handle_close
 
 
 /* our connectivity cruft */
-#include "con6ity.c"
+#if defined HARD_INCLUDE_con6ity
+# include "con6ity.c"
+#endif	/* HARD_INCLUDE_con6ity */
 
 static volatile int pfd_sock_net = -1;
 static volatile int pfd_sock_uds = -1;
@@ -133,9 +146,9 @@ init(void *clo)
 	/* obtain the unix domain sock from our settings */
 	udcfg_tbl_lookup_s(&pfd_sock_path, ctx, settings, "sock");
 	if (pfd_sock_path != NULL &&
-	    (pfd_sock_uds = listener_uds(pfd_sock_path)) > 0) {
+	    (pfd_sock_uds = conn_listener_uds(pfd_sock_path)) > 0) {
 		/* set up the IO watcher and timer */
-		init_watchers(ctx->mainloop, pfd_sock_uds);
+		init_conn_watchers(ctx->mainloop, pfd_sock_uds);
 	} else {
 		/* make sure we don't accidentally delete arbitrary files */
 		pfd_sock_path = NULL;
@@ -143,9 +156,9 @@ init(void *clo)
 	/* obtain port number for our network socket */
 	port = udcfg_tbl_lookup_i(ctx, settings, "port");
 	if (port &&
-	    (pfd_sock_net = listener_net(port)) > 0) {
+	    (pfd_sock_net = conn_listener_net(port)) > 0) {
 		/* set up the IO watcher and timer */
-		init_watchers(ctx->mainloop, pfd_sock_net);
+		init_conn_watchers(ctx->mainloop, pfd_sock_net);
 	}
 	PFD_DEBUG(MOD_PRE ": ... loaded\n");
 
@@ -167,7 +180,7 @@ deinit(void *clo)
 	ud_ctx_t ctx = clo;
 
 	PFD_DEBUG(MOD_PRE ": unloading ...");
-	deinit_watchers(ctx->mainloop);
+	deinit_conn_watchers(ctx->mainloop);
 	pfd_sock_net = -1;
 	pfd_sock_uds = -1;
 	/* unlink the unix domain socket */
