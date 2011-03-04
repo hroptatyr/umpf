@@ -70,28 +70,22 @@ struct umpf_ns_s {
 };
 
 /* contextual callbacks */
-struct __ctxcb_s {
-	/* principal types callbacks,
-	 * sf is for strings (and mdStrings)
-	 * dt is for dateTime (and mdDateTime) */
-	void(*sf)(umpf_ctxcb_t ctx, const char *str, size_t len);
-	void(*dtf)(umpf_ctxcb_t ctx, time_t date_time);
-	void(*df)(umpf_ctxcb_t ctx, double decimal);
-};
-
 struct umpf_ctxcb_s {
 	/* for a linked list */
 	umpf_ctxcb_t next;
 
-	struct __ctxcb_s cb[1];
 	/* navigation info, stores the context */
 	umpf_tid_t otype;
-	void *object;
+	union {
+		void *object;
+		long int objint;
+	};
 	umpf_ctxcb_t old_state;
 };
 
 struct __ctx_s {
-	umpf_doc_t doc;
+	/* the main message we're building */
+	void *doc;
 	struct umpf_ns_s ns[16];
 	size_t nns;
 	/* stuff buf */
@@ -178,10 +172,30 @@ get_state_otype(__ctx_t ctx)
 	return ctx->state ? ctx->state->otype : UMPF_TAG_UNK;
 }
 
-static void*
+static void* __attribute__((unused))
 get_state_object(__ctx_t ctx)
 {
 	return ctx->state->object;
+}
+
+static void __attribute__((unused))
+set_state_object(__ctx_t ctx, void *z)
+{
+	ctx->state->object = z;
+	return;
+}
+
+static long int __attribute__((unused))
+get_state_objint(__ctx_t ctx)
+{
+	return ctx->state->objint;
+}
+
+static void __attribute__((unused))
+set_state_objint(__ctx_t ctx, long int z)
+{
+	ctx->state->objint = z;
+	return;
 }
 
 static void*
@@ -276,13 +290,11 @@ umpf_init(__ctx_t ctx)
 	init_ctxcb(ctx);
 	/* alloc some space for our document */
 	{
-		struct __umpf_s *m = calloc(sizeof(*m), 1);
 		umpf_ctxcb_t cc = pop_ctxcb(ctx);
 
-		ctx->doc = m;
 		ctx->state = cc;
 		cc->old_state = NULL;
-		cc->object = m;
+		cc->object = NULL;
 		cc->otype = UMPF_TAG_FIXML;
 	}
 	return;
@@ -339,14 +351,6 @@ __sup##_add_##__slot(struct __##__sup##_s *o)		\
 	memset(res, 0, sizeof(*res));			\
 	return res;					\
 }
-
-ADDF(batch, struct __g_msg_s, msg);
-ADDF(pty, struct __sub_s, sub);
-ADDF(req_for_poss, struct __pty_s, pty);
-ADDF(req_for_poss_ack, struct __pty_s, pty);
-ADDF(pos_rpt, struct __pty_s, pty);
-ADDF(pos_rpt, struct __qty_s, qty);
-ADDF(pos_rpt, struct __amt_s, amt);
 
 
 static umpf_tid_t
@@ -413,10 +417,11 @@ proc_REQ_FOR_POSS_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
 	const umpf_aid_t aid = sax_aid_from_attr(attr);
-	struct __req_for_poss_s *r =
-		get_state_object_if(ctx, UMPF_TAG_REQ_FOR_POSS);
+	umpf_msg_t msg;
 
-	if (UNLIKELY(r == NULL)) {
+	if (UNLIKELY((msg = ctx->doc) == NULL)) {
+		return;
+	} else if (UNLIKELY(msg->hdr.mt != UMPF_MSG_GET_PF)) {
 		return;
 	} else if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
@@ -426,19 +431,19 @@ proc_REQ_FOR_POSS_attr(__ctx_t ctx, const char *attr, const char *value)
 
 	switch (aid) {
 	case UMPF_ATTR_REQ_ID:
-		r->req_id = strdup(value);
+		/* ignored */
 		break;
 	case UMPF_ATTR_SET_SES_ID:
-		r->set_ses_id = strdup(value);
+		/* ignored */
 		break;
 	case UMPF_ATTR_REQ_TYP:
-		r->req_typ = (umpf_req_typ_t)strtoul(value, NULL, 10);
+		/* ignored */
 		break;
 	case UMPF_ATTR_BIZ_DT:
-		r->biz_dt = get_zulu(value);
+		msg->pf.clr_dt = get_zulu(value);
 		break;
 	case UMPF_ATTR_TXN_TM:
-		r->txn_tm = get_zulu(value);
+		msg->pf.stamp = get_zulu(value);
 		break;
 	default:
 		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
@@ -452,10 +457,11 @@ proc_REQ_FOR_POSS_ACK_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
 	const umpf_aid_t aid = sax_aid_from_attr(attr);
-	struct __req_for_poss_ack_s *r =
-		get_state_object_if(ctx, UMPF_TAG_REQ_FOR_POSS_ACK);
+	umpf_msg_t msg;
 
-	if (UNLIKELY(r == NULL)) {
+	if (UNLIKELY((msg = ctx->doc) == NULL)) {
+		return;
+	} else if (UNLIKELY(msg->hdr.mt != UMPF_MSG_SET_PF)) {
 		return;
 	} else if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
@@ -465,66 +471,28 @@ proc_REQ_FOR_POSS_ACK_attr(__ctx_t ctx, const char *attr, const char *value)
 
 	switch (aid) {
 	case UMPF_ATTR_RPT_ID:
-		r->rpt_id = strdup(value);
+		/* ignored */
 		break;
 	case UMPF_ATTR_SET_SES_ID:
-		r->set_ses_id = strdup(value);
+		/* ignored */
 		break;
 	case UMPF_ATTR_REQ_TYP:
-		r->req_typ = (umpf_req_typ_t)strtoul(value, NULL, 10);
+		/* ignored */
 		break;
 	case UMPF_ATTR_BIZ_DT:
-		r->biz_dt = get_zulu(value);
+		msg->pf.clr_dt = get_zulu(value);
 		break;
 	case UMPF_ATTR_TXN_TM:
-		r->txn_tm = get_zulu(value);
+		msg->pf.stamp = get_zulu(value);
 		break;
 	case UMPF_ATTR_TOT_RPTS:
-		r->tot_rpts = strtoul(value, NULL, 10);
+		msg->pf.nposs = strtoul(value, NULL, 10);
 		break;
 	case UMPF_ATTR_RSLT:
-		r->rslt = (umpf_rslt_t)strtoul(value, NULL, 10);
+		/* ignored */
 		break;
 	case UMPF_ATTR_STAT:
-		r->stat = (umpf_stat_t)strtoul(value, NULL, 10);
-		break;
-	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
-		break;
-	}
-	return;
-}
-
-static void
-proc_POS_RPT_attr(__ctx_t ctx, const char *attr, const char *value)
-{
-	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
-	struct __pos_rpt_s *p = get_state_object_if(ctx, UMPF_TAG_POS_RPT);
-
-	if (UNLIKELY(p == NULL)) {
-		return;
-	} else if (!umpf_pref_p(ctx, attr, rattr - attr)) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
-	}
-
-	switch (aid) {
-	case UMPF_ATTR_RPT_ID:
-		p->rpt_id = strdup(value);
-		break;
-	case UMPF_ATTR_SET_SES_ID:
-		p->set_ses_id = strdup(value);
-		break;
-	case UMPF_ATTR_REQ_TYP:
-		p->req_typ = (umpf_req_typ_t)strtoul(value, NULL, 10);
-		break;
-	case UMPF_ATTR_TOT_RPTS:
-		p->tot_rpts = strtoul(value, NULL, 10);
-		break;
-	case UMPF_ATTR_BIZ_DT:
-		p->biz_dt = get_zulu(value);
+		/* ignored */
 		break;
 	default:
 		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
@@ -538,7 +506,7 @@ proc_PTY_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
 	const umpf_aid_t aid = sax_aid_from_attr(attr);
-	struct __pty_s *p = get_state_object(ctx);
+	umpf_msg_t msg = get_state_object(ctx);
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
@@ -548,40 +516,13 @@ proc_PTY_attr(__ctx_t ctx, const char *attr, const char *value)
 
 	switch (aid) {
 	case UMPF_ATTR_ID:
-		p->id = strdup(value);
+		msg->pf.name = strdup(value);
 		break;
 	case UMPF_ATTR_S:
-		p->src = (char)(value ? value[0] : '\0');
+		/* ignored */
 		break;
 	case UMPF_ATTR_R:
-		p->role = strtoul(value, NULL, 10);
-		break;
-	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
-		break;
-	}
-	return;
-}
-
-static void
-proc_SUB_attr(__ctx_t ctx, const char *attr, const char *value)
-{
-	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
-	struct __sub_s *s = get_state_object(ctx);
-
-	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
-	}
-
-	switch (aid) {
-	case UMPF_ATTR_ID:
-		s->id = strdup(value);
-		break;
-	case UMPF_ATTR_TYP:
-		s->typ = strtoul(value, NULL, 10);
+		/* ignored */
 		break;
 	default:
 		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
@@ -604,8 +545,8 @@ proc_INSTRMT_attr(__ctx_t ctx, const char *attr, const char *value)
 
 	switch (aid) {
 	case UMPF_ATTR_SYM: {
-		struct __instrmt_s *i = get_state_object(ctx);
-		i->sym = strdup(value);
+		struct __ins_qty_s *iq = get_state_object(ctx);
+		iq->instr = strdup(value);
 		break;
 	}
 	default:
@@ -620,7 +561,7 @@ proc_QTY_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
 	const umpf_aid_t aid = sax_aid_from_attr(attr);
-	struct __qty_s *q = get_state_object(ctx);
+	struct __ins_qty_s *iq = get_state_object(ctx);
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
@@ -630,46 +571,16 @@ proc_QTY_attr(__ctx_t ctx, const char *attr, const char *value)
 
 	switch (aid) {
 	case UMPF_ATTR_TYP:
-		q->typ = strdup(value);
+		/* ignored */
 		break;
 	case UMPF_ATTR_LONG:
-		q->_long = strtod(value, NULL);
+		iq->qty->_long = strtod(value, NULL);
 		break;
 	case UMPF_ATTR_SHORT:
-		q->_short = strtod(value, NULL);
+		iq->qty->_shrt = strtod(value, NULL);
 		break;
 	case UMPF_ATTR_QTY_DT:
-		q->qty_dt = get_zulu(value);
-		break;
-	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
-		break;
-	}
-	return;
-}
-
-static void
-proc_AMT_attr(__ctx_t ctx, const char *attr, const char *value)
-{
-	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
-	struct __amt_s *a = get_state_object(ctx);
-
-	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
-	}
-
-	switch (aid) {
-	case UMPF_ATTR_TYP:
-		a->typ = strdup(value);
-		break;
-	case UMPF_ATTR_AMT:
-		a->amt = strtod(value, NULL);
-		break;
-	case UMPF_ATTR_CCY:
-		strncpy(a->ccy, value, sizeof(a->ccy));
+		/* ignored */
 		break;
 	default:
 		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
@@ -703,93 +614,111 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		break;
 	}
 
-	case UMPF_TAG_POS_RPT:
+	case UMPF_TAG_BATCH:
+		break;
+
 	case UMPF_TAG_REQ_FOR_POSS:
-	case UMPF_TAG_REQ_FOR_POSS_ACK: {
-		/* check that we're inside a FIXML context */
-		struct __batch_s *b = get_state_object_if(ctx, UMPF_TAG_BATCH);
+		/* translate to get_pf/get_descr */
+	case UMPF_TAG_REQ_FOR_POSS_ACK:
+		/* translate to set_pf */
+	case UMPF_TAG_RGST_INSTRCTNS: {
+		/* translate to new_pf/set_descr */
+		umpf_msg_t msg;
 
-		if (LIKELY(b != NULL)) {
-			struct __g_msg_s *new_msg = batch_add_msg(b);
-			new_msg->tid = tid;
-			(void)push_state(ctx, tid, new_msg->msg.ptr);
+		if (UNLIKELY(ctx->doc != NULL)) {
+			break;
+		} else if (UNLIKELY(get_state_otype(ctx) != UMPF_TAG_FIXML)) {
 			break;
 		}
-		/* fallthrough otherwise */
+
+		/* generate a massage */
+		ctx->doc = msg = calloc(sizeof(*msg), 1);
+		/* sigh, subtle differences */
+		switch (tid) {
+		case UMPF_TAG_REQ_FOR_POSS:
+			msg->hdr.mt = UMPF_MSG_GET_PF * 2;
+			for (size_t j = 0; attrs[j] != NULL; j += 2) {
+				proc_REQ_FOR_POSS_attr(
+					ctx, attrs[j], attrs[j + 1]);
+			}
+			break;
+		case UMPF_TAG_REQ_FOR_POSS_ACK:
+			msg->hdr.mt = UMPF_MSG_SET_PF * 2;
+			for (size_t j = 0; attrs[j] != NULL; j += 2) {
+				proc_REQ_FOR_POSS_ACK_attr(
+					ctx, attrs[j], attrs[j + 1]);
+			}
+			msg = realloc(
+				msg, sizeof(*msg) +
+				sizeof(struct __ins_qty_s) * msg->pf.nposs);
+			break;
+		case UMPF_TAG_RGST_INSTRCTNS:
+			msg->hdr.mt = UMPF_MSG_NEW_PF * 2;
+			break;
+		default:
+			break;
+		}
+		(void)push_state(ctx, tid, msg);
+		break;
 	}
-	case UMPF_TAG_BATCH: {
-		/* check that we're inside a FIXML context */
-		umpf_doc_t m = get_state_object_if(ctx, UMPF_TAG_FIXML);
 
-		if (UNLIKELY(m == NULL)) {
+	case UMPF_TAG_POS_RPT: {
+		/* part of get/set pf */
+		umpf_msg_t msg;
+		struct __ins_qty_s *iq;
+
+		if (UNLIKELY((msg = ctx->doc) == NULL)) {
+			break;
+		} else if (UNLIKELY(get_state_otype(ctx) != UMPF_TAG_FIXML)) {
+			break;
+		} else if (UNLIKELY(msg->hdr.mt != UMPF_MSG_SET_PF)) {
 			break;
 		}
 
-		m->top = tid;
-		(void)push_state(ctx, tid, m->ptr);
+		iq = msg->pf.poss + get_state_objint(ctx);
+		(void)push_state(ctx, tid, iq);
 		break;
 	}
 
 	case UMPF_TAG_PTY: {
-		void *o = get_state_object(ctx);
-		umpf_tid_t oty = get_state_otype(ctx);
-		struct __pty_s *p;
+		/* context sensitive node, bummer */
+		umpf_msg_t msg;
 
-		switch (oty) {
-		case UMPF_TAG_REQ_FOR_POSS:
-			p = req_for_poss_add_pty(o);
-			break;
-		case UMPF_TAG_REQ_FOR_POSS_ACK:
-			p = req_for_poss_ack_add_pty(o);
-			break;
-		case UMPF_TAG_POS_RPT:
-			p = pos_rpt_add_pty(o);
-			break;
-		default:
-			UMPF_DEBUG(PFIXML_PRE " WARN: Pty's father empty?\n");
+		if (UNLIKELY((msg = ctx->doc) == NULL)) {
 			break;
 		}
-		(void)push_state(ctx, tid, p);
 
-		for (int j = 0; attrs[j] != NULL; j += 2) {
-			proc_PTY_attr(ctx, attrs[j], attrs[j + 1]);
+		switch (get_state_otype(ctx)) {
+		case UMPF_TAG_REQ_FOR_POSS:
+		case UMPF_TAG_REQ_FOR_POSS_ACK:
+			(void)push_state(ctx, tid, msg);
+			for (size_t j = 0; attrs[j] != NULL; j += 2) {
+				proc_PTY_attr(ctx, attrs[j], attrs[j + 1]);
+			}
+			break;
+		default:
+			(void)push_state(ctx, tid, NULL);
+			break;
 		}
 		break;
 	}
 
 	case UMPF_TAG_SUB: {
-		/* check that we're inside a Pty context */
-		struct __pty_s *p = get_state_object_if(ctx, UMPF_TAG_PTY);
-		struct __sub_s *s;
-
-		if (UNLIKELY(p == NULL)) {
-			UMPF_DEBUG(PFIXML_PRE " WARN: Sub outside of Pty\n");
-			break;
-		}
-
-		s = pty_add_sub(p);
-		(void)push_state(ctx, tid, s);
-
-		for (int j = 0; attrs[j] != NULL; j += 2) {
-			proc_SUB_attr(ctx, attrs[j], attrs[j + 1]);
-		}
+		/* not supported */
 		break;
 	}
 
 	case UMPF_TAG_INSTRMT: {
 		/* check that we're inside a PosRpt context */
-		struct __pos_rpt_s *pr =
+		struct __ins_qty_s *iq =
 			get_state_object_if(ctx, UMPF_TAG_POS_RPT);
-		struct __instrmt_s *i;
 
-		if (UNLIKELY(pr == NULL)) {
-			UMPF_DEBUG(PFIXML_PRE
-				  " WARN: Instrmt outside of PosRpt\n");
+		if (UNLIKELY(iq == NULL)) {
+			UMPF_DEBUG(
+				PFIXML_PRE
+				" WARN: Instrmt outside of PosRpt\n");
 			break;
 		}
-
-		i = pr->instrmt;
-		(void)push_state(ctx, tid, i);
 
 		for (int j = 0; attrs[j] != NULL; j += 2) {
 			proc_INSTRMT_attr(ctx, attrs[j], attrs[j + 1]);
@@ -799,18 +728,15 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 
 	case UMPF_TAG_QTY: {
 		/* check that we're inside a PosRpt context */
-		struct __pos_rpt_s *pr =
+		struct __ins_qty_s *iq =
 			get_state_object_if(ctx, UMPF_TAG_POS_RPT);
-		struct __qty_s *q;
 
-		if (UNLIKELY(pr == NULL)) {
-			UMPF_DEBUG(PFIXML_PRE
-				  " WARN: Instrmt outside of PosRpt\n");
+		if (UNLIKELY(iq == NULL)) {
+			UMPF_DEBUG(
+				PFIXML_PRE
+				" WARN: Qty outside of PosRpt\n");
 			break;
 		}
-
-		q = pos_rpt_add_qty(pr);
-		(void)push_state(ctx, tid, q);
 
 		for (int j = 0; attrs[j] != NULL; j += 2) {
 			proc_QTY_attr(ctx, attrs[j], attrs[j + 1]);
@@ -818,49 +744,12 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		break;
 	}
 
-	case UMPF_TAG_AMT: {
-		/* check that we're inside a PosRpt context */
-		struct __pos_rpt_s *pr =
-			get_state_object_if(ctx, UMPF_TAG_POS_RPT);
-		struct __amt_s *a;
-
-		if (UNLIKELY(pr == NULL)) {
-			UMPF_DEBUG(PFIXML_PRE
-				  " WARN: Instrmt outside of PosRpt\n");
-			break;
-		}
-
-		a = pos_rpt_add_amt(pr);
-		(void)push_state(ctx, tid, a);
-
-		for (int j = 0; attrs[j] != NULL; j += 2) {
-			proc_AMT_attr(ctx, attrs[j], attrs[j + 1]);
-		}
+	case UMPF_TAG_AMT:
+		/* unsupported */
 		break;
-	}
 
 	default:
 		UMPF_DEBUG(PFIXML_PRE " WARN: unknown tag %s\n", name);
-		break;
-	}
-
-	switch (tid) {
-	case UMPF_TAG_POS_RPT:
-		for (int j = 0; attrs[j] != NULL; j += 2) {
-			proc_POS_RPT_attr(ctx, attrs[j], attrs[j + 1]);
-		}
-		break;
-	case UMPF_TAG_REQ_FOR_POSS:
-		for (int j = 0; attrs[j] != NULL; j += 2) {
-			proc_REQ_FOR_POSS_attr(ctx, attrs[j], attrs[j + 1]);
-		}
-		break;
-	case UMPF_TAG_REQ_FOR_POSS_ACK:
-		for (int j = 0; attrs[j] != NULL; j += 2) {
-			proc_REQ_FOR_POSS_ACK_attr(ctx, attrs[j], attrs[j + 1]);
-		}
-		break;
-	default:
 		break;
 	}
 
@@ -885,10 +774,25 @@ sax_eo_elt(__ctx_t ctx, const char *name)
 	/* stuff buf reset */
 	stuff_buf_reset(ctx);
 
-	/* restore old handler */
-	if (LIKELY(tid == get_state_otype(ctx))) {
+	/* stuff that needed to be done, fix up state etc. */
+	switch (tid) {
+	case UMPF_TAG_REQ_FOR_POSS_ACK:
+		/* need to zilch out the objid as PosRpt relies on it */
 		pop_state(ctx);
+		set_state_objint(ctx, 0);
+		break;
+	case UMPF_TAG_POS_RPT:
+		/* need to zilch out the objid as PosRpt relies on it */
+		pop_state(ctx);
+		set_state_objint(ctx, get_state_objint(ctx) + 1);
+		break;
+	case UMPF_TAG_PTY:
+		pop_state(ctx);
+		break;
+	default:
+		break;
 	}
+
 	if (UNLIKELY(tid == UMPF_TAG_FIXML)) {
 		/* finalise the document */
 		pop_state(ctx);

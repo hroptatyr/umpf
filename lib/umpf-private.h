@@ -149,9 +149,9 @@ struct __amt_s {
 /* top level messages */
 struct __req_for_poss_s {
 	time_t biz_dt;
+	time_t txn_tm;
 	umpf_req_typ_t req_typ;
 	char *req_id;
-	time_t txn_tm;
 	char *set_ses_id;
 
 	/* variadic stuff */
@@ -162,12 +162,12 @@ struct __req_for_poss_s {
 struct __req_for_poss_ack_s {
 	char *rpt_id;
 	time_t biz_dt;
+	time_t txn_tm;
 	umpf_req_typ_t req_typ;
 	size_t tot_rpts;
 	umpf_rslt_t rslt;
 	umpf_stat_t stat;
 	char *set_ses_id;
-	time_t txn_tm;
 
 	/* variadic stuff */
 	size_t npty;

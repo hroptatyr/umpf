@@ -96,6 +96,9 @@ struct umpf_msg_pf_s {
 	struct umpf_msg_hdr_s hdr;
 
 	char *name;
+	time_t stamp;
+	time_t clr_dt;
+
 	size_t nposs;
 	struct __ins_qty_s poss[];
 };
