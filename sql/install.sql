@@ -2,7 +2,7 @@
 -- the idea is to provide a short nickname per portfolio and
 -- some longer description that could be used to associate
 -- info used by external applications
-CREATE TABLE IF NOT EXISTS `aou_pfd_portfolio` (
+CREATE TABLE IF NOT EXISTS `aou_umpf_portfolio` (
 	portfolio_id INTEGER AUTO_INCREMENT PRIMARY KEY,
 	-- nickname used to identify this portfolio externally
 	short VARCHAR(64) CHARSET ASCII NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS `aou_pfd_portfolio` (
 -- portfolio tags
 -- now the idea is to regard portfolios as the git tags of
 -- a chain of orders (commits)
-CREATE TABLE IF NOT EXISTS `aou_pfd_tag` (
+CREATE TABLE IF NOT EXISTS `aou_umpf_tag` (
 	tag_id INTEGER AUTO_INCREMENT PRIMARY KEY,
 	portfolio_id INTEGER NOT NULL,
 	-- this has got to be UTC
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS `aou_pfd_tag` (
 		ON UPDATE CURRENT_TIMESTAMP
 		COMMENT 'time stamp of database entry of snapshot',
 	FOREIGN KEY (`portfolio_id`)
-		REFERENCES `aou_pfd_portfolio` (`portfolio_id`)
+		REFERENCES `aou_umpf_portfolio` (`portfolio_id`)
 		ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE InnoDB CHARSET ASCII;
 
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS `aou_pfd_tag` (
 -- of any of these, this table exists to avoid redundance among
 -- portfolio tags and must not be confused with a comprehensive
 -- security database
-CREATE TABLE IF NOT EXISTS `aou_pfd_security` (
+CREATE TABLE IF NOT EXISTS `aou_umpf_security` (
 	security_id INTEGER AUTO_INCREMENT PRIMARY KEY,
 	-- portfolio id, this is to allow the same security nicks
 	-- across portfolios
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS `aou_pfd_security` (
 	description TEXT,
 	UNIQUE KEY (`portfolio_id`, `short`),
 	FOREIGN KEY (`portfolio_id`)
-		REFERENCES `aou_pfd_portfolio` (`portfolio_id`)
+		REFERENCES `aou_umpf_portfolio` (`portfolio_id`)
 		ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE InnoDB CHARSET utf8 COLLATE utf8_unicode_ci;
 
@@ -58,46 +58,46 @@ CREATE TABLE IF NOT EXISTS `aou_pfd_security` (
 -- securities are referenced from a different table and must
 -- not be confused with a contract database
 -- fact table
-CREATE TABLE IF NOT EXISTS `aou_pfd_position` (
+CREATE TABLE IF NOT EXISTS `aou_umpf_position` (
 	tag_id INTEGER NOT NULL,
 	security_id INTEGER NOT NULL,
 	long_qty DECIMAL(18,9),
 	short_qty DECIMAL(18,9),
 	PRIMARY KEY (`tag_id`, `security_id`),
 	FOREIGN KEY (`tag_id`)
-		REFERENCES `aou_pfd_tag` (`tag_id`)
+		REFERENCES `aou_umpf_tag` (`tag_id`)
 		ON DELETE CASCADE ON UPDATE CASCADE,
 	FOREIGN KEY (`security_id`)
-		REFERENCES `aou_pfd_security` (`security_id`)
+		REFERENCES `aou_umpf_security` (`security_id`)
 		ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE InnoDB CHARSET ASCII;
 
 -- last portfolio
 -- keeps track of the last tag in chronological order
-CREATE TABLE IF NOT EXISTS `aou_pfd_last` (
+CREATE TABLE IF NOT EXISTS `aou_umpf_last` (
 	portfolio_id INTEGER NOT NULL,
 	tag_id INTEGER NOT NULL,
 	UNIQUE KEY (`portfolio_id`, `tag_id`),
 	FOREIGN KEY (`portfolio_id`)
-		REFERENCES `aou_pfd_portfolio` (`portfolio_id`)
+		REFERENCES `aou_umpf_portfolio` (`portfolio_id`)
 		ON DELETE CASCADE ON UPDATE CASCADE,
 	FOREIGN KEY (`tag_id`)
-		REFERENCES `aou_pfd_tag` (`tag_id`)
+		REFERENCES `aou_umpf_tag` (`tag_id`)
 		ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE InnoDB CHARSET ASCII;
 
 -- just some getters
-DROP FUNCTION IF EXISTS `aou_pfd_get_security`;
+DROP FUNCTION IF EXISTS `aou_umpf_get_security`;
 DELIMITER $$
-CREATE FUNCTION `aou_pfd_get_security` (`short` VARCHAR(64))
+CREATE FUNCTION `aou_umpf_get_security` (`short` VARCHAR(64))
 RETURNS INTEGER
 DETERMINISTIC READS SQL DATA
 COMMENT 'Return the security_id assigned to SHORT'
 BEGIN
 	DECLARE res INTEGER DEFAULT 0;
 	SELECT `security_id` INTO res
-		FROM `aou_pfd_security`
-		WHERE `aou_pfd_security`.`short` = `short`
+		FROM `aou_umpf_security`
+		WHERE `aou_umpf_security`.`short` = `short`
 	LIMIT 1;
 	RETURN res;
 END;
