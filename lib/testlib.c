@@ -186,6 +186,7 @@ test_blks(char *blob, size_t len)
 	return;
 }
 
+#if 0
 #include <libxml/parser.h>
 
 static void
@@ -230,6 +231,7 @@ test_libxml2(char *blob, size_t len)
 	}
 	return;
 }
+#endif	/* 0 */
 
 int
 main(int argc, const char *argv[])
