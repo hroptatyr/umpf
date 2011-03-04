@@ -24,13 +24,13 @@ As an extension we allow
 		<Pty ID="aou-pfd-0x6b2f2290"/>
 		<RgDtl Dtls="Sebastian Freundt" Email="freundt@ga-group.nl">
 			<!-- name of the portfolio -->
-			<Pty ID="me_portfolio"/>
-			<!-- register a second portfolio -->
-			<Pty ID="my_currencies">
+			<Pty ID="me_currencies">
 				<aou:glue content-type="application/text">
 					How to associate satellite data.
 				</aou:glue>
 			</Pty>
+			<!-- register a second portfolio -->
+			<Pty ID="me_portfolio"/>
 		</RgDtl>
 	</RgstInstrctns>
 </FIXML>
