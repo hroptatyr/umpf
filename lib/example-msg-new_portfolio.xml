@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<!--
+
+Request a new portfolio
+
+We just use the RgstInstrctns component.  To delete a portfolio use
+any ID and the RefID attribute to name your portfolio, then use
+TrnsTyp="2" which is `cancel' in fix speak.
+
+To change the name of your portfolio, use the new name as ID and refer
+to the old one using the RefID attribute, then use TrnsTyp="1" which
+is `replace' in fix speak.  Same thing with ID=RefID if you need to
+update the portfolio's satellite data.
+
+The party id can be left empty, to talk to multi-daemons just use
+their identifier as ID.
+
+As an extension we allow 
+
+-->
+<FIXML xmlns="http://www.fixprotocol.org/FIXML-5-0" v="5.0"
+	xmlns:aou="http://www.ga-group.nl/aou-0.1">
+	<RgstInstrctns ID="new_pf_req" TrnsTyp="0">
+		<Pty ID="aou-pfd-0x6b2f2290"/>
+		<RgDtl Dtls="Sebastian Freundt" Email="freundt@ga-group.nl">
+			<!-- name of the portfolio -->
+			<Pty ID="me_portfolio"/>
+			<!-- register a second portfolio -->
+			<Pty ID="my_currencies">
+				<aou:glue content-type="application/text">
+					How to associate satellite data.
+				</aou:glue>
+			</Pty>
+		</RgDtl>
+	</RgstInstrctns>
+</FIXML>
+
+<!-- response -->
+<?xml version="1.0"?>
+<FIXML xmlns="http://www.fixprotocol.org/FIXML-5-0" v="5.0">
+	<RgstInstrctnsRsp ID="new_pf_req" TrnsTyp="0" RegStat="A"/>
+</FIXML>
