@@ -11,6 +11,6 @@ install-sh
 missing
 lib/config.h.in
 *~
-=build
-build
+=build*
+build*
 depcomp
