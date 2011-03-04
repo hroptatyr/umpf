@@ -143,7 +143,7 @@ extern void umpf_free_msg(umpf_msg_t);
 
 /**
  * Print DOC to OUT. */
-extern void umpf_print_doc(umpf_doc_t, FILE *out);
+extern void umpf_print_msg(umpf_msg_t, FILE *out);
 
 /**
  * Name space URI for FIXML 5.0 */

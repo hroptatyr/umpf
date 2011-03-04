@@ -153,17 +153,18 @@ fputs_encq(const char *s, FILE *out)
 
 /* printer */
 static void
-print_instrmt(struct __instrmt_s *i, FILE *out, size_t indent)
+print_instrmt(struct __ins_qty_s *i, FILE *out, size_t indent)
 {
 	print_indent(out, indent);
 	fputs("<Instrmt", out);
 
-	if (i->sym) {
+	if (i->instr) {
 		fputs(" Sym=\"", out);
-		fputs_encq(i->sym, out);
+		fputs_encq(i->instr, out);
 		fputc('"', out);
 	}
 
+#if 0
 	if (i->id) {
 		fputs(" ID=\"", out);
 		fputs_encq(i->id, out);
@@ -175,6 +176,7 @@ print_instrmt(struct __instrmt_s *i, FILE *out, size_t indent)
 		fputs_encq(i->src, out);
 		fputc('"', out);
 	}
+#endif
 
 	/* finalise the tag */
 	fputs("/>\n", out);
@@ -182,32 +184,39 @@ print_instrmt(struct __instrmt_s *i, FILE *out, size_t indent)
 }
 
 static void
-print_qty(struct __qty_s *q, FILE *out, size_t indent)
+print_qty(struct __ins_qty_s *q, FILE *out, size_t indent)
 {
 	print_indent(out, indent);
 	fputs("<Qty", out);
 
+#if 0
 	if (q->typ) {
 		fputs(" Typ=\"", out);
 		fputs_encq(q->typ, out);
 		fputc('"', out);
 	}
+#endif
 
-	fprintf(out, " Long=\"%.6f\"", q->_long);
-	fprintf(out, " Short=\"%.6f\"", q->_short);
+	fprintf(out, " Long=\"%.6f\"", q->qty->_long);
+	fprintf(out, " Short=\"%.6f\"", q->qty->_shrt);
+#if 0
 	fprintf(out, " Stat=\"%u\"", q->stat);
+#endif
 
+#if 0
 	if (q->qty_dt > 0) {
 		fputs(" QtyDt=\"", out);
 		print_date(out, q->qty_dt);
 		fputc('"', out);
 	}
+#endif
 
 	/* finalise the tag */
 	fputs("/>\n", out);
 	return;
 }
 
+#if 0
 static void
 print_amt(struct __amt_s *a, FILE *out, size_t indent)
 {
@@ -227,52 +236,38 @@ print_amt(struct __amt_s *a, FILE *out, size_t indent)
 	fputs("/>\n", out);
 	return;
 }
+#endif
 
 static void
-print_sub(struct __sub_s *s, FILE *out, size_t indent)
-{
-	print_indent(out, indent);
-	fputs("<Sub", out);
-
-	if (s->id) {
-		fputs(" ID=\"", out);
-		fputs_encq(s->id, out);
-		fputc('"', out);
-	}
-
-	fprintf(out, " Typ=\"%u\"", s->typ);
-
-	/* finalise the tag */
-	fputs("/>\n", out);
-	return;
-}
-
-static void
-print_pty(struct __pty_s *p, FILE *out, size_t indent)
+print_pty(const char *id, unsigned int role, char src, FILE *out, size_t indent)
 {
 	print_indent(out, indent);
 	fputs("<Pty", out);
 
-	if (p->id) {
+	if (id) {
 		fputs(" ID=\"", out);
-		fputs_encq(p->id, out);
+		fputs_encq(id, out);
 		fputc('"', out);
 	}
 
-	if (p->src) {
+	fprintf(out, " R=\"%u\"", role);
+
+	if (src) {
 		fputs(" Src=\"", out);
-		fputc(p->src, out);
+		fputc(src, out);
 		fputc('"', out);
 	}
-	fprintf(out, " R=\"%u\"", p->role);
 
 	/* finalise the tag */
 	fputs(">\n", out);
 
+#if 0
+/* not supported */
 	for (size_t j = 0; j < p->nsub; j++) {
 		struct __sub_s *sub = p->sub + j;
 		print_sub(sub, out, indent + 2);
 	}
+#endif	/* 0 */
 
 	print_indent(out, indent);
 	fputs("</Pty>\n", out);
@@ -280,44 +275,45 @@ print_pty(struct __pty_s *p, FILE *out, size_t indent)
 }
 
 static void
-print_req_for_poss(struct __req_for_poss_s *r, FILE *out, size_t indent)
+print_req_for_poss(umpf_msg_t msg, FILE *out, size_t indent)
 {
 	print_indent(out, indent);
 	fputs("<ReqForPoss", out);
 
+#if 0
 	if (r->req_id) {
 		fputs(" ReqId=\"", out);
 		fputs_encq(r->req_id, out);
 		fputc('"', out);
 	}
+#endif
 
-	if (r->biz_dt > 0) {
+	if (msg->pf.clr_dt > 0) {
 		fputs(" BizDt=\"", out);
-		print_date(out, r->biz_dt);
+		print_date(out, msg->pf.clr_dt);
 		fputc('"', out);
 	}
 
-	fprintf(out, " ReqTyp=\"%u\"", r->req_typ);
+	fputs(" ReqTyp=\"0\"", out);
 
+#if 0
 	if (r->set_ses_id) {
 		fputs(" SetSesID=\"", out);
 		fputs_encq(r->set_ses_id, out);
 		fputc('"', out);
 	}
+#endif
 
-	if (r->txn_tm > 0) {
+	if (msg->pf.stamp > 0) {
 		fputs(" TxnTm=\"", out);
-		print_zulu(out, r->txn_tm);
+		print_zulu(out, msg->pf.stamp);
 		fputc('"', out);
 	}
 
 	/* finalise the tag */
 	fputs(">\n", out);
 
-	for (size_t j = 0; j < r->npty; j++) {
-		struct __pty_s *pty = r->pty + j;
-		print_pty(pty, out, indent + 2);
-	}
+	print_pty(msg->pf.name, 0, '\0', out, indent + 2);
 
 	print_indent(out, indent);
 	fputs("</ReqForPoss>\n", out);
@@ -325,46 +321,46 @@ print_req_for_poss(struct __req_for_poss_s *r, FILE *out, size_t indent)
 }
 
 static void
-print_req_for_poss_ack(struct __req_for_poss_ack_s *r, FILE *out, size_t indent)
+print_req_for_poss_ack(umpf_msg_t msg, FILE *out, size_t indent)
 {
 	print_indent(out, indent);
 	fputs("<ReqForPossAck", out);
 
+#if 0
 	if (r->rpt_id) {
 		fputs(" RptId=\"", out);
 		fputs_encq(r->rpt_id, out);
 		fputc('"', out);
 	}
+#endif
 
-	if (r->biz_dt > 0) {
+	if (msg->pf.clr_dt > 0) {
 		fputs(" BizDt=\"", out);
-		print_date(out, r->biz_dt);
+		print_date(out, msg->pf.clr_dt);
 		fputc('"', out);
 	}
 
-	fprintf(out, " ReqTyp=\"%u\"", r->req_typ);
-	fprintf(out, " TotRpts=\"%zu\"", r->tot_rpts);
-	fprintf(out, " Rslt=\"%u\"", r->rslt);
-	fprintf(out, " Stat=\"%u\"", r->stat);
+	fputs(" ReqTyp=\"0\"", out);
+	fprintf(out, " TotRpts=\"%zu\"", msg->pf.nposs);
+	fputs(" Rslt=\"0\" Stat=\"0\"", out);
 
+#if 0
 	if (r->set_ses_id) {
 		fputs(" SetSesID=\"", out);
 		fputs_encq(r->set_ses_id, out);
 		fputc('"', out);
 	}
+#endif
 
-	if (r->txn_tm > 0) {
+	if (msg->pf.stamp > 0) {
 		fputs(" TxnTm=\"", out);
-		print_zulu(out, r->txn_tm);
+		print_zulu(out, msg->pf.stamp);
 		fputc('"', out);
 	}
 	/* finalise the tag */
 	fputs(">\n", out);
 
-	for (size_t j = 0; j < r->npty; j++) {
-		struct __pty_s *pty = r->pty + j;
-		print_pty(pty, out, indent + 2);
-	}
+	print_pty(msg->pf.name, 0, '\0', out, indent + 2);
 
 	print_indent(out, indent);
 	fputs("</ReqForPossAck>\n", out);
@@ -372,58 +368,49 @@ print_req_for_poss_ack(struct __req_for_poss_ack_s *r, FILE *out, size_t indent)
 }
 
 static void
-print_pos_rpt(struct __pos_rpt_s *pr, FILE *out, size_t indent)
+print_pos_rpt(umpf_msg_t msg, size_t idx, FILE *out, size_t indent)
 {
 	print_indent(out, indent);
 	fputs("<PosRpt", out);
 
+#if 0
 	if (pr->rpt_id) {
 		fputs(" RptId=\"", out);
 		fputs_encq(pr->rpt_id, out);
 		fputc('"', out);
 	}
 	/* TotRpts makes no sense innit? */
+#endif
 
-	fprintf(out, " Rslt=\"%u\"", pr->rslt);
+	fputs(" Rslt=\"0\" ReqTyp=\"0\"", out);
 
-	fprintf(out, " ReqTyp=\"%u\"", pr->req_typ);
-
-	if (pr->biz_dt > 0) {
+	if (msg->pf.clr_dt > 0) {
 		fputs(" BizDt=\"", out);
-		print_date(out, pr->biz_dt);
+		print_date(out, msg->pf.clr_dt);
 		fputc('"', out);
 	}
 
-	if (pr->rpt_id) {
-		fputs(" RptId=\"", out);
-		fputs_encq(pr->rpt_id, out);
-		fputc('"', out);
-	}
-
+#if 0
 	if (pr->set_ses_id) {
 		fputs(" SetSesID=\"", out);
 		fputs_encq(pr->set_ses_id, out);
 		fputc('"', out);
 	}
+#endif
 	/* finalise the tag */
 	fputs(">\n", out);
 
-	print_instrmt(pr->instrmt, out, indent + 2);
+	print_pty(msg->pf.name, 0, '\0', out, indent + 2);
 
-	for (size_t j = 0; j < pr->npty; j++) {
-		struct __pty_s *pty = pr->pty + j;
-		print_pty(pty, out, indent + 2);
-	}
+	print_instrmt(msg->pf.poss + idx, out, indent + 2);
+	print_qty(msg->pf.poss + idx, out, indent + 2);
 
-	for (size_t j = 0; j < pr->nqty; j++) {
-		struct __qty_s *qty = pr->qty + j;
-		print_qty(qty, out, indent + 2);
-	}
-
+#if 0
 	for (size_t j = 0; j < pr->namt; j++) {
 		struct __amt_s *amt = pr->amt + j;
 		print_amt(amt, out, indent + 2);
 	}
+#endif
 
 	print_indent(out, indent);
 	fputs("<PosRpt>\n", out);
@@ -431,56 +418,34 @@ print_pos_rpt(struct __pos_rpt_s *pr, FILE *out, size_t indent)
 }
 
 static void
-print_batch(struct __batch_s *b, FILE *out, size_t indent)
-{
-	print_indent(out, indent);
-	fputs("<Batch>\n", out);
-
-	for (size_t j = 0; j < b->nmsg; j++) {
-		struct __g_msg_s *m = b->msg + j;
-		switch (m->tid) {
-		case UMPF_TAG_REQ_FOR_POSS:
-			print_req_for_poss(
-				m->msg.req_for_poss, out, indent + 2);
-			break;
-		case UMPF_TAG_REQ_FOR_POSS_ACK:
-			print_req_for_poss_ack(
-				m->msg.req_for_poss_ack, out, indent + 2);
-			break;
-		case UMPF_TAG_POS_RPT:
-			print_pos_rpt(m->msg.pos_rpt, out, indent + 2);
-			break;
-		default:
-			break;
-		}
-	}
-
-	print_indent(out, indent);
-	fputs("</Batch>\n", out);
-	return;
-}
-
-static void
-print_doc(umpf_doc_t doc, FILE *out, size_t indent)
+print_msg(umpf_msg_t msg, FILE *out, size_t indent)
 {
 	print_indent(out, indent);
 	fputs("<FIXML xmlns=\"", out);
 	fputs(fixml50_ns_uri, out);
 	fputs("\" v=\"5.0\">\n", out);
 
-	switch (doc->top) {
-	case UMPF_TAG_BATCH:
-		print_batch(doc->batch, out, indent + 2);
+	switch (msg->hdr.mt) {
+	case UMPF_MSG_NEW_PF * 2:
+		/* not supported yet */
 		break;
-	case UMPF_TAG_REQ_FOR_POSS:
-		print_req_for_poss(doc->msg.req_for_poss, out, indent + 2);
+	case UMPF_MSG_GET_PF * 2:
+		print_req_for_poss(msg, out, indent + 2);
 		break;
-	case UMPF_TAG_REQ_FOR_POSS_ACK:
-		print_req_for_poss_ack(
-			doc->msg.req_for_poss_ack, out, indent + 2);
+	case UMPF_MSG_SET_PF * 2:
+		/* more than one child, so Batch it */
+		print_indent(out, indent + 2);
+		fputs("<Batch>\n", out);
+
+		print_req_for_poss_ack(msg, out, indent + 4);
+		for (size_t i = 0; i < msg->pf.nposs; i++) {
+			print_pos_rpt(msg, i, out, indent + 4);
+		}
+
+		print_indent(out, indent);
+		fputs("</Batch>\n", out);
 		break;
-	case UMPF_TAG_POS_RPT:
-		print_pos_rpt(doc->msg.pos_rpt, out, indent + 2);
+	default:
 		break;
 	}
 
@@ -492,11 +457,11 @@ print_doc(umpf_doc_t doc, FILE *out, size_t indent)
 
 /* external stuff and helpers */
 void
-umpf_print_doc(umpf_doc_t doc, FILE *out)
+umpf_print_msg(umpf_msg_t msg, FILE *out)
 {
 	fputs("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n", out);
-	print_doc(doc, out, 0);
+	print_msg(msg, out, 0);
 	return;
 }
 
-/* print-xml.c ends here */
+/* print-fixml.c ends here */
