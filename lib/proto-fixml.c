@@ -85,7 +85,7 @@ struct umpf_ctxcb_s {
 
 struct __ctx_s {
 	/* the main message we're building */
-	void *doc;
+	umpf_msg_t msg;
 	struct umpf_ns_s ns[16];
 	size_t nns;
 	/* stuff buf */
@@ -417,7 +417,7 @@ proc_REQ_FOR_POSS_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
 	const umpf_aid_t aid = sax_aid_from_attr(attr);
-	umpf_msg_t msg = ctx->doc;
+	umpf_msg_t msg = ctx->msg;
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
@@ -453,7 +453,7 @@ proc_REQ_FOR_POSS_ACK_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
 	const umpf_aid_t aid = sax_aid_from_attr(attr);
-	umpf_msg_t msg = ctx->doc;
+	umpf_msg_t msg = ctx->msg;
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
@@ -589,7 +589,7 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 	const char *rname = tag_massage(name);
 	const umpf_tid_t tid = sax_tid_from_tag(rname);
 
-	if (!umpf_pref_p(ctx, name, rname - name) && ctx->doc != NULL) {
+	if (!umpf_pref_p(ctx, name, rname - name) && ctx->msg != NULL) {
 		/* dont know what to do */
 		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", name);
 		return;
@@ -602,7 +602,7 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		for (int i = 0; attrs[i] != NULL; i += 2) {
 			proc_FIXML_attr(ctx, attrs[i], attrs[i + 1]);
 		}
-		push_state(ctx, tid, ctx->doc);
+		push_state(ctx, tid, ctx->msg);
 		break;
 	}
 
@@ -617,14 +617,14 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		/* translate to new_pf/set_descr */
 		umpf_msg_t msg;
 
-		if (UNLIKELY(ctx->doc != NULL)) {
+		if (UNLIKELY(ctx->msg != NULL)) {
 			break;
 		} else if (UNLIKELY(get_state_otype(ctx) != UMPF_TAG_FIXML)) {
 			break;
 		}
 
 		/* generate a massage */
-		ctx->doc = msg = calloc(sizeof(*msg), 1);
+		ctx->msg = msg = calloc(sizeof(*msg), 1);
 		/* sigh, subtle differences */
 		switch (tid) {
 		case UMPF_TAG_REQ_FOR_POSS:
@@ -640,9 +640,11 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 				proc_REQ_FOR_POSS_ACK_attr(
 					ctx, attrs[j], attrs[j + 1]);
 			}
-			msg = realloc(
-				msg, sizeof(*msg) +
-				sizeof(struct __ins_qty_s) * msg->pf.nposs);
+			if (msg->pf.nposs > 0) {
+				ctx->msg = msg = realloc(
+					msg, sizeof(*msg) +
+					sizeof(*msg->pf.poss) * msg->pf.nposs);
+			}
 			break;
 		case UMPF_TAG_RGST_INSTRCTNS:
 			msg->hdr.mt = UMPF_MSG_NEW_PF * 2;
@@ -659,7 +661,7 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		umpf_msg_t msg;
 		struct __ins_qty_s *iq;
 
-		if (UNLIKELY((msg = ctx->doc) == NULL)) {
+		if (UNLIKELY((msg = ctx->msg) == NULL)) {
 			iq = NULL;
 		} else if (UNLIKELY(get_state_otype(ctx) != UMPF_TAG_FIXML)) {
 			iq = NULL;
@@ -674,7 +676,7 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		/* context sensitive node, bummer */
 		umpf_msg_t msg;
 
-		if (UNLIKELY((msg = ctx->doc) == NULL)) {
+		if (UNLIKELY((msg = ctx->msg) == NULL)) {
 			break;
 		}
 
@@ -839,12 +841,12 @@ static int
 final_blob_p(__ctx_t ctx)
 {
 /* return 1 if we need more blobs, 0 if this was the final blob, -1 on error */
-	if (ctx->doc != NULL && ctx->state == NULL) {
+	if (ctx->msg != NULL && ctx->state == NULL) {
 		/* we're ready */
 		UMPF_DEBUG(PFIXML_PRE ": seems ready\n");
 		return xmlParseChunk(ctx->pp, ctx->sbuf, 0, 1);
 	}
-	UMPF_DEBUG(PFIXML_PRE ": %p %u\n", ctx->doc, get_state_otype(ctx));
+	UMPF_DEBUG(PFIXML_PRE ": %p %u\n", ctx->msg, get_state_otype(ctx));
 	/* request more data */
 	return BLOB_M_PLZ;
 }
@@ -875,12 +877,13 @@ init(__ctx_t ctx)
 	memset(ctx, 0, sizeof(*ctx));
 #else
 	/* wipe some slots */
-	ctx->doc = NULL;
+	ctx->msg = NULL;
 #endif	/* 0 */
 
 	/* initialise the stuff buffer */
 	ctx->sbuf = realloc(ctx->sbuf, ctx->sbsz = INITIAL_STUFF_BUF_SIZE);
 	ctx->sbix = 0;
+
 	/* we always reserve one name space slot for FIXML */
 	ctx->nns = 1;
 
@@ -895,9 +898,9 @@ init(__ctx_t ctx)
 static void
 deinit(__ctx_t ctx)
 {
-	if (ctx->doc) {
+	if (ctx->msg) {
 		/* reset the document, leak if not free()'d */
-		ctx->doc = NULL;
+		ctx->msg = NULL;
 	}
 
 	for (size_t i = 0; i < ctx->nns; i++) {
@@ -932,16 +935,16 @@ free_ctx(__ctx_t ctx)
 	return;
 }
 
-static umpf_doc_t
+static umpf_msg_t
 __umpf_parse_file(__ctx_t ctx, const char *file)
 {
-	umpf_doc_t res;
+	umpf_msg_t res;
 
 	init(ctx);
 	UMPF_DEBUG(PFIXML_PRE ": parsing %s\n", file);
 	if (LIKELY(parse_file(ctx, file) == 0)) {
 		UMPF_DEBUG(PFIXML_PRE ": done\n");
-		res = ctx->doc;
+		res = ctx->msg;
 	} else {
 		UMPF_DEBUG(PFIXML_PRE ": failed\n");
 		res = NULL;
@@ -950,18 +953,18 @@ __umpf_parse_file(__ctx_t ctx, const char *file)
 	return res;
 }
 
-umpf_doc_t
+umpf_msg_t
 umpf_parse_file(const char *file)
 {
 	static struct __ctx_s ctx[1] = {{0}};
 	return __umpf_parse_file(ctx, file);
 }
 
-umpf_doc_t
+umpf_msg_t
 umpf_parse_file_r(const char *file)
 {
 	__ctx_t ctx = calloc(sizeof(*ctx), 1);
-	umpf_doc_t res = __umpf_parse_file(ctx, file);
+	umpf_msg_t res = __umpf_parse_file(ctx, file);
 	free_ctx(ctx);
 	return res;
 }
@@ -973,16 +976,16 @@ ctx_deinitted_p(__ctx_t ctx)
 	return ctx->pp == NULL;
 }
 
-static umpf_doc_t
+static umpf_msg_t
 check_ret(__ctx_t ctx)
 {
-	umpf_doc_t res;
+	umpf_msg_t res;
 	int ret = final_blob_p(ctx);
 
 	switch (ret) {
 	case BLOB_READY:
 		UMPF_DEBUG(PFIXML_PRE ": done\n");
-		res = ctx->doc;
+		res = ctx->msg;
 		break;
 	case BLOB_M_PLZ:
 		UMPF_DEBUG(PFIXML_PRE ": more\n");
@@ -1015,11 +1018,11 @@ __umpf_parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 	return;
 }
 
-umpf_doc_t
+umpf_msg_t
 umpf_parse_blob(umpf_ctx_t *ctx, const char *buf, size_t bsz)
 {
 	static struct __ctx_s __ctx[1] = {{0}};
-	umpf_doc_t res;
+	umpf_msg_t res;
 
 	if (UNLIKELY(*ctx == NULL)) {
 		*ctx = __ctx;
@@ -1034,10 +1037,10 @@ umpf_parse_blob(umpf_ctx_t *ctx, const char *buf, size_t bsz)
 	return res;
 }
 
-umpf_doc_t
+umpf_msg_t
 umpf_parse_blob_r(umpf_ctx_t *ctx, const char *buf, size_t bsz)
 {
-	umpf_doc_t res;
+	umpf_msg_t res;
 
 	if (UNLIKELY(*ctx == NULL)) {
 		*ctx = calloc(sizeof(struct __ctx_s), 1);
@@ -1055,10 +1058,12 @@ umpf_parse_blob_r(umpf_ctx_t *ctx, const char *buf, size_t bsz)
 }
 
 void
-umpf_free_doc(umpf_doc_t doc)
+umpf_free_msg(umpf_msg_t msg)
 {
-/* do me properly */
-	free(doc);
+	/* add more stuff once we go hierarchy,
+	 * for now the union type allows us to just free him,
+	 * thanks realloc */
+	free(msg);
 	return;
 }
 

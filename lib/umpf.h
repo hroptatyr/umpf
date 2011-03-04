@@ -114,11 +114,11 @@ union umpf_msg_u {
 
 /**
  * Parse bla bla ... */
-extern umpf_doc_t umpf_parse_file(const char *file);
+extern umpf_msg_t umpf_parse_file(const char *file);
 
 /**
  * Like `umpf_parse_file()' but re-entrant (and thus slower). */
-extern umpf_doc_t umpf_parse_file_r(const char *file);
+extern umpf_msg_t umpf_parse_file_r(const char *file);
 
 /* blob parsing */
 /**
@@ -129,17 +129,17 @@ extern umpf_doc_t umpf_parse_file_r(const char *file);
  * If CTX becomes NULL the document is either finished or
  * errors have occurred, the return value will be the document
  * in the former case or NULL in the latter. */
-extern umpf_doc_t
+extern umpf_msg_t
 umpf_parse_blob(umpf_ctx_t *ctx, const char *buf, size_t bsz);
 
 /**
  * Like `umpf_parse_blob()' but re-entrant (and thus slower). */
-extern umpf_doc_t
+extern umpf_msg_t
 umpf_parse_blob_r(umpf_ctx_t *ctx, const char *buf, size_t bsz);
 
 /**
- * Oh yes. */
-extern void umpf_free_doc(umpf_doc_t);
+ * Free resources associated with MSG. */
+extern void umpf_free_msg(umpf_msg_t);
 
 /**
  * Print DOC to OUT. */
