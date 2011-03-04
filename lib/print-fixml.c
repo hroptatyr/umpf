@@ -51,10 +51,6 @@
 
 #define PFIXML_PRE	"mod/pfd/fixml"
 
-/* gperf goodness */
-#include "proto-fixml-tag.c"
-#include "proto-fixml-attr.c"
-
 #if defined __INTEL_COMPILER
 # pragma warning (disable:424)
 #endif	/* __INTEL_COMPILER */
