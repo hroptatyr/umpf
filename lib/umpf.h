@@ -49,6 +49,55 @@ extern "C" {
 typedef void *umpf_ctx_t;
 typedef struct __umpf_s *umpf_doc_t;
 
+/* message types */
+typedef enum {
+	UMPF_MSG_UNK,
+	UMPF_MSG_NEW_PF,
+	UMPF_MSG_GET_PF,
+	UMPF_MSG_SET_PF,
+	/* portoflio descriptions */
+	UMPF_MSG_GET_DESCR,
+	UMPF_MSG_SET_DESCR,
+	/* will be coalesced with od/uschi messages one day
+	 * diff takes 2 portfolios and returns a stream of od/uschi msgs
+	 * patch takes a portfolio and a stream of od/uschi msgs */
+	UMPF_MSG_DIFF,
+	UMPF_MSG_PATCH,
+} umpf_msg_type_t;
+
+/* naked portfolios */
+struct __Xqty_s {
+	double _long;
+	double _shrt;
+};
+
+struct __ins_qty_s {
+	char *instr;
+	struct __Xqty_s qty[1];
+};
+
+struct umpf_msg_s {
+	umpf_msg_type_t mt;
+	void *p;
+};
+
+/* RgstInstrctns -> new_pf */
+struct umpf_msg_new_pf_s {
+	struct umpf_msg_s hdr[1];
+
+	char *name;
+	char *satellite;
+};
+
+/* ReqForPoss[Ack] -> get_pf/set_pf */
+struct umpf_msg_pf_s {
+	struct umpf_msg_s hdr[1];
+
+	char *name;
+	size_t nposs;
+	struct __ins_qty_s poss[];
+};
+
 
 /* some useful functions */
 
