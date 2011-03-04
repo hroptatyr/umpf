@@ -48,6 +48,7 @@ extern "C" {
 
 typedef void *umpf_ctx_t;
 typedef struct __umpf_s *umpf_doc_t;
+typedef union umpf_msg_u *umpf_msg_t;
 
 /* message types */
 typedef enum {
@@ -76,14 +77,15 @@ struct __ins_qty_s {
 	struct __Xqty_s qty[1];
 };
 
-struct umpf_msg_s {
-	umpf_msg_type_t mt;
+struct umpf_msg_hdr_s {
+	/* this is generally msg_type * 2 */
+	unsigned int mt;
 	void *p;
 };
 
 /* RgstInstrctns -> new_pf */
 struct umpf_msg_new_pf_s {
-	struct umpf_msg_s hdr[1];
+	struct umpf_msg_hdr_s hdr;
 
 	char *name;
 	char *satellite;
@@ -91,11 +93,17 @@ struct umpf_msg_new_pf_s {
 
 /* ReqForPoss[Ack] -> get_pf/set_pf */
 struct umpf_msg_pf_s {
-	struct umpf_msg_s hdr[1];
+	struct umpf_msg_hdr_s hdr;
 
 	char *name;
 	size_t nposs;
 	struct __ins_qty_s poss[];
+};
+
+union umpf_msg_u {
+	struct umpf_msg_hdr_s hdr;
+	struct umpf_msg_pf_s pf;
+	struct umpf_msg_new_pf_s new_pf;
 };
 
 
