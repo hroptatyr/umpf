@@ -659,13 +659,13 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 	case UMPF_TAG_POS_RPT: {
 		/* part of get/set pf */
 		umpf_msg_t msg;
-		struct __ins_qty_s *iq;
+		struct __ins_qty_s *iq = NULL;
 
 		if (UNLIKELY((msg = ctx->msg) == NULL)) {
-			iq = NULL;
+			;
 		} else if (UNLIKELY(get_state_otype(ctx) != UMPF_TAG_FIXML)) {
-			iq = NULL;
-		} else {
+			;
+		} else if (get_state_objint(ctx) < msg->pf.nposs) {
 			iq = msg->pf.poss + get_state_objint(ctx);
 		}
 		(void)push_state(ctx, tid, iq);
