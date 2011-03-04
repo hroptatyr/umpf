@@ -47,6 +47,7 @@
 #endif	/* HAVE_LIBXML2 */
 #include "nifty.h"
 #include "umpf.h"
+#include "umpf-private.h"
 
 #define PFIXML_PRE	"mod/umpf/fixml"
 

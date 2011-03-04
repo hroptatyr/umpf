@@ -8,6 +8,7 @@ aouhdr_HEADERS =
 
 bin_PROGRAMS =
 noinst_PROGRAMS =
+noinst_HEADERS =
 lib_LTLIBRARIES =
 BUILT_SOURCES =
 CLEANFILES = $(BUILT_SOURCES)
@@ -15,6 +16,7 @@ EXTRA_DIST =
 
 lib_LTLIBRARIES += libumpf.la
 aouhdr_HEADERS += umpf.h
+noinst_HEADERS += umpf-private.h
 libumpf_la_SOURCES =
 EXTRA_libumpf_la_SOURCES =
 libumpf_la_SOURCES += proto-fixml.c
