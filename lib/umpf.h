@@ -1,4 +1,4 @@
-/*** fixml.h -- fixml position messages
+/*** umpf.h -- fixml position messages
  *
  * Copyright (C) 2011 Sebastian Freundt
  *
@@ -46,59 +46,59 @@
 extern "C" {
 #endif	/* __cplusplus */
 
-typedef void *pfd_ctx_t;
+typedef void *umpf_ctx_t;
 
 /* all tags we understand */
 typedef enum {
 	/* must be first */
-	PFD_TAG_UNK,
+	UMPF_TAG_UNK,
 	/* alphabetic list of tags */
-	PFD_TAG_AMT,
-	PFD_TAG_BATCH,
-	PFD_TAG_FIXML,
-	PFD_TAG_INSTRMT,
-	PFD_TAG_POS_RPT,
+	UMPF_TAG_AMT,
+	UMPF_TAG_BATCH,
+	UMPF_TAG_FIXML,
+	UMPF_TAG_INSTRMT,
+	UMPF_TAG_POS_RPT,
 
-	PFD_TAG_PTY,
-	PFD_TAG_QTY,
-	PFD_TAG_REQ_FOR_POSS,
-	PFD_TAG_REQ_FOR_POSS_ACK,
-	PFD_TAG_SUB,
+	UMPF_TAG_PTY,
+	UMPF_TAG_QTY,
+	UMPF_TAG_REQ_FOR_POSS,
+	UMPF_TAG_REQ_FOR_POSS_ACK,
+	UMPF_TAG_SUB,
 
-} pfd_tid_t;
-
-typedef enum {
-	PFD_REQ_TYP_POSS,
-	PFD_REQ_TYP_TRADES,
-	PFD_REQ_TYP_EXER,
-	PFD_REQ_TYP_ASSS,
-	PFD_REQ_TYP_STLM_ACT,
-	PFD_REQ_TYP_BACK_OUT_MSG,
-	PFD_REQ_TYP_DELTA_POSS,
-} pfd_req_typ_t;
+} umpf_tid_t;
 
 typedef enum {
-	PFD_RSLT_VALID,
-	PFD_RSLT_INVALID,
-	PFD_RSLT_NO_MATCH,
-	PFD_RSLT_NOT_AUTH,
-	PFD_RSLT_NOT_SUPP,
-	PFD_RSLT_OTHER = 99,
-} pfd_rslt_t;
+	UMPF_REQ_TYP_POSS,
+	UMPF_REQ_TYP_TRADES,
+	UMPF_REQ_TYP_EXER,
+	UMPF_REQ_TYP_ASSS,
+	UMPF_REQ_TYP_STLM_ACT,
+	UMPF_REQ_TYP_BACK_OUT_MSG,
+	UMPF_REQ_TYP_DELTA_POSS,
+} umpf_req_typ_t;
 
 typedef enum {
-	PFD_STAT_COMPLETED,
-	PFD_STAT_WARNINGS,
-	PFD_STAT_REJECTED,
-} pfd_stat_t;
+	UMPF_RSLT_VALID,
+	UMPF_RSLT_INVALID,
+	UMPF_RSLT_NO_MATCH,
+	UMPF_RSLT_NOT_AUTH,
+	UMPF_RSLT_NOT_SUPP,
+	UMPF_RSLT_OTHER = 99,
+} umpf_rslt_t;
 
 typedef enum {
-	PFD_POS_QTY_SUBMITTED,
-	PFD_POS_QTY_ACCEPTED,
-	PFD_POS_QTY_REJECTED,
-} pfd_pos_qty_stat_t;
+	UMPF_STAT_COMPLETED,
+	UMPF_STAT_WARNINGS,
+	UMPF_STAT_REJECTED,
+} umpf_stat_t;
 
-typedef struct __pfd_s *pfd_doc_t;
+typedef enum {
+	UMPF_POS_QTY_SUBMITTED,
+	UMPF_POS_QTY_ACCEPTED,
+	UMPF_POS_QTY_REJECTED,
+} umpf_pos_qty_stat_t;
+
+typedef struct __umpf_s *umpf_doc_t;
 
 
 struct __sub_s {
@@ -133,7 +133,7 @@ struct __qty_s {
 	char *typ;
 	double _long;
 	double _short;
-	pfd_pos_qty_stat_t stat;
+	umpf_pos_qty_stat_t stat;
 	time_t qty_dt;
 };
 
@@ -148,7 +148,7 @@ struct __amt_s {
 /* top level messages */
 struct __req_for_poss_s {
 	time_t biz_dt;
-	pfd_req_typ_t req_typ;
+	umpf_req_typ_t req_typ;
 	char *req_id;
 	time_t txn_tm;
 	char *set_ses_id;
@@ -161,10 +161,10 @@ struct __req_for_poss_s {
 struct __req_for_poss_ack_s {
 	char *rpt_id;
 	time_t biz_dt;
-	pfd_req_typ_t req_typ;
+	umpf_req_typ_t req_typ;
 	size_t tot_rpts;
-	pfd_rslt_t rslt;
-	pfd_stat_t stat;
+	umpf_rslt_t rslt;
+	umpf_stat_t stat;
 	char *set_ses_id;
 	time_t txn_tm;
 
@@ -175,9 +175,9 @@ struct __req_for_poss_ack_s {
 
 struct __pos_rpt_s {
 	char *rpt_id;
-	pfd_req_typ_t req_typ;
+	umpf_req_typ_t req_typ;
 	size_t tot_rpts;
-	pfd_rslt_t rslt;
+	umpf_rslt_t rslt;
 	time_t biz_dt;
 	char *set_ses_id;
 
@@ -202,7 +202,7 @@ union __g_msg_u {
 };
 
 struct __g_msg_s {
-	pfd_tid_t tid;
+	umpf_tid_t tid;
 	union __g_msg_u msg;
 };
 
@@ -212,8 +212,8 @@ struct __batch_s {
 };
 
 /* top-level FIXML standard header */
-struct __pfd_s {
-	pfd_tid_t top;
+struct __umpf_s {
+	umpf_tid_t top;
 	union {
 		struct __batch_s batch[1];
 		union __g_msg_u msg;
@@ -226,34 +226,36 @@ struct __pfd_s {
 
 /**
  * Parse bla bla ... */
-extern pfd_doc_t pfd_parse_file(const char *file);
+extern umpf_doc_t umpf_parse_file(const char *file);
 
 /**
- * Like `pfd_parse_file()' but re-entrant (and thus slower). */
-extern pfd_doc_t pfd_parse_file_r(const char *file);
+ * Like `umpf_parse_file()' but re-entrant (and thus slower). */
+extern umpf_doc_t umpf_parse_file_r(const char *file);
 
 /* blob parsing */
 /**
  * Parse BSZ bytes in BUF and, by side effect, obtain a context.
  * That context can be reused in subsequent calls to
- * `pfd_parse_blob()' to parse fragments of XML documents in
+ * `umpf_parse_blob()' to parse fragments of XML documents in
  * several goes, use a NULL pointer upon the first go.
  * If CTX becomes NULL the document is either finished or
  * errors have occurred, the return value will be the document
  * in the former case or NULL in the latter. */
-extern pfd_doc_t pfd_parse_blob(pfd_ctx_t *ctx, const char *buf, size_t bsz);
+extern umpf_doc_t
+umpf_parse_blob(umpf_ctx_t *ctx, const char *buf, size_t bsz);
 
 /**
- * Like `pfd_parse_blob()' but re-entrant (and thus slower). */
-extern pfd_doc_t pfd_parse_blob_r(pfd_ctx_t *ctx, const char *buf, size_t bsz);
+ * Like `umpf_parse_blob()' but re-entrant (and thus slower). */
+extern umpf_doc_t
+umpf_parse_blob_r(umpf_ctx_t *ctx, const char *buf, size_t bsz);
 
 /**
  * Oh yes. */
-extern void pfd_free_doc(pfd_doc_t);
+extern void umpf_free_doc(umpf_doc_t);
 
 /**
  * Print DOC to OUT. */
-extern void pfd_print_doc(pfd_doc_t, FILE *out);
+extern void umpf_print_doc(umpf_doc_t, FILE *out);
 
 /**
  * Name space URI for FIXML 5.0 */

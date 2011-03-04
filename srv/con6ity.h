@@ -53,11 +53,11 @@
 # define DEFUN_W	__attribute__((weak))
 #endif	/* !DEFUN */
 
-typedef void *pfd_conn_t;
+typedef void *umpf_conn_t;
 
-DECLF int get_fd(pfd_conn_t ctx);
-DECLF void *get_fd_data(pfd_conn_t ctx);
-DECLF void put_fd_data(pfd_conn_t ctx, void *data);
+DECLF int get_fd(umpf_conn_t ctx);
+DECLF void *get_fd_data(umpf_conn_t ctx);
+DECLF void put_fd_data(umpf_conn_t ctx, void *data);
 
 DECLF int conn_listener_net(uint16_t port);
 DECLF int conn_listener_uds(const char *sock_path);
@@ -66,7 +66,7 @@ DECLF void deinit_conn_watchers(void *loop);
 
 
 /* stuff the user should/must overwrite, to be replaced with callbacks */
-DECLF_W int handle_data(pfd_conn_t, char *msg, size_t msglen);
-DECLF_W void handle_close(pfd_conn_t);
+DECLF_W int handle_data(umpf_conn_t, char *msg, size_t msglen);
+DECLF_W void handle_close(umpf_conn_t);
 
 #endif	/* INCLUDED_con6ity_h_ */

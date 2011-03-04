@@ -1,5 +1,5 @@
 %{
-typedef struct pfd_tag_s *pfd_tag_t;
+typedef struct umpf_tag_s *umpf_tag_t;
 %}
 %7bit
 %readonly-tables
@@ -10,19 +10,19 @@ typedef struct pfd_tag_s *pfd_tag_t;
 %null-strings
 %enum
 
-struct pfd_tag_s {
+struct umpf_tag_s {
 	const char *tag;
-	pfd_tid_t tid;
+	umpf_tid_t tid;
 };
 
 %%
-Amt,	PFD_TAG_AMT
-Batch,	PFD_TAG_BATCH
-FIXML,	PFD_TAG_FIXML
-Instrmt,	PFD_TAG_INSTRMT
-PosRpt,	PFD_TAG_POS_RPT
-Pty,	PFD_TAG_PTY
-Qty,	PFD_TAG_QTY
-ReqForPoss,	PFD_TAG_REQ_FOR_POSS
-ReqForPossAck,	PFD_TAG_REQ_FOR_POSS_ACK
-Sub,	PFD_TAG_SUB
+Amt,	UMPF_TAG_AMT
+Batch,	UMPF_TAG_BATCH
+FIXML,	UMPF_TAG_FIXML
+Instrmt,	UMPF_TAG_INSTRMT
+PosRpt,	UMPF_TAG_POS_RPT
+Pty,	UMPF_TAG_PTY
+Qty,	UMPF_TAG_QTY
+ReqForPoss,	UMPF_TAG_REQ_FOR_POSS
+ReqForPossAck,	UMPF_TAG_REQ_FOR_POSS_ACK
+Sub,	UMPF_TAG_SUB

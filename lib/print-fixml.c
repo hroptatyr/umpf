@@ -47,9 +47,9 @@
 # include <libxml/parser.h>
 #endif	/* HAVE_LIBXML2 */
 #include "nifty.h"
-#include "pfd.h"
+#include "umpf.h"
 
-#define PFIXML_PRE	"mod/pfd/fixml"
+#define PFIXML_PRE	"mod/umpf/fixml"
 
 #if defined __INTEL_COMPILER
 # pragma warning (disable:424)
@@ -438,15 +438,15 @@ print_batch(struct __batch_s *b, FILE *out, size_t indent)
 	for (size_t j = 0; j < b->nmsg; j++) {
 		struct __g_msg_s *m = b->msg + j;
 		switch (m->tid) {
-		case PFD_TAG_REQ_FOR_POSS:
+		case UMPF_TAG_REQ_FOR_POSS:
 			print_req_for_poss(
 				m->msg.req_for_poss, out, indent + 2);
 			break;
-		case PFD_TAG_REQ_FOR_POSS_ACK:
+		case UMPF_TAG_REQ_FOR_POSS_ACK:
 			print_req_for_poss_ack(
 				m->msg.req_for_poss_ack, out, indent + 2);
 			break;
-		case PFD_TAG_POS_RPT:
+		case UMPF_TAG_POS_RPT:
 			print_pos_rpt(m->msg.pos_rpt, out, indent + 2);
 			break;
 		default:
@@ -460,7 +460,7 @@ print_batch(struct __batch_s *b, FILE *out, size_t indent)
 }
 
 static void
-print_doc(pfd_doc_t doc, FILE *out, size_t indent)
+print_doc(umpf_doc_t doc, FILE *out, size_t indent)
 {
 	print_indent(out, indent);
 	fputs("<FIXML xmlns=\"", out);
@@ -468,17 +468,17 @@ print_doc(pfd_doc_t doc, FILE *out, size_t indent)
 	fputs("\" v=\"5.0\">\n", out);
 
 	switch (doc->top) {
-	case PFD_TAG_BATCH:
+	case UMPF_TAG_BATCH:
 		print_batch(doc->batch, out, indent + 2);
 		break;
-	case PFD_TAG_REQ_FOR_POSS:
+	case UMPF_TAG_REQ_FOR_POSS:
 		print_req_for_poss(doc->msg.req_for_poss, out, indent + 2);
 		break;
-	case PFD_TAG_REQ_FOR_POSS_ACK:
+	case UMPF_TAG_REQ_FOR_POSS_ACK:
 		print_req_for_poss_ack(
 			doc->msg.req_for_poss_ack, out, indent + 2);
 		break;
-	case PFD_TAG_POS_RPT:
+	case UMPF_TAG_POS_RPT:
 		print_pos_rpt(doc->msg.pos_rpt, out, indent + 2);
 		break;
 	}
@@ -491,7 +491,7 @@ print_doc(pfd_doc_t doc, FILE *out, size_t indent)
 
 /* external stuff and helpers */
 void
-pfd_print_doc(pfd_doc_t doc, FILE *out)
+umpf_print_doc(umpf_doc_t doc, FILE *out)
 {
 	fputs("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n", out);
 	print_doc(doc, out, 0);

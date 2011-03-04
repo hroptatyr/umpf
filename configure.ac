@@ -3,7 +3,7 @@ dnl Autoconf startup.
 dnl -------------------------------------------------------------------------
 
 AC_PREREQ([2.63])
-AC_INIT([pfd], m4_esyscmd([./git-version-gen]), [http://www.ga-group.nl])
+AC_INIT([umpf], m4_esyscmd([./git-version-gen]), [https://trac.ga-group.nl/freundt_devel/])
 AC_CONFIG_AUX_DIR([.])
 AC_CONFIG_HEADER([lib/config.h])
 AC_CONFIG_MACRO_DIR([m4])
@@ -14,7 +14,7 @@ dnl Local copyright notices.
 dnl -------------------------------------------------------------------------
 
 AC_COPYRIGHT(
-[#### Configuration script for pfd and friends.
+[#### Configuration script for umpf and friends.
 #### Copyright (C) 2011  Sebastian Freundt
 
 ### Don't edit this script!
@@ -88,7 +88,7 @@ AC_CONFIG_FILES([Makefile])
 AC_CONFIG_FILES([cli/Makefile])
 AC_CONFIG_FILES([lib/Makefile])
 AC_CONFIG_FILES([srv/Makefile])
-AC_CONFIG_FILES([libpfd.pc])
+AC_CONFIG_FILES([libumpf.pc])
 AC_OUTPUT
 
 echo

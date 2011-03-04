@@ -1,5 +1,5 @@
 #include <string.h>
-#include "pfd.h"
+#include "umpf.h"
 
 #define countof(x)	(sizeof(x) / sizeof(*x))
 
@@ -42,29 +42,29 @@ static const size_t blszs[] = {
 int
 main(int argc, const char *argv[])
 {
-	pfd_doc_t doc;
-	pfd_ctx_t ctx;
+	umpf_doc_t doc;
+	umpf_ctx_t ctx;
 	char altogether[4096] = {0};
 	size_t len;
 	size_t i;
 
-	doc = pfd_parse_file(argv[1]);
-	pfd_free_doc(doc);
+	doc = umpf_parse_file(argv[1]);
+	umpf_free_doc(doc);
 
-	doc = pfd_parse_file(argv[1]);
-	pfd_free_doc(doc);
+	doc = umpf_parse_file(argv[1]);
+	umpf_free_doc(doc);
 
-	doc = pfd_parse_file_r(argv[1]);
-	pfd_print_doc(doc, stdout);
-	pfd_free_doc(doc);
+	doc = umpf_parse_file_r(argv[1]);
+	umpf_print_doc(doc, stdout);
+	umpf_free_doc(doc);
 
 	for (i = 0, ctx = NULL; i < countof(blobs); i++) {
-		doc = pfd_parse_blob(&ctx, blobs[i], blszs[i]);
+		doc = umpf_parse_blob(&ctx, blobs[i], blszs[i]);
 		if (doc != NULL) {
 			/* definite success */
 			fprintf(stderr, "finally\n");
-			pfd_print_doc(doc, stdout);
-			pfd_free_doc(doc);
+			umpf_print_doc(doc, stdout);
+			umpf_free_doc(doc);
 
 		} else if (/* doc == NULL && */ctx == NULL) {
 			/* error occurred */
@@ -74,11 +74,11 @@ main(int argc, const char *argv[])
 	}
 
 	for (i = 0, ctx = NULL; i < countof(blobs); i++) {
-		doc = pfd_parse_blob_r(&ctx, blobs[i], blszs[i]);
+		doc = umpf_parse_blob_r(&ctx, blobs[i], blszs[i]);
 		if (doc != NULL) {
 			/* definite success */
-			pfd_print_doc(doc, stdout);
-			pfd_free_doc(doc);
+			umpf_print_doc(doc, stdout);
+			umpf_free_doc(doc);
 
 		} else if (/* doc == NULL && */ctx == NULL) {
 			/* error occurred */
@@ -94,23 +94,23 @@ main(int argc, const char *argv[])
 	len = strlen(altogether);
 
 	ctx = NULL;
-	doc = pfd_parse_blob(&ctx, altogether, len);
+	doc = umpf_parse_blob(&ctx, altogether, len);
 	if (doc == NULL) {
 		fprintf(stderr, "no doc %p\n", ctx);
 	} else if (ctx != NULL) {
 		fprintf(stderr, "wants more data we haven't got\n");
 	} else {
-		pfd_free_doc(doc);
+		umpf_free_doc(doc);
 	}
 
 	ctx = NULL;
-	doc = pfd_parse_blob_r(&ctx, altogether, len);
+	doc = umpf_parse_blob_r(&ctx, altogether, len);
 	if (doc == NULL) {
 		fprintf(stderr, "no doc %p\n", ctx);
 	} else if (ctx != NULL) {
 		fprintf(stderr, "wants more data we haven't got\n");
 	} else {
-		pfd_free_doc(doc);
+		umpf_free_doc(doc);
 	}
 	return 0;
 }

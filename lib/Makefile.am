@@ -13,20 +13,20 @@ BUILT_SOURCES =
 CLEANFILES = $(BUILT_SOURCES)
 EXTRA_DIST =
 
-lib_LTLIBRARIES += libaou-pfd.la
-aouhdr_HEADERS += pfd.h
-libaou_pfd_la_SOURCES =
-EXTRA_libaou_pfd_la_SOURCES =
-libaou_pfd_la_SOURCES += proto-fixml.c
-libaou_pfd_la_SOURCES += print-fixml.c
-libaou_pfd_la_CPPFLAGS = $(AM_CPPFLAGS) $(LIBXML2_CFLAGS) -I$(top_srcdir)/srv
-libaou_pfd_la_LDFLAGS = $(AM_LDFLAGS) $(LIBXML2_LIBS)
+lib_LTLIBRARIES += libumpf.la
+aouhdr_HEADERS += umpf.h
+libumpf_la_SOURCES =
+EXTRA_libumpf_la_SOURCES =
+libumpf_la_SOURCES += proto-fixml.c
+libumpf_la_SOURCES += print-fixml.c
+libumpf_la_CPPFLAGS = $(AM_CPPFLAGS) $(LIBXML2_CFLAGS) -I$(top_srcdir)/srv
+libumpf_la_LDFLAGS = $(AM_LDFLAGS) $(LIBXML2_LIBS)
 BUILT_SOURCES += proto-fixml-tag.c proto-fixml-attr.c
-EXTRA_libaou_pfd_la_SOURCES += proto-fixml-tag.gperf proto-fixml-attr.gperf
-EXTRA_libaou_pfd_la_SOURCES += $(BUILT_SOURCES)
+EXTRA_libumpf_la_SOURCES += proto-fixml-tag.gperf proto-fixml-attr.gperf
+EXTRA_libumpf_la_SOURCES += $(BUILT_SOURCES)
 
 noinst_PROGRAMS += testlib
-testlib_LDFLAGS = libaou-pfd.la
+testlib_LDFLAGS = libumpf.la
 
 ## serves documentation purposes
 EXTRA_DIST += example-msg-01.xml

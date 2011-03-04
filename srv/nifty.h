@@ -1,4 +1,4 @@
-/*** unserding-nifty.h -- generally handy macroes
+/*** nifty.h -- generally handy macroes
  *
  * Copyright (C) 2009 Sebastian Freundt
  *
@@ -79,13 +79,13 @@
 
 #if defined DEBUG_FLAG
 # include <stdio.h>
-# define PFD_DEBUG(args...)			\
-	fprintf(logout, "[pfd] " args)
-# define PFD_DBGCONT(args...)			\
+# define UMPF_DEBUG(args...)			\
+	fprintf(logout, "[umpf] " args)
+# define UMPF_DBGCONT(args...)			\
 	fprintf(logout, args)
 #else  /* !DEBUG_FLAG */
-# define PFD_DEBUG(args...)
-# define PFD_DBGCONT(args...)
+# define UMPF_DEBUG(args...)
+# define UMPF_DBGCONT(args...)
 #endif	/* DEBUG_FLAG */
 
 /* fixme, any chance we can get that one from the server? */

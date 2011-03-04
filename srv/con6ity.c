@@ -1,4 +1,4 @@
-/*** just to focus on the essential stuff in the dso-oq module */
+/*** just to focus on the essential stuff in the dso-umpf module */
 #include <stddef.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -18,28 +18,28 @@
 # pragma warning (disable:177)
 #endif	/* __INTEL_COMPILER */
 
-#define C10Y_PRE	"mod/pfd/con6ity"
+#define C10Y_PRE	"mod/umpf/con6ity"
 
 
 /* services for includers that need not know about libev */
 #define FD_MAP_TYPE	ev_io*
 
 DEFUN int __attribute__((unused))
-get_fd(pfd_conn_t ctx)
+get_fd(umpf_conn_t ctx)
 {
 	FD_MAP_TYPE io = ctx;
 	return io->fd;
 }
 
 DEFUN void* __attribute__((unused))
-get_fd_data(pfd_conn_t ctx)
+get_fd_data(umpf_conn_t ctx)
 {
 	FD_MAP_TYPE io = ctx;
 	return io->data;
 }
 
 DEFUN void __attribute__((unused))
-put_fd_data(pfd_conn_t ctx, void *data)
+put_fd_data(umpf_conn_t ctx, void *data)
 {
 	FD_MAP_TYPE io = ctx;
 	io->data = data;
@@ -127,7 +127,7 @@ conn_listener_net(uint16_t port)
 		/* likely case upfront */
 		;
 	} else {
-		PFD_DEBUG(C10Y_PRE ": socket() failed ... I'm clueless now\n");
+		UMPF_DEBUG(C10Y_PRE ": socket() failed ... I'm clueless now\n");
 		return s;
 	}
 
@@ -152,7 +152,7 @@ conn_listener_net(uint16_t port)
 	/* we used to retry upon failure, but who cares */
 	if (bind(s, (struct sockaddr*)&__sa6, sizeof(__sa6)) < 0 ||
 	    listen(s, 2) < 0) {
-		PFD_DEBUG(C10Y_PRE ": bind() failed, errno %d\n", errno);
+		UMPF_DEBUG(C10Y_PRE ": bind() failed, errno %d\n", errno);
 		close(s);
 		return -1;
 	}
@@ -176,7 +176,7 @@ conn_listener_uds(const char *sock_path)
 		/* likely case upfront */
 		;
 	} else {
-		PFD_DEBUG(C10Y_PRE ": socket() failed ... I'm clueless now\n");
+		UMPF_DEBUG(C10Y_PRE ": socket() failed ... I'm clueless now\n");
 		return s;
 	}
 
@@ -196,7 +196,7 @@ conn_listener_uds(const char *sock_path)
 	unlink(sock_path);
 	/* we used to retry upon failure, but who cares */
 	if (bind(s, (struct sockaddr*)&__s, sz) < 0) {
-		PFD_DEBUG(C10Y_PRE ": bind() failed: %s\n", strerror(errno));
+		UMPF_DEBUG(C10Y_PRE ": bind() failed: %s\n", strerror(errno));
 		close(s);
 		return -1;
 	}
@@ -207,7 +207,7 @@ conn_listener_uds(const char *sock_path)
 /* weak functions first */
 #if !defined HAVE_handle_data
 DEFUN_W int
-handle_data(pfd_conn_t UNUSED(c), char *UNUSED(msg), size_t UNUSED(msglen))
+handle_data(umpf_conn_t UNUSED(c), char *UNUSED(msg), size_t UNUSED(msglen))
 {
 	return 0;
 }
@@ -215,7 +215,7 @@ handle_data(pfd_conn_t UNUSED(c), char *UNUSED(msg), size_t UNUSED(msglen))
 
 #if !defined HAVE_handle_close
 DEFUN_W void
-handle_close(pfd_conn_t UNUSED(c))
+handle_close(umpf_conn_t UNUSED(c))
 {
 	return;
 }
@@ -228,14 +228,14 @@ data_cb(EV_P_ ev_io *w, int UNUSED(re))
 	ssize_t nrd;
 
 	if ((nrd = read(w->fd, buf, sizeof(buf))) <= 0) {
-		PFD_DEBUG(C10Y_PRE ": no data, closing socket %d\n", w->fd);
+		UMPF_DEBUG(C10Y_PRE ": no data, closing socket %d\n", w->fd);
 		handle_close(w);
 		clo_wio(EV_A_ w);
 		return;
 	}
-	PFD_DEBUG(C10Y_PRE ": new data in sock %d\n", w->fd);
+	UMPF_DEBUG(C10Y_PRE ": new data in sock %d\n", w->fd);
 	if (handle_data(w, buf, nrd) < 0) {
-		PFD_DEBUG(C10Y_PRE ": negative, closing down\n");
+		UMPF_DEBUG(C10Y_PRE ": negative, closing down\n");
 		handle_close(w);
 		clo_wio(EV_A_ w);
 	}
@@ -251,9 +251,9 @@ inco_cb(EV_P_ ev_io *w, int UNUSED(re))
 	struct sockaddr_storage sa;
 	socklen_t sa_size = sizeof(sa);
 
-	PFD_DEBUG(C10Y_PRE ": they got back to us...");
+	UMPF_DEBUG(C10Y_PRE ": they got back to us...");
 	if ((ns = accept(w->fd, (struct sockaddr*)&sa, &sa_size)) < 0) {
-		PFD_DBGCONT("accept() failed\n");
+		UMPF_DBGCONT("accept() failed\n");
 		return;
 	}
 
@@ -262,7 +262,7 @@ inco_cb(EV_P_ ev_io *w, int UNUSED(re))
         ev_io_init(aw, data_cb, ns, EV_READ);
 	aw->data = NULL;
         ev_io_start(EV_A_ aw);
-	PFD_DBGCONT("success, new sock %d\n", ns);
+	UMPF_DBGCONT("success, new sock %d\n", ns);
 	return;
 }
 
@@ -308,4 +308,4 @@ deinit_conn_watchers(void *UNUSED(loop))
 	return;
 }
 
-/* dso-oq-connectivity.c ends here */
+/* con6ity.c ends here */

@@ -6,7 +6,7 @@ ACLOCAL_AMFLAGS = -I m4
 SUBDIRS = lib cli srv
 
 pkgconfigdir = @libdir@/pkgconfig
-pkgconfig_DATA = libpfd.pc
+pkgconfig_DATA = libumpf.pc
 
 EXTRA_DIST = .version git-version-gen
 

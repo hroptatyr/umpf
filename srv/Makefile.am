@@ -13,18 +13,18 @@ BUILT_SOURCES =
 CLEANFILES = $(BUILT_SOURCES)
 
 if BUILD_SERVER
-mod_LTLIBRARIES += dso-pfd.la
-dso_pfd_la_SOURCES =
-EXTRA_dso_pfd_la_SOURCES =
-dso_pfd_la_LDFLAGS = -module
-dso_pfd_la_LDFLAGS += $(unserding_LDFLAGS) $(MYSQL_LIBS) $(LIBXML2_LIBS)
-dso_pfd_la_LDFLAGS += $(top_builddir)/lib/libaou-pfd.la
-dso_pfd_la_CPPFLAGS = $(AM_CPPFLAGS) $(unserding_CFLAGS)
-dso_pfd_la_CPPFLAGS += -I$(top_srcdir)/lib
-dso_pfd_la_CPPFLAGS += $(MYSQL_CPPFLAGS) $(LIBXML2_CFLAGS)
-dso_pfd_la_SOURCES += dso-pfd.c
-EXTRA_dso_pfd_la_SOURCES += con6ity.c con6ity.h
-dso_pfd_la_CPPFLAGS += -DHARD_INCLUDE_con6ity
+mod_LTLIBRARIES += dso-umpf.la
+dso_umpf_la_SOURCES =
+EXTRA_dso_umpf_la_SOURCES =
+dso_umpf_la_LDFLAGS = -module
+dso_umpf_la_LDFLAGS += $(unserding_LDFLAGS) $(MYSQL_LIBS) $(LIBXML2_LIBS)
+dso_umpf_la_LDFLAGS += $(top_builddir)/lib/libumpf.la
+dso_umpf_la_CPPFLAGS = $(AM_CPPFLAGS) $(unserding_CFLAGS)
+dso_umpf_la_CPPFLAGS += -I$(top_srcdir)/lib
+dso_umpf_la_CPPFLAGS += $(MYSQL_CPPFLAGS) $(LIBXML2_CFLAGS)
+dso_umpf_la_SOURCES += dso-umpf.c
+EXTRA_dso_umpf_la_SOURCES += con6ity.c con6ity.h
+dso_umpf_la_CPPFLAGS += -DHARD_INCLUDE_con6ity
 noinst_HEADERS += nifty.h
 endif
 

@@ -46,9 +46,9 @@
 # include <libxml/parser.h>
 #endif	/* HAVE_LIBXML2 */
 #include "nifty.h"
-#include "pfd.h"
+#include "umpf.h"
 
-#define PFIXML_PRE	"mod/pfd/fixml"
+#define PFIXML_PRE	"mod/umpf/fixml"
 
 /* gperf goodness */
 #include "proto-fixml-tag.c"
@@ -61,9 +61,9 @@
 typedef struct __ctx_s *__ctx_t;
 typedef xmlSAXHandler sax_hdl_s;
 typedef sax_hdl_s *sax_hdl_t;
-typedef struct pfd_ctxcb_s *pfd_ctxcb_t;
+typedef struct umpf_ctxcb_s *umpf_ctxcb_t;
 
-struct pfd_ns_s {
+struct umpf_ns_s {
 	char *pref;
 	char *href;
 };
@@ -73,25 +73,25 @@ struct __ctxcb_s {
 	/* principal types callbacks,
 	 * sf is for strings (and mdStrings)
 	 * dt is for dateTime (and mdDateTime) */
-	void(*sf)(pfd_ctxcb_t ctx, const char *str, size_t len);
-	void(*dtf)(pfd_ctxcb_t ctx, time_t date_time);
-	void(*df)(pfd_ctxcb_t ctx, double decimal);
+	void(*sf)(umpf_ctxcb_t ctx, const char *str, size_t len);
+	void(*dtf)(umpf_ctxcb_t ctx, time_t date_time);
+	void(*df)(umpf_ctxcb_t ctx, double decimal);
 };
 
-struct pfd_ctxcb_s {
+struct umpf_ctxcb_s {
 	/* for a linked list */
-	pfd_ctxcb_t next;
+	umpf_ctxcb_t next;
 
 	struct __ctxcb_s cb[1];
 	/* navigation info, stores the context */
-	pfd_tid_t otype;
+	umpf_tid_t otype;
 	void *object;
-	pfd_ctxcb_t old_state;
+	umpf_ctxcb_t old_state;
 };
 
 struct __ctx_s {
-	pfd_doc_t doc;
-	struct pfd_ns_s ns[16];
+	umpf_doc_t doc;
+	struct umpf_ns_s ns[16];
 	size_t nns;
 	/* stuff buf */
 #define INITIAL_STUFF_BUF_SIZE	(4096)
@@ -101,10 +101,10 @@ struct __ctx_s {
 	/* the current sax handler */
 	sax_hdl_s hdl[1];
 	/* parser state, for contextual callbacks */
-	pfd_ctxcb_t state;
+	umpf_ctxcb_t state;
 	/* pool of context trackers, implies maximum parsing depth */
-	struct pfd_ctxcb_s ctxcb_pool[16];
-	pfd_ctxcb_t ctxcb_head;
+	struct umpf_ctxcb_s ctxcb_pool[16];
+	umpf_ctxcb_t ctxcb_head;
 
 	/* push parser */
 	xmlParserCtxtPtr pp;
@@ -125,10 +125,10 @@ init_ctxcb(__ctx_t ctx)
 	return;
 }
 
-static pfd_ctxcb_t
+static umpf_ctxcb_t
 pop_ctxcb(__ctx_t ctx)
 {
-	pfd_ctxcb_t res = ctx->ctxcb_head;
+	umpf_ctxcb_t res = ctx->ctxcb_head;
 
 	if (LIKELY(res != NULL)) {
 		ctx->ctxcb_head = res->next;
@@ -138,7 +138,7 @@ pop_ctxcb(__ctx_t ctx)
 }
 
 static void
-push_ctxcb(__ctx_t ctx, pfd_ctxcb_t ctxcb)
+push_ctxcb(__ctx_t ctx, umpf_ctxcb_t ctxcb)
 {
 	ctxcb->next = ctx->ctxcb_head;
 	ctx->ctxcb_head = ctxcb;
@@ -149,7 +149,7 @@ static void
 pop_state(__ctx_t ctx)
 {
 /* restore the previous current state */
-	pfd_ctxcb_t curr = ctx->state;
+	umpf_ctxcb_t curr = ctx->state;
 
 	ctx->state = curr->old_state;
 	/* queue him in our pool */
@@ -157,10 +157,10 @@ pop_state(__ctx_t ctx)
 	return;
 }
 
-static pfd_ctxcb_t
-push_state(__ctx_t ctx, pfd_tid_t otype, void *object)
+static umpf_ctxcb_t
+push_state(__ctx_t ctx, umpf_tid_t otype, void *object)
 {
-	pfd_ctxcb_t res = pop_ctxcb(ctx);
+	umpf_ctxcb_t res = pop_ctxcb(ctx);
 
 	/* stuff it with the object we want to keep track of */
 	res->object = object;
@@ -171,10 +171,10 @@ push_state(__ctx_t ctx, pfd_tid_t otype, void *object)
 	return res;
 }
 
-static pfd_tid_t
+static umpf_tid_t
 get_state_otype(__ctx_t ctx)
 {
-	return ctx->state ? ctx->state->otype : PFD_TAG_UNK;
+	return ctx->state ? ctx->state->otype : UMPF_TAG_UNK;
 }
 
 static void*
@@ -184,7 +184,7 @@ get_state_object(__ctx_t ctx)
 }
 
 static void*
-get_state_object_if(__ctx_t ctx, pfd_tid_t otype)
+get_state_object_if(__ctx_t ctx, umpf_tid_t otype)
 {
 /* like get_state_object() but return NULL if types do not match */
 	if (LIKELY(get_state_otype(ctx) == otype)) {
@@ -245,7 +245,7 @@ tag_massage(const char *tag)
 }
 
 static void
-pfd_reg_ns(__ctx_t ctx, const char *pref, const char *href)
+umpf_reg_ns(__ctx_t ctx, const char *pref, const char *href)
 {
 	if (ctx->nns >= countof(ctx->ns)) {
 		fputs("too many name spaces\n", stderr);
@@ -269,28 +269,28 @@ pfd_reg_ns(__ctx_t ctx, const char *pref, const char *href)
 }
 
 static void
-pfd_init(__ctx_t ctx)
+umpf_init(__ctx_t ctx)
 {
 	/* initialise the ctxcb pool */
 	init_ctxcb(ctx);
 	/* alloc some space for our document */
 	{
-		struct __pfd_s *m = calloc(sizeof(*m), 1);
-		pfd_ctxcb_t cc = pop_ctxcb(ctx);
+		struct __umpf_s *m = calloc(sizeof(*m), 1);
+		umpf_ctxcb_t cc = pop_ctxcb(ctx);
 
 		ctx->doc = m;
 		ctx->state = cc;
 		cc->old_state = NULL;
 		cc->object = m;
-		cc->otype = PFD_TAG_FIXML;
+		cc->otype = UMPF_TAG_FIXML;
 	}
 	return;
 }
 
 static bool
-pfd_pref_p(__ctx_t ctx, const char *pref, size_t pref_len)
+umpf_pref_p(__ctx_t ctx, const char *pref, size_t pref_len)
 {
-	/* we sorted our namespaces so that pfd is always at index 0 */
+	/* we sorted our namespaces so that umpf is always at index 0 */
 	if (UNLIKELY(ctx->ns[0].href == NULL)) {
 		return false;
 
@@ -348,27 +348,27 @@ ADDF(pos_rpt, struct __qty_s, qty);
 ADDF(pos_rpt, struct __amt_s, amt);
 
 
-static pfd_tid_t
+static umpf_tid_t
 sax_tid_from_tag(const char *tag)
 {
 	size_t tlen = strlen(tag);
-	const struct pfd_tag_s *t = __tiddify(tag, tlen);
-	return t ? t->tid : PFD_TAG_UNK;
+	const struct umpf_tag_s *t = __tiddify(tag, tlen);
+	return t ? t->tid : UMPF_TAG_UNK;
 }
 
-static pfd_aid_t
+static umpf_aid_t
 sax_aid_from_attr(const char *attr)
 {
 	size_t alen = strlen(attr);
-	const struct pfd_attr_s *a = __aiddify(attr, alen);
-	return a ? a->aid : PFD_ATTR_UNK;
+	const struct umpf_attr_s *a = __aiddify(attr, alen);
+	return a ? a->aid : UMPF_ATTR_UNK;
 }
 
 static void
 proc_FIXML_xmlns(__ctx_t ctx, const char *pref, const char *value)
 {
-	PFD_DEBUG(PFIXML_PRE ": reg'ging name space %s\n", pref);
-	pfd_reg_ns(ctx, pref, value);
+	UMPF_DEBUG(PFIXML_PRE ": reg'ging name space %s\n", pref);
+	umpf_reg_ns(ctx, pref, value);
 	return;
 }
 
@@ -376,32 +376,32 @@ static void
 proc_FIXML_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const pfd_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(attr);
 
 	if (UNLIKELY(rattr > attr && ctx->ns[0].href == NULL)) {
-		const struct pfd_attr_s *a = __aiddify(attr, rattr - attr);
+		const struct umpf_attr_s *a = __aiddify(attr, rattr - attr);
 
-		if (a && a->aid == PFD_ATTR_XMLNS) {
+		if (a && a->aid == UMPF_ATTR_XMLNS) {
 			proc_FIXML_xmlns(ctx, rattr, value);
 			return;
 		}
-	} else if (rattr > attr && !pfd_pref_p(ctx, attr, rattr - attr)) {
+	} else if (rattr > attr && !umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
-		PFD_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
 		return;
 	}
 
 	switch (aid) {
-	case PFD_ATTR_XMLNS:
+	case UMPF_ATTR_XMLNS:
 		proc_FIXML_xmlns(ctx, NULL, value);
 		break;
-	case PFD_ATTR_S:
-	case PFD_ATTR_R:
-	case PFD_ATTR_V:
+	case UMPF_ATTR_S:
+	case UMPF_ATTR_R:
+	case UMPF_ATTR_V:
 		/* we're so not interested in version mumbo jumbo */
 		break;
 	default:
-		PFD_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
 		break;
 	}
 	return;
@@ -411,36 +411,36 @@ static void
 proc_REQ_FOR_POSS_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const pfd_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(attr);
 	struct __req_for_poss_s *r =
-		get_state_object_if(ctx, PFD_TAG_REQ_FOR_POSS);
+		get_state_object_if(ctx, UMPF_TAG_REQ_FOR_POSS);
 
 	if (UNLIKELY(r == NULL)) {
 		return;
-	} else if (!pfd_pref_p(ctx, attr, rattr - attr)) {
+	} else if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
-		PFD_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
 		return;
 	}
 
 	switch (aid) {
-	case PFD_ATTR_REQ_ID:
+	case UMPF_ATTR_REQ_ID:
 		r->req_id = strdup(value);
 		break;
-	case PFD_ATTR_SET_SES_ID:
+	case UMPF_ATTR_SET_SES_ID:
 		r->set_ses_id = strdup(value);
 		break;
-	case PFD_ATTR_REQ_TYP:
-		r->req_typ = (pfd_req_typ_t)strtoul(value, NULL, 10);
+	case UMPF_ATTR_REQ_TYP:
+		r->req_typ = (umpf_req_typ_t)strtoul(value, NULL, 10);
 		break;
-	case PFD_ATTR_BIZ_DT:
+	case UMPF_ATTR_BIZ_DT:
 		r->biz_dt = get_zulu(value);
 		break;
-	case PFD_ATTR_TXN_TM:
+	case UMPF_ATTR_TXN_TM:
 		r->txn_tm = get_zulu(value);
 		break;
 	default:
-		PFD_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
 		break;
 	}
 	return;
@@ -450,45 +450,45 @@ static void
 proc_REQ_FOR_POSS_ACK_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const pfd_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(attr);
 	struct __req_for_poss_ack_s *r =
-		get_state_object_if(ctx, PFD_TAG_REQ_FOR_POSS_ACK);
+		get_state_object_if(ctx, UMPF_TAG_REQ_FOR_POSS_ACK);
 
 	if (UNLIKELY(r == NULL)) {
 		return;
-	} else if (!pfd_pref_p(ctx, attr, rattr - attr)) {
+	} else if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
-		PFD_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
 		return;
 	}
 
 	switch (aid) {
-	case PFD_ATTR_RPT_ID:
+	case UMPF_ATTR_RPT_ID:
 		r->rpt_id = strdup(value);
 		break;
-	case PFD_ATTR_SET_SES_ID:
+	case UMPF_ATTR_SET_SES_ID:
 		r->set_ses_id = strdup(value);
 		break;
-	case PFD_ATTR_REQ_TYP:
-		r->req_typ = (pfd_req_typ_t)strtoul(value, NULL, 10);
+	case UMPF_ATTR_REQ_TYP:
+		r->req_typ = (umpf_req_typ_t)strtoul(value, NULL, 10);
 		break;
-	case PFD_ATTR_BIZ_DT:
+	case UMPF_ATTR_BIZ_DT:
 		r->biz_dt = get_zulu(value);
 		break;
-	case PFD_ATTR_TXN_TM:
+	case UMPF_ATTR_TXN_TM:
 		r->txn_tm = get_zulu(value);
 		break;
-	case PFD_ATTR_TOT_RPTS:
+	case UMPF_ATTR_TOT_RPTS:
 		r->tot_rpts = strtoul(value, NULL, 10);
 		break;
-	case PFD_ATTR_RSLT:
-		r->rslt = (pfd_rslt_t)strtoul(value, NULL, 10);
+	case UMPF_ATTR_RSLT:
+		r->rslt = (umpf_rslt_t)strtoul(value, NULL, 10);
 		break;
-	case PFD_ATTR_STAT:
-		r->stat = (pfd_stat_t)strtoul(value, NULL, 10);
+	case UMPF_ATTR_STAT:
+		r->stat = (umpf_stat_t)strtoul(value, NULL, 10);
 		break;
 	default:
-		PFD_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
 		break;
 	}
 	return;
@@ -498,35 +498,35 @@ static void
 proc_POS_RPT_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const pfd_aid_t aid = sax_aid_from_attr(attr);
-	struct __pos_rpt_s *p = get_state_object_if(ctx, PFD_TAG_POS_RPT);
+	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	struct __pos_rpt_s *p = get_state_object_if(ctx, UMPF_TAG_POS_RPT);
 
 	if (UNLIKELY(p == NULL)) {
 		return;
-	} else if (!pfd_pref_p(ctx, attr, rattr - attr)) {
+	} else if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
-		PFD_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
 		return;
 	}
 
 	switch (aid) {
-	case PFD_ATTR_RPT_ID:
+	case UMPF_ATTR_RPT_ID:
 		p->rpt_id = strdup(value);
 		break;
-	case PFD_ATTR_SET_SES_ID:
+	case UMPF_ATTR_SET_SES_ID:
 		p->set_ses_id = strdup(value);
 		break;
-	case PFD_ATTR_REQ_TYP:
-		p->req_typ = (pfd_req_typ_t)strtoul(value, NULL, 10);
+	case UMPF_ATTR_REQ_TYP:
+		p->req_typ = (umpf_req_typ_t)strtoul(value, NULL, 10);
 		break;
-	case PFD_ATTR_TOT_RPTS:
+	case UMPF_ATTR_TOT_RPTS:
 		p->tot_rpts = strtoul(value, NULL, 10);
 		break;
-	case PFD_ATTR_BIZ_DT:
+	case UMPF_ATTR_BIZ_DT:
 		p->biz_dt = get_zulu(value);
 		break;
 	default:
-		PFD_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
 		break;
 	}
 	return;
@@ -536,27 +536,27 @@ static void
 proc_PTY_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const pfd_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(attr);
 	struct __pty_s *p = get_state_object(ctx);
 
-	if (!pfd_pref_p(ctx, attr, rattr - attr)) {
+	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
-		PFD_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
 		return;
 	}
 
 	switch (aid) {
-	case PFD_ATTR_ID:
+	case UMPF_ATTR_ID:
 		p->id = strdup(value);
 		break;
-	case PFD_ATTR_S:
+	case UMPF_ATTR_S:
 		p->src = (char)(value ? value[0] : '\0');
 		break;
-	case PFD_ATTR_R:
+	case UMPF_ATTR_R:
 		p->role = strtoul(value, NULL, 10);
 		break;
 	default:
-		PFD_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
 		break;
 	}
 	return;
@@ -566,24 +566,24 @@ static void
 proc_SUB_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const pfd_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(attr);
 	struct __sub_s *s = get_state_object(ctx);
 
-	if (!pfd_pref_p(ctx, attr, rattr - attr)) {
+	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
-		PFD_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
 		return;
 	}
 
 	switch (aid) {
-	case PFD_ATTR_ID:
+	case UMPF_ATTR_ID:
 		s->id = strdup(value);
 		break;
-	case PFD_ATTR_TYP:
+	case UMPF_ATTR_TYP:
 		s->typ = strtoul(value, NULL, 10);
 		break;
 	default:
-		PFD_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
 		break;
 	}
 	return;
@@ -593,22 +593,22 @@ static void
 proc_INSTRMT_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const pfd_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(attr);
 
-	if (!pfd_pref_p(ctx, attr, rattr - attr)) {
+	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
-		PFD_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
 		return;
 	}
 
 	switch (aid) {
-	case PFD_ATTR_SYM: {
+	case UMPF_ATTR_SYM: {
 		struct __instrmt_s *i = get_state_object(ctx);
 		i->sym = strdup(value);
 		break;
 	}
 	default:
-		PFD_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
 		break;
 	}
 	return;
@@ -618,30 +618,30 @@ static void
 proc_QTY_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const pfd_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(attr);
 	struct __qty_s *q = get_state_object(ctx);
 
-	if (!pfd_pref_p(ctx, attr, rattr - attr)) {
+	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
-		PFD_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
 		return;
 	}
 
 	switch (aid) {
-	case PFD_ATTR_TYP:
+	case UMPF_ATTR_TYP:
 		q->typ = strdup(value);
 		break;
-	case PFD_ATTR_LONG:
+	case UMPF_ATTR_LONG:
 		q->_long = strtod(value, NULL);
 		break;
-	case PFD_ATTR_SHORT:
+	case UMPF_ATTR_SHORT:
 		q->_short = strtod(value, NULL);
 		break;
-	case PFD_ATTR_QTY_DT:
+	case UMPF_ATTR_QTY_DT:
 		q->qty_dt = get_zulu(value);
 		break;
 	default:
-		PFD_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
 		break;
 	}
 	return;
@@ -651,27 +651,27 @@ static void
 proc_AMT_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const pfd_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(attr);
 	struct __amt_s *a = get_state_object(ctx);
 
-	if (!pfd_pref_p(ctx, attr, rattr - attr)) {
+	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
-		PFD_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
 		return;
 	}
 
 	switch (aid) {
-	case PFD_ATTR_TYP:
+	case UMPF_ATTR_TYP:
 		a->typ = strdup(value);
 		break;
-	case PFD_ATTR_AMT:
+	case UMPF_ATTR_AMT:
 		a->amt = strtod(value, NULL);
 		break;
-	case PFD_ATTR_CCY:
+	case UMPF_ATTR_CCY:
 		strncpy(a->ccy, value, sizeof(a->ccy));
 		break;
 	default:
-		PFD_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
 		break;
 	}
 	return;
@@ -683,18 +683,18 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 {
 	/* where the real element name starts, sans ns prefix */
 	const char *rname = tag_massage(name);
-	const pfd_tid_t tid = sax_tid_from_tag(rname);
+	const umpf_tid_t tid = sax_tid_from_tag(rname);
 
-	if (!pfd_pref_p(ctx, name, rname - name) && ctx->doc != NULL) {
+	if (!umpf_pref_p(ctx, name, rname - name) && ctx->doc != NULL) {
 		/* dont know what to do */
-		PFD_DEBUG(PFIXML_PRE ": unknown namespace %s\n", name);
+		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", name);
 		return;
 	}
 
 	/* all the stuff that needs a new sax handler */
 	switch (tid) {
-	case PFD_TAG_FIXML: {
-		pfd_init(ctx);
+	case UMPF_TAG_FIXML: {
+		umpf_init(ctx);
 		for (int i = 0; attrs[i] != NULL; i += 2) {
 			proc_FIXML_attr(ctx, attrs[i], attrs[i + 1]);
 		}
@@ -702,11 +702,11 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		break;
 	}
 
-	case PFD_TAG_POS_RPT:
-	case PFD_TAG_REQ_FOR_POSS:
-	case PFD_TAG_REQ_FOR_POSS_ACK: {
+	case UMPF_TAG_POS_RPT:
+	case UMPF_TAG_REQ_FOR_POSS:
+	case UMPF_TAG_REQ_FOR_POSS_ACK: {
 		/* check that we're inside a FIXML context */
-		struct __batch_s *b = get_state_object_if(ctx, PFD_TAG_BATCH);
+		struct __batch_s *b = get_state_object_if(ctx, UMPF_TAG_BATCH);
 
 		if (LIKELY(b != NULL)) {
 			struct __g_msg_s *new_msg = batch_add_msg(b);
@@ -716,9 +716,9 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		}
 		/* fallthrough otherwise */
 	}
-	case PFD_TAG_BATCH: {
+	case UMPF_TAG_BATCH: {
 		/* check that we're inside a FIXML context */
-		pfd_doc_t m = get_state_object_if(ctx, PFD_TAG_FIXML);
+		umpf_doc_t m = get_state_object_if(ctx, UMPF_TAG_FIXML);
 
 		if (UNLIKELY(m == NULL)) {
 			break;
@@ -729,23 +729,23 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		break;
 	}
 
-	case PFD_TAG_PTY: {
+	case UMPF_TAG_PTY: {
 		void *o = get_state_object(ctx);
-		pfd_tid_t oty = get_state_otype(ctx);
+		umpf_tid_t oty = get_state_otype(ctx);
 		struct __pty_s *p;
 
 		switch (oty) {
-		case PFD_TAG_REQ_FOR_POSS:
+		case UMPF_TAG_REQ_FOR_POSS:
 			p = req_for_poss_add_pty(o);
 			break;
-		case PFD_TAG_REQ_FOR_POSS_ACK:
+		case UMPF_TAG_REQ_FOR_POSS_ACK:
 			p = req_for_poss_ack_add_pty(o);
 			break;
-		case PFD_TAG_POS_RPT:
+		case UMPF_TAG_POS_RPT:
 			p = pos_rpt_add_pty(o);
 			break;
 		default:
-			PFD_DEBUG(PFIXML_PRE " WARN: Pty's father empty?\n");
+			UMPF_DEBUG(PFIXML_PRE " WARN: Pty's father empty?\n");
 			break;
 		}
 		(void)push_state(ctx, tid, p);
@@ -756,13 +756,13 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		break;
 	}
 
-	case PFD_TAG_SUB: {
+	case UMPF_TAG_SUB: {
 		/* check that we're inside a Pty context */
-		struct __pty_s *p = get_state_object_if(ctx, PFD_TAG_PTY);
+		struct __pty_s *p = get_state_object_if(ctx, UMPF_TAG_PTY);
 		struct __sub_s *s;
 
 		if (UNLIKELY(p == NULL)) {
-			PFD_DEBUG(PFIXML_PRE " WARN: Sub outside of Pty\n");
+			UMPF_DEBUG(PFIXML_PRE " WARN: Sub outside of Pty\n");
 			break;
 		}
 
@@ -775,14 +775,14 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		break;
 	}
 
-	case PFD_TAG_INSTRMT: {
+	case UMPF_TAG_INSTRMT: {
 		/* check that we're inside a PosRpt context */
 		struct __pos_rpt_s *pr =
-			get_state_object_if(ctx, PFD_TAG_POS_RPT);
+			get_state_object_if(ctx, UMPF_TAG_POS_RPT);
 		struct __instrmt_s *i;
 
 		if (UNLIKELY(pr == NULL)) {
-			PFD_DEBUG(PFIXML_PRE
+			UMPF_DEBUG(PFIXML_PRE
 				  " WARN: Instrmt outside of PosRpt\n");
 			break;
 		}
@@ -796,14 +796,14 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		break;
 	}
 
-	case PFD_TAG_QTY: {
+	case UMPF_TAG_QTY: {
 		/* check that we're inside a PosRpt context */
 		struct __pos_rpt_s *pr =
-			get_state_object_if(ctx, PFD_TAG_POS_RPT);
+			get_state_object_if(ctx, UMPF_TAG_POS_RPT);
 		struct __qty_s *q;
 
 		if (UNLIKELY(pr == NULL)) {
-			PFD_DEBUG(PFIXML_PRE
+			UMPF_DEBUG(PFIXML_PRE
 				  " WARN: Instrmt outside of PosRpt\n");
 			break;
 		}
@@ -817,14 +817,14 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		break;
 	}
 
-	case PFD_TAG_AMT: {
+	case UMPF_TAG_AMT: {
 		/* check that we're inside a PosRpt context */
 		struct __pos_rpt_s *pr =
-			get_state_object_if(ctx, PFD_TAG_POS_RPT);
+			get_state_object_if(ctx, UMPF_TAG_POS_RPT);
 		struct __amt_s *a;
 
 		if (UNLIKELY(pr == NULL)) {
-			PFD_DEBUG(PFIXML_PRE
+			UMPF_DEBUG(PFIXML_PRE
 				  " WARN: Instrmt outside of PosRpt\n");
 			break;
 		}
@@ -839,22 +839,22 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 	}
 
 	default:
-		PFD_DEBUG(PFIXML_PRE " WARN: unknown tag %s\n", name);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown tag %s\n", name);
 		break;
 	}
 
 	switch (tid) {
-	case PFD_TAG_POS_RPT:
+	case UMPF_TAG_POS_RPT:
 		for (int j = 0; attrs[j] != NULL; j += 2) {
 			proc_POS_RPT_attr(ctx, attrs[j], attrs[j + 1]);
 		}
 		break;
-	case PFD_TAG_REQ_FOR_POSS:
+	case UMPF_TAG_REQ_FOR_POSS:
 		for (int j = 0; attrs[j] != NULL; j += 2) {
 			proc_REQ_FOR_POSS_attr(ctx, attrs[j], attrs[j + 1]);
 		}
 		break;
-	case PFD_TAG_REQ_FOR_POSS_ACK:
+	case UMPF_TAG_REQ_FOR_POSS_ACK:
 		for (int j = 0; attrs[j] != NULL; j += 2) {
 			proc_REQ_FOR_POSS_ACK_attr(ctx, attrs[j], attrs[j + 1]);
 		}
@@ -863,7 +863,7 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		break;
 	}
 
-	PFD_DEBUG(PFIXML_PRE " STATE: %u <- %s\n", get_state_otype(ctx), name);
+	UMPF_DEBUG(PFIXML_PRE " STATE: %u <- %s\n", get_state_otype(ctx), name);
 	return;
 }
 
@@ -873,10 +873,10 @@ sax_eo_elt(__ctx_t ctx, const char *name)
 {
 	/* where the real element name starts, sans ns prefix */
 	const char *rname = tag_massage(name);
-	pfd_tid_t tid = sax_tid_from_tag(rname);
+	umpf_tid_t tid = sax_tid_from_tag(rname);
 
-	/* check if this is an pfd node */
-	if (!pfd_pref_p(ctx, name, rname - name)) {
+	/* check if this is an umpf node */
+	if (!umpf_pref_p(ctx, name, rname - name)) {
 		/* dont know what to do */
 		return;
 	}
@@ -888,7 +888,7 @@ sax_eo_elt(__ctx_t ctx, const char *name)
 	if (LIKELY(tid == get_state_otype(ctx))) {
 		pop_state(ctx);
 	}
-	if (UNLIKELY(tid == PFD_TAG_FIXML)) {
+	if (UNLIKELY(tid == UMPF_TAG_FIXML)) {
 		/* finalise the document */
 		pop_state(ctx);
 	}
@@ -945,10 +945,10 @@ final_blob_p(__ctx_t ctx)
 /* return 1 if we need more blobs, 0 if this was the final blob, -1 on error */
 	if (ctx->doc != NULL && ctx->state == NULL) {
 		/* we're ready */
-		PFD_DEBUG(PFIXML_PRE ": seems ready\n");
+		UMPF_DEBUG(PFIXML_PRE ": seems ready\n");
 		return xmlParseChunk(ctx->pp, ctx->sbuf, 0, 1);
 	}
-	PFD_DEBUG(PFIXML_PRE ": %p %u\n", ctx->doc, get_state_otype(ctx));
+	UMPF_DEBUG(PFIXML_PRE ": %p %u\n", ctx->doc, get_state_otype(ctx));
 	/* request more data */
 	return BLOB_M_PLZ;
 }
@@ -1036,36 +1036,36 @@ free_ctx(__ctx_t ctx)
 	return;
 }
 
-static pfd_doc_t
-__pfd_parse_file(__ctx_t ctx, const char *file)
+static umpf_doc_t
+__umpf_parse_file(__ctx_t ctx, const char *file)
 {
-	pfd_doc_t res;
+	umpf_doc_t res;
 
 	init(ctx);
-	PFD_DEBUG(PFIXML_PRE ": parsing %s\n", file);
+	UMPF_DEBUG(PFIXML_PRE ": parsing %s\n", file);
 	if (LIKELY(parse_file(ctx, file) == 0)) {
-		PFD_DEBUG(PFIXML_PRE ": done\n");
+		UMPF_DEBUG(PFIXML_PRE ": done\n");
 		res = ctx->doc;
 	} else {
-		PFD_DEBUG(PFIXML_PRE ": failed\n");
+		UMPF_DEBUG(PFIXML_PRE ": failed\n");
 		res = NULL;
 	}
 	deinit(ctx);
 	return res;
 }
 
-pfd_doc_t
-pfd_parse_file(const char *file)
+umpf_doc_t
+umpf_parse_file(const char *file)
 {
 	static struct __ctx_s ctx[1] = {{0}};
-	return __pfd_parse_file(ctx, file);
+	return __umpf_parse_file(ctx, file);
 }
 
-pfd_doc_t
-pfd_parse_file_r(const char *file)
+umpf_doc_t
+umpf_parse_file_r(const char *file)
 {
 	__ctx_t ctx = calloc(sizeof(*ctx), 1);
-	pfd_doc_t res = __pfd_parse_file(ctx, file);
+	umpf_doc_t res = __umpf_parse_file(ctx, file);
 	free_ctx(ctx);
 	return res;
 }
@@ -1077,24 +1077,24 @@ ctx_deinitted_p(__ctx_t ctx)
 	return ctx->pp == NULL;
 }
 
-static pfd_doc_t
+static umpf_doc_t
 check_ret(__ctx_t ctx)
 {
-	pfd_doc_t res;
+	umpf_doc_t res;
 	int ret = final_blob_p(ctx);
 
 	switch (ret) {
 	case BLOB_READY:
-		PFD_DEBUG(PFIXML_PRE ": done\n");
+		UMPF_DEBUG(PFIXML_PRE ": done\n");
 		res = ctx->doc;
 		break;
 	case BLOB_M_PLZ:
-		PFD_DEBUG(PFIXML_PRE ": more\n");
+		UMPF_DEBUG(PFIXML_PRE ": more\n");
 		return NULL;
 	default:
 	case BLOB_ERROR:
 		/* error of some sort */
-		PFD_DEBUG(PFIXML_PRE ": failed\n");
+		UMPF_DEBUG(PFIXML_PRE ": failed\n");
 		res = NULL;
 		break;
 	}
@@ -1103,33 +1103,33 @@ check_ret(__ctx_t ctx)
 }
 
 static void
-__pfd_parse_blob(__ctx_t ctx, const char *buf, size_t bsz)
+__umpf_parse_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
 	init(ctx);
-	PFD_DEBUG(PFIXML_PRE ": parsing blob of size %zu\n", bsz);
+	UMPF_DEBUG(PFIXML_PRE ": parsing blob of size %zu\n", bsz);
 	parse_blob(ctx, buf, bsz);
 	return;
 }
 
 static void
-__pfd_parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
+__umpf_parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
-	PFD_DEBUG(PFIXML_PRE ": parsing blob of size %zu\n", bsz);
+	UMPF_DEBUG(PFIXML_PRE ": parsing blob of size %zu\n", bsz);
 	parse_more_blob(ctx, buf, bsz);
 	return;
 }
 
-pfd_doc_t
-pfd_parse_blob(pfd_ctx_t *ctx, const char *buf, size_t bsz)
+umpf_doc_t
+umpf_parse_blob(umpf_ctx_t *ctx, const char *buf, size_t bsz)
 {
 	static struct __ctx_s __ctx[1] = {{0}};
-	pfd_doc_t res;
+	umpf_doc_t res;
 
 	if (UNLIKELY(*ctx == NULL)) {
 		*ctx = __ctx;
-		__pfd_parse_blob(*ctx, buf, bsz);
+		__umpf_parse_blob(*ctx, buf, bsz);
 	} else {
-		__pfd_parse_more_blob(*ctx, buf, bsz);
+		__umpf_parse_more_blob(*ctx, buf, bsz);
 	}
 	res = check_ret(*ctx);
 	if (ctx_deinitted_p(*ctx)) {
@@ -1138,16 +1138,16 @@ pfd_parse_blob(pfd_ctx_t *ctx, const char *buf, size_t bsz)
 	return res;
 }
 
-pfd_doc_t
-pfd_parse_blob_r(pfd_ctx_t *ctx, const char *buf, size_t bsz)
+umpf_doc_t
+umpf_parse_blob_r(umpf_ctx_t *ctx, const char *buf, size_t bsz)
 {
-	pfd_doc_t res;
+	umpf_doc_t res;
 
 	if (UNLIKELY(*ctx == NULL)) {
 		*ctx = calloc(sizeof(struct __ctx_s), 1);
-		__pfd_parse_blob(*ctx, buf, bsz);
+		__umpf_parse_blob(*ctx, buf, bsz);
 	} else {
-		__pfd_parse_more_blob(*ctx, buf, bsz);
+		__umpf_parse_more_blob(*ctx, buf, bsz);
 	}
 
 	res = check_ret(*ctx);
@@ -1159,7 +1159,7 @@ pfd_parse_blob_r(pfd_ctx_t *ctx, const char *buf, size_t bsz)
 }
 
 void
-pfd_free_doc(pfd_doc_t doc)
+umpf_free_doc(umpf_doc_t doc)
 {
 /* do me properly */
 	free(doc);
