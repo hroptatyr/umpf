@@ -672,15 +672,19 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		break;
 	}
 
+	case UMPF_TAG_RG_DTL:
+		(void)push_state(ctx, tid, NULL);
+		break;
+
 	case UMPF_TAG_PTY: {
 		/* context sensitive node, bummer */
-		umpf_msg_t msg;
-
-		if (UNLIKELY((msg = ctx->msg) == NULL)) {
-			break;
-		}
+		umpf_msg_t msg = ctx->msg;
 
 		switch (get_state_otype(ctx)) {
+		case UMPF_TAG_RG_DTL:
+			/* we use a design fluke,
+			 * msg_new_pf's name slot is at the same offset
+			 * as msg_pf's, so just go with it */
 		case UMPF_TAG_REQ_FOR_POSS:
 		case UMPF_TAG_REQ_FOR_POSS_ACK:
 			(void)push_state(ctx, tid, msg);
@@ -778,6 +782,9 @@ sax_eo_elt(__ctx_t ctx, const char *name)
 		pop_state(ctx);
 		set_state_objint(ctx, get_state_objint(ctx) + 1);
 		break;
+	case UMPF_TAG_REQ_FOR_POSS:
+	case UMPF_TAG_RGST_INSTRCTNS:
+	case UMPF_TAG_RG_DTL:
 	case UMPF_TAG_PTY:
 		pop_state(ctx);
 		break;
