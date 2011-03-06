@@ -58,6 +58,9 @@
 #if defined __INTEL_COMPILER
 # pragma warning (disable:424)
 #endif	/* __INTEL_COMPILER */
+#if defined DEBUG_FLAG
+# include <assert.h>
+#endif	/* DEBUG_FLAG */
 
 typedef struct __ctx_s *__ctx_t;
 typedef xmlSAXHandler sax_hdl_s;
@@ -288,15 +291,6 @@ umpf_init(__ctx_t ctx)
 {
 	/* initialise the ctxcb pool */
 	init_ctxcb(ctx);
-	/* alloc some space for our document */
-	{
-		umpf_ctxcb_t cc = pop_ctxcb(ctx);
-
-		ctx->state = cc;
-		cc->old_state = NULL;
-		cc->object = NULL;
-		cc->otype = UMPF_TAG_FIXML;
-	}
 	return;
 }
 
@@ -598,6 +592,8 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 	/* all the stuff that needs a new sax handler */
 	switch (tid) {
 	case UMPF_TAG_FIXML: {
+		/* has got to be the root */
+		assert(ctx->state == NULL);
 		umpf_init(ctx);
 		for (int i = 0; attrs[i] != NULL; i += 2) {
 			proc_FIXML_attr(ctx, attrs[i], attrs[i + 1]);
@@ -788,14 +784,17 @@ sax_eo_elt(__ctx_t ctx, const char *name)
 	case UMPF_TAG_PTY:
 		pop_state(ctx);
 		break;
+	case UMPF_TAG_FIXML:
+		/* finalise the document */
+		assert(ctx->state != NULL);
+		assert(ctx->state->otype == tid);
+		assert(ctx->state->old_state == NULL);
+		pop_state(ctx);
+		assert(ctx->state == NULL);
 	default:
 		break;
 	}
 
-	if (UNLIKELY(tid == UMPF_TAG_FIXML)) {
-		/* finalise the document */
-		pop_state(ctx);
-	}
 	UMPF_DEBUG(PFIXML_PRE " STATE: %s -> %u\n", name, get_state_otype(ctx));
 	return;
 }
