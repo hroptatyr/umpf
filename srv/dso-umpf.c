@@ -66,6 +66,13 @@
 
 
 /* connexion<->proto glue */
+static void
+interpret_msg(umpf_msg_t msg)
+{
+	umpf_print_msg(msg, stdout);
+	return;
+}
+
 /**
  * Take the stuff in MSG of size MSGLEN coming from FD and process it.
  * Return values <0 cause the handler caller to close down the socket. */
@@ -80,7 +87,7 @@ handle_data(umpf_conn_t ctx, char *msg, size_t msglen)
 
 	if ((umsg = umpf_parse_blob_r(&p, msg, msglen)) != NULL) {
 		/* definite success */
-		umpf_print_msg(umsg, stdout);
+		interpret_msg(umsg);
 		umpf_free_msg(umsg);
 
 	} else if (/* umsg == NULL && */ctx == NULL) {
