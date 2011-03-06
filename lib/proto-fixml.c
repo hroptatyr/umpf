@@ -1068,9 +1068,31 @@ umpf_parse_blob_r(umpf_ctx_t *ctx, const char *buf, size_t bsz)
 void
 umpf_free_msg(umpf_msg_t msg)
 {
-	/* add more stuff once we go hierarchy,
-	 * for now the union type allows us to just free him,
-	 * thanks realloc */
+	switch (msg->hdr.mt) {
+	case UMPF_MSG_NEW_PF:
+		/* satellite only occurs in new pf */
+		if (msg->new_pf.satellite) {
+			free(msg->new_pf.satellite);
+		}
+		goto common;
+
+	case UMPF_MSG_GET_PF:
+	case UMPF_MSG_SET_PF:
+		/* the ins_qty's must be freed too */
+		for (size_t j = 0; j < msg->pf.nposs; j++) {
+			struct __ins_qty_s *iq = msg->pf.poss + j;
+			if (iq->instr) {
+				free(iq->instr);
+			}
+		}
+	common:
+		/* common to all messages */
+		if (msg->pf.name) {
+			free(msg->pf.name);
+		}
+	default:
+		break;
+	}
 	free(msg);
 	return;
 }
