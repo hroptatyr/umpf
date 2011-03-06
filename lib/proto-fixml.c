@@ -624,14 +624,14 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		/* sigh, subtle differences */
 		switch (tid) {
 		case UMPF_TAG_REQ_FOR_POSS:
-			msg->hdr.mt = UMPF_MSG_GET_PF * 2;
+			umpf_set_msg_type(msg, UMPF_MSG_GET_PF);
 			for (size_t j = 0; attrs[j] != NULL; j += 2) {
 				proc_REQ_FOR_POSS_attr(
 					ctx, attrs[j], attrs[j + 1]);
 			}
 			break;
 		case UMPF_TAG_REQ_FOR_POSS_ACK:
-			msg->hdr.mt = UMPF_MSG_SET_PF * 2;
+			umpf_set_msg_type(msg, UMPF_MSG_SET_PF);
 			for (size_t j = 0; attrs[j] != NULL; j += 2) {
 				proc_REQ_FOR_POSS_ACK_attr(
 					ctx, attrs[j], attrs[j + 1]);
@@ -645,7 +645,7 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 			}
 			break;
 		case UMPF_TAG_RGST_INSTRCTNS:
-			msg->hdr.mt = UMPF_MSG_NEW_PF * 2;
+			umpf_set_msg_type(msg, UMPF_MSG_NEW_PF);
 			break;
 		default:
 			break;
@@ -1068,7 +1068,7 @@ umpf_parse_blob_r(umpf_ctx_t *ctx, const char *buf, size_t bsz)
 void
 umpf_free_msg(umpf_msg_t msg)
 {
-	switch (msg->hdr.mt) {
+	switch (umpf_get_msg_type(msg)) {
 	case UMPF_MSG_NEW_PF:
 		/* satellite only occurs in new pf */
 		if (msg->new_pf.satellite) {

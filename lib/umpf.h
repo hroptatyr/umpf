@@ -153,6 +153,21 @@ extern const char fixml50_ns_uri[];
  * Name space URI for FIXML 4.4 */
 extern const char fixml44_ns_uri[];
 
+
+/* some convenience inlines */
+static inline void
+umpf_set_msg_type(umpf_msg_t msg, umpf_msg_type_t mt)
+{
+	msg->hdr.mt = mt * 2;
+	return;
+}
+
+static inline umpf_msg_type_t
+umpf_get_msg_type(umpf_msg_t msg)
+{
+	return (umpf_msg_type_t)(msg->hdr.mt / 2);
+}
+
 #if defined __cplusplus
 }
 #endif	/* __cplusplus */
