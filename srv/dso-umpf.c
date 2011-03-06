@@ -69,6 +69,20 @@
 static void
 interpret_msg(umpf_msg_t msg)
 {
+	switch (umpf_get_msg_type(msg)) {
+	case UMPF_MSG_NEW_PF:
+		UMPF_DEBUG(MOD_PRE ": new_pf();\n");
+		break;
+	case UMPF_MSG_GET_PF:
+		UMPF_DEBUG(MOD_PRE ": get_pf();\n");
+		break;
+	case UMPF_MSG_SET_PF:
+		UMPF_DEBUG(MOD_PRE ": set_pf();\n");
+		break;
+	default:
+		UMPF_DEBUG(MOD_PRE ": unknown message %u\n", msg->hdr.mt);
+		break;
+	}
 	umpf_print_msg(msg, stdout);
 	return;
 }
