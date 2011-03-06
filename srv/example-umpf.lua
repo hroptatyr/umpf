@@ -16,4 +16,10 @@ load_module(
 	sock = "/tmp/.s.umpf",
 	-- tcp socket port to listen to
 	port = 8642,
+	db = {
+		host = "localhost",
+		user = "testuser",
+		pass = "password",
+		schema = "test",
+	},
 });

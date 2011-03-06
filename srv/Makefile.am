@@ -17,16 +17,24 @@ mod_LTLIBRARIES += dso-umpf.la
 dso_umpf_la_SOURCES =
 EXTRA_dso_umpf_la_SOURCES =
 dso_umpf_la_LDFLAGS = -module
-dso_umpf_la_LDFLAGS += $(unserding_LDFLAGS) $(MYSQL_LIBS) $(LIBXML2_LIBS)
+dso_umpf_la_LDFLAGS += $(unserding_LDFLAGS) $(LIBXML2_LIBS)
 dso_umpf_la_LDFLAGS += $(top_builddir)/lib/libumpf.la
 dso_umpf_la_CPPFLAGS = $(AM_CPPFLAGS) $(unserding_CFLAGS)
 dso_umpf_la_CPPFLAGS += -I$(top_srcdir)/lib
-dso_umpf_la_CPPFLAGS += $(MYSQL_CPPFLAGS) $(LIBXML2_CFLAGS)
+dso_umpf_la_CPPFLAGS += $(LIBXML2_CFLAGS)
 dso_umpf_la_SOURCES += dso-umpf.c
 EXTRA_dso_umpf_la_SOURCES += con6ity.c con6ity.h
+EXTRA_dso_umpf_la_SOURCES += be-sql.c be-sql.h
 dso_umpf_la_CPPFLAGS += -DHARD_INCLUDE_con6ity
 noinst_HEADERS += nifty.h
-endif
+if USE_MYSQL
+dso_umpf_la_LDFLAGS += $(MYSQL_LDFLAGS)
+dso_umpf_la_CPPFLAGS +=  $(MYSQL_CPPFLAGS)
+dso_umpf_la_CPPFLAGS += -DHARD_INCLUDE_be_sql
+else
+dso_umpf_la_CPPFLAGS += -DHARD_INCLUDE_be_sql
+endif ## USE_MYSQL
+endif ## BUILD_SERVER
 
 
 # 

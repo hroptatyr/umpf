@@ -62,6 +62,15 @@
 #endif	/* HARD_INCLUDE_con6ity */
 #include "con6ity.h"
 
+/* get rid of sql guts */
+#if defined HARD_INCLUDE_be_sql
+# undef DECLF
+# undef DEFUN
+# define DECLF		static
+# define DEFUN		static
+#endif	/* HARD_INCLUDE_be_sql */
+#include "be-sql.h"
+
 #define MOD_PRE		"mod/umpf"
 
 
@@ -147,6 +156,38 @@ static volatile int umpf_sock_uds = -1;
 const char *umpf_sock_path;
 
 
+/* our database connexion */
+#if defined HARD_INCLUDE_be_sql
+# include "be-sql.c"
+#endif	/* HARD_INCLUDE_be_sql */
+
+static dbconn_t umpf_dbconn;
+
+static dbconn_t
+umpf_init_be_sql(ud_ctx_t ctx, void *s)
+{
+	const char *host;
+	const char *user;
+	const char *pass;
+	const char *sch;
+	void *db;
+
+	if ((db = udcfg_tbl_lookup(ctx, s, "db")) == NULL) {
+		return NULL;
+	}
+	if ((udcfg_tbl_lookup_s(&host, ctx, db, "host"), host) == NULL ||
+	    (udcfg_tbl_lookup_s(&user, ctx, db, "user"), user) == NULL ||
+	    (udcfg_tbl_lookup_s(&pass, ctx, db, "pass"), pass) == NULL ||
+	    (udcfg_tbl_lookup_s(&sch, ctx, db, "schema"), sch) == NULL) {
+		udcfg_tbl_free(ctx, db);
+		return NULL;
+	}
+	/* free our settings */
+	udcfg_tbl_free(ctx, db);
+	return be_sql_connect(host, user, pass, sch);
+}
+
+
 /* unserding bindings */
 void
 init(void *clo)
@@ -181,6 +222,9 @@ init(void *clo)
 		/* set up the IO watcher and timer */
 		init_conn_watchers(ctx->mainloop, umpf_sock_net);
 	}
+	/* connect to our database */
+	umpf_init_be_sql(ctx, settings);
+
 	UMPF_DEBUG(MOD_PRE ": ... loaded\n");
 
 	/* clean up */
@@ -207,6 +251,10 @@ deinit(void *clo)
 	/* unlink the unix domain socket */
 	if (umpf_sock_path != NULL) {
 		unlink(umpf_sock_path);
+	}
+	/* lose our db connection */
+	if (umpf_dbconn) {
+		be_sql_close(umpf_dbconn);
 	}
 	UMPF_DBGCONT("done\n");
 	return;
