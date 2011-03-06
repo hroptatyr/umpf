@@ -275,6 +275,40 @@ print_pty(const char *id, unsigned int role, char src, FILE *out, size_t indent)
 }
 
 static void
+print_rg_dtl(const char *name, const char *satellite, FILE *out, size_t indent)
+{
+	print_indent(out, indent);
+	fputs("<RgDtl>\n", out);
+
+	/* do not use the pty printer as we need to go child-wards */
+	print_indent(out, indent + 2);
+	fputs("<Pty", out);
+
+	if (name) {
+		fputs(" ID=\"", out);
+		fputs_encq(name, out);
+		fputc('"', out);
+	}
+
+	if (satellite) {
+		/* finalise the tag */
+		fputs(">\n", out);
+
+		fputs_enc(satellite, out);
+
+		print_indent(out, indent + 2);
+		fputs("</Pty>\n", out);
+	} else {
+		/* finalise the tag */
+		fputs("/>\n", out);
+	}
+
+	print_indent(out, indent);
+	fputs("</RgDtl>\n", out);
+	return;
+}
+
+static void
 print_req_for_poss(umpf_msg_t msg, FILE *out, size_t indent)
 {
 	print_indent(out, indent);
@@ -368,6 +402,19 @@ print_req_for_poss_ack(umpf_msg_t msg, FILE *out, size_t indent)
 }
 
 static void
+print_rgst_instrctns(umpf_msg_t msg, FILE *out, size_t indent)
+{
+	print_indent(out, indent);
+	fputs("<RgstInstrctns TrsnTyp=\"0\">\n", out);
+
+	print_rg_dtl(msg->new_pf.name, msg->new_pf.satellite, out, indent + 2);
+
+	print_indent(out, indent);
+	fputs("</RgstInstrctns>\n", out);
+	return;
+}
+
+static void
 print_pos_rpt(umpf_msg_t msg, size_t idx, FILE *out, size_t indent)
 {
 	print_indent(out, indent);
@@ -427,7 +474,7 @@ print_msg(umpf_msg_t msg, FILE *out, size_t indent)
 
 	switch (umpf_get_msg_type(msg)) {
 	case UMPF_MSG_NEW_PF:
-		/* not supported yet */
+		print_rgst_instrctns(msg, out, indent + 2);
 		break;
 	case UMPF_MSG_GET_PF:
 		print_req_for_poss(msg, out, indent + 2);
