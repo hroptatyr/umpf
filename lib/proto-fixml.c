@@ -637,9 +637,11 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 					ctx, attrs[j], attrs[j + 1]);
 			}
 			if (msg->pf.nposs > 0) {
+				size_t iqsz =
+					sizeof(*msg->pf.poss) * msg->pf.nposs;
 				ctx->msg = msg = realloc(
-					msg, sizeof(*msg) +
-					sizeof(*msg->pf.poss) * msg->pf.nposs);
+					msg, sizeof(*msg) + iqsz);
+				memset(msg->pf.poss, 0, iqsz);
 			}
 			break;
 		case UMPF_TAG_RGST_INSTRCTNS:
