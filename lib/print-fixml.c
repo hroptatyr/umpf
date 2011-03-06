@@ -425,14 +425,14 @@ print_msg(umpf_msg_t msg, FILE *out, size_t indent)
 	fputs(fixml50_ns_uri, out);
 	fputs("\" v=\"5.0\">\n", out);
 
-	switch (msg->hdr.mt) {
-	case UMPF_MSG_NEW_PF * 2:
+	switch (umpf_get_msg_type(msg)) {
+	case UMPF_MSG_NEW_PF:
 		/* not supported yet */
 		break;
-	case UMPF_MSG_GET_PF * 2:
+	case UMPF_MSG_GET_PF:
 		print_req_for_poss(msg, out, indent + 2);
 		break;
-	case UMPF_MSG_SET_PF * 2:
+	case UMPF_MSG_SET_PF:
 		/* more than one child, so Batch it */
 		print_indent(out, indent + 2);
 		fputs("<Batch>\n", out);
