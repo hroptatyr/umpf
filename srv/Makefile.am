@@ -27,13 +27,16 @@ EXTRA_dso_umpf_la_SOURCES += con6ity.c con6ity.h
 EXTRA_dso_umpf_la_SOURCES += be-sql.c be-sql.h
 dso_umpf_la_CPPFLAGS += -DHARD_INCLUDE_con6ity
 noinst_HEADERS += nifty.h
+## database goodness
 if USE_MYSQL
 dso_umpf_la_LDFLAGS += $(MYSQL_LDFLAGS)
 dso_umpf_la_CPPFLAGS +=  $(MYSQL_CPPFLAGS)
+endif
+if USE_SQLITE
+dso_umpf_la_LDFLAGS += $(SQLITE_LIBS)
+dso_umpf_la_CPPFLAGS +=  $(SQLITE_CFLAGS)
+endif
 dso_umpf_la_CPPFLAGS += -DHARD_INCLUDE_be_sql
-else
-dso_umpf_la_CPPFLAGS += -DHARD_INCLUDE_be_sql
-endif ## USE_MYSQL
 endif ## BUILD_SERVER
 
 
