@@ -14,7 +14,6 @@ AC_ARG_WITH([mysql], [
 			AC_DEFINE([HAVE_MYSQL], [1],
 				[Defined when mysql could be found])
 		fi
-		AC_DEFINE([WITH_MYSQL], [1], [Defined when mysql was desired])
 	
 		SXE_DUMP_LIBS
 		CPPFLAGS="${CPPFLAGS} ${MYSQL_CPPFLAGS}"
@@ -27,6 +26,7 @@ AC_ARG_WITH([mysql], [
 	AM_CONDITIONAL([USE_MYSQL], []use_mysql_p[])
 
 	if []use_mysql_p[]; then
+		AC_DEFINE([WITH_MYSQL], [1], [Defined when mysql was desired])
 		DBMS="${DBMS} mysql"
 	fi
 
@@ -48,6 +48,7 @@ AC_DEFUN([SXE_CHECK_SQLITE], [dnl
 
 	if []use_sqlite_p[]; then
 		DBMS="${DBMS} sqlite"
+		AC_DEFINE([WITH_SQLITE], [1], [Defined when sqlite was desired])
 	fi
 
 	popdef([use_sqlite_p])
