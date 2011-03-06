@@ -73,17 +73,17 @@ DEFUN int
 handle_data(umpf_conn_t ctx, char *msg, size_t msglen)
 {
 	umpf_ctx_t p = get_fd_data(ctx);
-	umpf_doc_t doc;
+	umpf_msg_t umsg;
 
 	msg[msglen] = '\0';
 	UMPF_DEBUG(MOD_PRE "/ctx: %p %zu\n%s\n", ctx, msglen, msg);
 
-	if ((doc = umpf_parse_blob_r(&p, msg, msglen)) != NULL) {
+	if ((umsg = umpf_parse_blob_r(&p, msg, msglen)) != NULL) {
 		/* definite success */
-		umpf_print_doc(doc, stdout);
-		umpf_free_doc(doc);
+		umpf_print_msg(umsg, stdout);
+		umpf_free_msg(umsg);
 
-	} else if (/* doc == NULL && */ctx == NULL) {
+	} else if (/* umsg == NULL && */ctx == NULL) {
 		/* error occurred */
 		UMPF_DEBUG(MOD_PRE ": ERROR\n");
 	} else {
@@ -102,11 +102,11 @@ handle_close(umpf_conn_t ctx)
 	UMPF_DEBUG("forgetting about %d\n", get_fd(ctx));
 	if ((p = get_fd_data(ctx)) != NULL) {
 		/* finalise the push parser to avoid mem leaks */
-		umpf_doc_t doc = umpf_parse_blob_r(&p, ctx, 0);
+		umpf_msg_t msg = umpf_parse_blob_r(&p, ctx, 0);
 
-		if (UNLIKELY(doc != NULL)) {
+		if (UNLIKELY(msg != NULL)) {
 			/* sigh */
-			umpf_free_doc(doc);
+			umpf_free_msg(msg);
 		}
 	}
 	put_fd_data(ctx, NULL);
