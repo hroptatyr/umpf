@@ -502,7 +502,11 @@ proc_PTY_attr(__ctx_t ctx, const char *attr, const char *value)
 
 	switch (aid) {
 	case UMPF_ATTR_ID:
-		msg->pf.name = strdup(value);
+		/* dont overwrite stuff without free()ing
+		 * actually this is a bit rich, too much knowledge in here */
+		if (msg->pf.name == NULL) {
+			msg->pf.name = strdup(value);
+		}
 		break;
 	case UMPF_ATTR_S:
 		/* ignored */
