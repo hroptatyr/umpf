@@ -604,6 +604,7 @@ be_sql_new_pf(dbconn_t conn, const char *mnemo, const char *descr)
 INSERT INTO aou_umpf_portfolio (short, description) VALUES (";
 	static const char pst[] = "\
 );";
+	void *res;
 
 	if (UNLIKELY(mnemo == NULL)) {
 		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
@@ -642,27 +643,11 @@ INSERT INTO aou_umpf_portfolio (short, description) VALUES (";
 	tmp = stpncpy(tmp, pst, sizeof(pst));
 	UMPF_DEBUG(BE_SQL ": -> %s\n", qbuf);
 
-	switch (be_sql_get_type(conn)) {
-		void *res;
-	case BE_SQL_UNK:
-	default:
-		break;
-	case BE_SQL_MYSQL:
-		res = be_mysql_qry(be_sql_get_conn(conn), qbuf, tmp - qbuf);
-		UMPF_DEBUG(BE_SQL ": <- %p\n", res);
-		if (res != NULL) {
-			/* um, that's weird */
-			abort();
-		}
-		break;
-	case BE_SQL_SQLITE:
-		res = be_sqlite_qry(be_sql_get_conn(conn), qbuf, tmp - qbuf);
-		UMPF_DEBUG(BE_SQL ": <- %p\n", res);
-		if (res != NULL) {
-			/* um, that's weird */
-			abort();
-		}
-		break;
+	res = be_sql_qry(conn, qbuf, tmp - qbuf);
+	UMPF_DEBUG(BE_SQL ": <- %p\n", res);
+	if (res != NULL) {
+		/* um, that's weird */
+		abort();
 	}
 	return;
 }
@@ -681,6 +666,7 @@ WHERE short = \
 \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"";
 	/* we create a new tag and return its id */
 	uint64_t tag_id;
+	void *res;
 
 	if (UNLIKELY(mnemo == NULL)) {
 		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
@@ -709,27 +695,11 @@ WHERE short = \
 
 	UMPF_DEBUG(BE_SQL ": -> %s\n", qbuf);
 
-	switch (be_sql_get_type(conn)) {
-		void *res;
-	case BE_SQL_UNK:
-	default:
-		break;
-	case BE_SQL_MYSQL:
-		res = be_mysql_qry(be_sql_get_conn(conn), qbuf, tmp - qbuf);
-		UMPF_DEBUG(BE_SQL ": <- %p\n", res);
-		if (res != NULL) {
-			/* um, that's weird */
-			abort();
-		}
-		break;
-	case BE_SQL_SQLITE:
-		res = be_sqlite_qry(be_sql_get_conn(conn), qbuf, tmp - qbuf);
-		UMPF_DEBUG(BE_SQL ": <- %p\n", res);
-		if (res != NULL) {
-			/* um, that's weird */
-			abort();
-		}
-		break;
+	res = be_sql_qry(conn, qbuf, tmp - qbuf);
+	UMPF_DEBUG(BE_SQL ": <- %p\n", res);
+	if (res != NULL) {
+		/* um, that's weird */
+		abort();
 	}
 	/* retrieve our tag id */
 	tag_id = be_sql_last_rowid(conn);
