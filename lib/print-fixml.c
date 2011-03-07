@@ -415,6 +415,24 @@ print_rgst_instrctns(umpf_msg_t msg, FILE *out, size_t indent)
 }
 
 static void
+print_rgst_instrctns_rsp(umpf_msg_t msg, FILE *out, size_t indent)
+{
+	print_indent(out, indent);
+	fputs("<RgstInstrctnsRsp TrsnTyp=\"0\"", out);
+
+	if (msg->new_pf.name) {
+		fputs(" RegStat=\"A\" ID=\"", out);
+		fputs_encq(msg->new_pf.name, out);
+		fputc('"', out);
+	} else {
+		fputs(" RegStat=\"R\"", out);
+	}
+
+	fputs("/>\n", out);
+	return;
+}
+
+static void
 print_pos_rpt(umpf_msg_t msg, size_t idx, FILE *out, size_t indent)
 {
 	print_indent(out, indent);
@@ -472,14 +490,17 @@ print_msg(umpf_msg_t msg, FILE *out, size_t indent)
 	fputs(fixml50_ns_uri, out);
 	fputs("\" v=\"5.0\">\n", out);
 
-	switch (umpf_get_msg_type(msg)) {
-	case UMPF_MSG_NEW_PF:
+	switch (msg->hdr.mt) {
+	case UMPF_MSG_NEW_PF * 2:
 		print_rgst_instrctns(msg, out, indent + 2);
 		break;
-	case UMPF_MSG_GET_PF:
+	case UMPF_MSG_NEW_PF * 2 + 1:
+		print_rgst_instrctns_rsp(msg, out, indent + 2);
+		break;
+	case UMPF_MSG_GET_PF * 2:
 		print_req_for_poss(msg, out, indent + 2);
 		break;
-	case UMPF_MSG_SET_PF:
+	case UMPF_MSG_SET_PF * 2:
 		/* more than one child, so Batch it */
 		print_indent(out, indent + 2);
 		fputs("<Batch>\n", out);

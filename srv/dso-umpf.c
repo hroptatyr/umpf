@@ -79,7 +79,7 @@ static dbconn_t umpf_dbconn;
 
 /* connexion<->proto glue */
 static void
-interpret_msg(umpf_msg_t msg)
+interpret_msg(int fd, umpf_msg_t msg)
 {
 #if defined DEBUG_FLAG
 	umpf_print_msg(msg, stdout);
@@ -92,6 +92,14 @@ interpret_msg(umpf_msg_t msg)
 		mnemo = msg->new_pf.name;
 		descr = msg->new_pf.satellite;
 		be_sql_new_pf(umpf_dbconn, mnemo, descr);
+
+		/* reuse the message to send the answer */
+		{
+			FILE *f = fdopen(fd, "w+");
+			msg->hdr.mt++;
+			umpf_print_msg(msg, f);
+			fclose(f);
+		}
 		break;
 	}
 	case UMPF_MSG_GET_PF:
@@ -121,7 +129,7 @@ handle_data(umpf_conn_t ctx, char *msg, size_t msglen)
 
 	if ((umsg = umpf_parse_blob_r(&p, msg, msglen)) != NULL) {
 		/* definite success */
-		interpret_msg(umsg);
+		interpret_msg(get_fd(ctx), umsg);
 		umpf_free_msg(umsg);
 
 	} else if (/* umsg == NULL && */ctx == NULL) {
