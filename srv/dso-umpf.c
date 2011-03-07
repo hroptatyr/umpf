@@ -98,7 +98,9 @@ interpret_msg(int fd, umpf_msg_t msg)
 			FILE *f = fdopen(fd, "w+");
 			msg->hdr.mt++;
 			umpf_print_msg(msg, f);
-			fclose(f);
+			/* can't fclose() here or the underlying stream will
+			 * close too */
+			//fclose(f);
 		}
 		break;
 	}
