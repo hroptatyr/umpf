@@ -69,15 +69,13 @@ static void __attribute__((noinline))
 check_realloc(__ctx_t ctx, size_t len)
 {
 	if (UNLIKELY(ctx->idx + len > ctx->gbsz)) {
-		if (ctx->gbsz == INITIAL_GBUF_SIZE) {
-			/* first one needs a malloc */
-			char *old = ctx->gbuf;
-			ctx->gbuf = malloc(ctx->gbsz += INITIAL_GBUF_SIZE);
-			memcpy(ctx->gbuf, old, ctx->idx);
-		} else {
 			ctx->gbuf = realloc(
 				ctx->gbuf, ctx->gbsz + INITIAL_GBUF_SIZE);
-		}
+	} else if (UNLIKELY(ctx->idx + len > -ctx->gbsz)) {
+		/* now we need a malloc */
+		char *old = ctx->gbuf;
+		ctx->gbuf = malloc(ctx->gbsz += INITIAL_GBUF_SIZE);
+		memcpy(ctx->gbuf, old, ctx->idx);
 	}
 	return;
 }
@@ -622,7 +620,7 @@ umpf_print_msg(int out, umpf_msg_t msg)
 	static struct __ctx_s ctx[1];
 
 	ctx->gbuf = gbuf;
-	ctx->gbsz = INITIAL_GBUF_SIZE;
+	ctx->gbsz = -INITIAL_GBUF_SIZE;
 	ctx->idx = 0;
 
 	snputs(ctx, xml_hdr, countof_m1(xml_hdr));
