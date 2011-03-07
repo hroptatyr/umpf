@@ -1,4 +1,6 @@
 #include <string.h>
+#include <stdio.h>
+#include <unistd.h>
 #include "umpf.h"
 
 #define countof(x)	(sizeof(x) / sizeof(*x))
@@ -51,7 +53,7 @@ test_files(const char *file)
 	umpf_free_msg(msg);
 
 	msg = umpf_parse_file_r(file);
-	umpf_print_msg(msg, stdout);
+	umpf_print_msg(STDOUT_FILENO, msg);
 	umpf_free_msg(msg);
 	return;
 }
@@ -68,7 +70,7 @@ test_blobs(void)
 		if (msg != NULL) {
 			/* definite success */
 			fprintf(stderr, "finally\n");
-			umpf_print_msg(msg, stdout);
+			umpf_print_msg(STDOUT_FILENO, msg);
 			umpf_free_msg(msg);
 
 		} else if (/* msg == NULL && */ctx == NULL) {
@@ -82,7 +84,7 @@ test_blobs(void)
 		msg = umpf_parse_blob_r(&ctx, blobs[i], blszs[i]);
 		if (msg != NULL) {
 			/* definite success */
-			umpf_print_msg(msg, stdout);
+			umpf_print_msg(STDOUT_FILENO, msg);
 			umpf_free_msg(msg);
 
 		} else if (/* msg == NULL && */ctx == NULL) {

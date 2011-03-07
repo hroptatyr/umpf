@@ -56,60 +56,134 @@
 # pragma warning (disable:424)
 #endif	/* __INTEL_COMPILER */
 
+#define INITIAL_GBUF_SIZE	(4096)
+
+typedef struct __ctx_s {
+	char *gbuf;
+	size_t gbsz;
+	size_t idx;
+} *__ctx_t;
+
 
-static void
-print_indent(FILE *out, size_t indent)
+static void __attribute__((noinline))
+check_realloc(__ctx_t ctx, size_t len)
 {
-	for (size_t i = 0; i < indent; i++) {
-		fputc(' ', out);
+	if (UNLIKELY(ctx->idx + len > ctx->gbsz)) {
+		if (ctx->gbsz == INITIAL_GBUF_SIZE) {
+			/* first one needs a malloc */
+			char *old = ctx->gbuf;
+			ctx->gbuf = malloc(ctx->gbsz += INITIAL_GBUF_SIZE);
+			memcpy(ctx->gbuf, old, ctx->idx);
+		} else {
+			ctx->gbuf = realloc(
+				ctx->gbuf, ctx->gbsz + INITIAL_GBUF_SIZE);
+		}
 	}
 	return;
 }
 
-static void
-print_zulu(FILE *out, time_t stamp)
+static size_t
+sputs(__ctx_t ctx, const char *src)
 {
-	struct tm tm[1] = {{0}};
-	char buf[32];
-	gmtime_r(&stamp, tm);
-	strftime(buf, sizeof(buf), "%FT%T%z", tm);
-	fputs(buf, out);
+	size_t len = strlen(src);
+
+	check_realloc(ctx, len);
+	memcpy(ctx->gbuf + ctx->idx, src, len);
+	ctx->idx += len;
+	return len;
+}
+
+static void
+snputs(__ctx_t ctx, const char *src, size_t len)
+{
+	check_realloc(ctx, len);
+	memcpy(ctx->gbuf + ctx->idx, src, len);
+	ctx->idx += len;
 	return;
 }
 
 static void
-print_date(FILE *out, time_t stamp)
+sputc(__ctx_t ctx, const char c)
 {
-	struct tm tm[1] = {{0}};
-	char buf[32];
-	gmtime_r(&stamp, tm);
-	strftime(buf, sizeof(buf), "%F", tm);
-	fputs(buf, out);
+	ctx->gbuf[ctx->idx++] = c;
 	return;
 }
 
-static void __attribute__((unused))
-fputs_enc(const char *s, FILE *out)
+/* declare our variadic goodness */
+static size_t
+csnprintf(__ctx_t ctx, const char *fmt, ...)
+	__attribute__((format(printf, 2, 3)));
+static size_t
+csnprintf(__ctx_t ctx, const char *fmt, ...)
 {
-/* like fputs() but encode special chars */
+	va_list ap;
+	size_t left;
+	int len = 0;
+
+	do {
+		check_realloc(ctx, len + 1);
+		left = ctx->gbsz - ctx->idx;
+		va_start(ap, fmt);
+		len = vsnprintf(ctx->gbuf + ctx->idx, left, fmt, ap);
+		va_end(ap);
+	} while (UNLIKELY(len == -1 || len >= left));
+
+	ctx->idx += len;
+	return len;
+}
+
+static void
+print_indent(__ctx_t ctx, size_t indent)
+{
+	check_realloc(ctx, indent);
+	memset(ctx->gbuf + ctx->idx, ' ', indent);
+	ctx->idx += indent;
+	return;
+}
+
+static void
+print_zulu(__ctx_t ctx, time_t stamp)
+{
+	struct tm tm[1] = {{0}};
+
+	check_realloc(ctx, 32);
+	gmtime_r(&stamp, tm);
+	ctx->idx += strftime(ctx->gbuf + ctx->idx, 32, "%FT%T%z", tm);
+	return;
+}
+
+static void
+print_date(__ctx_t ctx, time_t stamp)
+{
+	struct tm tm[1] = {{0}};
+
+	check_realloc(ctx, 32);
+	gmtime_r(&stamp, tm);
+	ctx->idx += strftime(ctx->gbuf + ctx->idx, 32, "%F", tm);
+	return;
+}
+
+static void
+sputs_enc(__ctx_t ctx, const char *s)
+{
 	static const char stpset[] = "<>&";
 
 	for (size_t idx; idx = strcspn(s, stpset); s += idx + sizeof(*s)) {
 		/* write what we've got */
-		fwrite(s, sizeof(*s), idx, out);
+		snputs(ctx, s, idx);
 		/* inspect the character */
 		switch (s[idx]) {
 		default:
 		case '\0':
 			return;
 		case '<':
-			fputs("&lt;", out);
+			snputs(ctx, "&lt;", 4);
 			break;
 		case '>':
-			fputs("&gt;", out);
+			snputs(ctx, "&gt;", 4);
 			break;
 		case '&':
-			fputs("&amp;", out);
+			snputs(ctx, "&amp;", 5);
 			break;
 		}
 	}
@@ -117,33 +191,33 @@ fputs_enc(const char *s, FILE *out)
 }
 
 static void
-fputs_encq(const char *s, FILE *out)
+sputs_encq(__ctx_t ctx, const char *s)
 {
 /* like fputs() but encode special chars */
 	static const char stpset[] = "<>&'\"";
 
 	for (size_t idx; idx = strcspn(s, stpset); s += idx + sizeof(*s)) {
 		/* write what we've got */
-		fwrite(s, sizeof(*s), idx, out);
+		snputs(ctx, s, idx);
 		/* inspect the character */
 		switch (s[idx]) {
 		default:
 		case '\0':
 			return;
 		case '<':
-			fputs("&lt;", out);
+			snputs(ctx, "&lt;", 4);
 			break;
 		case '>':
-			fputs("&gt;", out);
+			snputs(ctx, "&gt;", 4);
 			break;
 		case '&':
-			fputs("&amp;", out);
+			snputs(ctx, "&amp;", 5);
 			break;
 		case '\'':
-			fputs("&apos;", out);
+			snputs(ctx, "&apos;", 6);
 			break;
 		case '"':
-			fputs("&quot;", out);
+			snputs(ctx, "&quot;", 6);
 			break;
 		}
 	}
@@ -153,113 +227,113 @@ fputs_encq(const char *s, FILE *out)
 
 /* printer */
 static void
-print_instrmt(struct __ins_qty_s *i, FILE *out, size_t indent)
+print_instrmt(__ctx_t ctx, struct __ins_qty_s *i, size_t indent)
 {
-	print_indent(out, indent);
-	fputs("<Instrmt", out);
+	print_indent(ctx, indent);
+	sputs(ctx, "<Instrmt");
 
 	if (i->instr) {
-		fputs(" Sym=\"", out);
-		fputs_encq(i->instr, out);
-		fputc('"', out);
+		sputs(ctx, " Sym=\"");
+		sputs_encq(ctx, i->instr);
+		sputc(ctx, '"');
 	}
 
 #if 0
 	if (i->id) {
-		fputs(" ID=\"", out);
-		fputs_encq(i->id, out);
-		fputc('"', out);
+		sputs(ctx, " ID=\"");
+		sputs_encq(ctx, i->id);
+		sputc(ctx, '"');
 	}
 
 	if (i->src) {
-		fputs(" Src=\"", out);
-		fputs_encq(i->src, out);
-		fputc('"', out);
+		sputs(ctx, " Src=\"");
+		sputs_encq(ctx, i->src);
+		sputc(ctx, '"');
 	}
 #endif
 
 	/* finalise the tag */
-	fputs("/>\n", out);
+	sputs(ctx, "/>\n");
 	return;
 }
 
 static void
-print_qty(struct __ins_qty_s *q, FILE *out, size_t indent)
+print_qty(__ctx_t ctx, struct __ins_qty_s *q, size_t indent)
 {
-	print_indent(out, indent);
-	fputs("<Qty", out);
+	print_indent(ctx, indent);
+	sputs(ctx, "<Qty");
 
 #if 0
 	if (q->typ) {
-		fputs(" Typ=\"", out);
-		fputs_encq(q->typ, out);
-		fputc('"', out);
+		sputs(ctx, " Typ=\"");
+		sputs_encq(ctx, q->typ);
+		sputc(ctx, '"');
 	}
 #endif
 
-	fprintf(out, " Long=\"%.6f\"", q->qty->_long);
-	fprintf(out, " Short=\"%.6f\"", q->qty->_shrt);
+	csnprintf(ctx, " Long=\"%.6f\"", q->qty->_long);
+	csnprintf(ctx, " Short=\"%.6f\"", q->qty->_shrt);
 #if 0
-	fprintf(out, " Stat=\"%u\"", q->stat);
+	csnprintf(ctx, " Stat=\"%u\"", q->stat);
 #endif
 
 #if 0
 	if (q->qty_dt > 0) {
-		fputs(" QtyDt=\"", out);
-		print_date(out, q->qty_dt);
-		fputc('"', out);
+		sputs(ctx, " QtyDt=\"");
+		print_date(ctx, q->qty_dt);
+		sputc(ctx, '"');
 	}
 #endif
 
 	/* finalise the tag */
-	fputs("/>\n", out);
+	sputs(ctx, "/>\n");
 	return;
 }
 
 #if 0
 static void
-print_amt(struct __amt_s *a, FILE *out, size_t indent)
+print_amt(__ctx_t ctx, struct __amt_s *a, size_t indent)
 {
-	print_indent(out, indent);
-	fputs("<Amt", out);
+	print_indent(ctx, indent);
+	sputs(ctx, "<Amt");
 
 	if (a->typ) {
-		fputs(" Typ=\"", out);
-		fputs_encq(a->typ, out);
-		fputc('"', out);
+		sputs(ctx, " Typ=\"");
+		sputs_encq(ctx, a->typ);
+		sputc(ctx, '"');
 	}
 
-	fprintf(out, " Amt=\"%.6f\"", a->amt);
-	fprintf(out, " Ccy=\"%s\"", a->ccy);
+	csnprintf(ctx, " Amt=\"%.6f\"", a->amt);
+	csnprintf(ctx, " Ccy=\"%s\"", a->ccy);
 
 	/* finalise the tag */
-	fputs("/>\n", out);
+	sputs(ctx, "/>\n");
 	return;
 }
 #endif
 
 static void
-print_pty(const char *id, unsigned int role, char src, FILE *out, size_t indent)
+print_pty(__ctx_t ctx, const char *id, unsigned int role, char src, size_t ind)
 {
-	print_indent(out, indent);
-	fputs("<Pty", out);
+	print_indent(ctx, ind);
+	sputs(ctx, "<Pty");
 
 	if (id) {
-		fputs(" ID=\"", out);
-		fputs_encq(id, out);
-		fputc('"', out);
+		sputs(ctx, " ID=\"");
+		sputs_encq(ctx, id);
+		sputc(ctx, '"');
 	}
 
-	fprintf(out, " R=\"%u\"", role);
+	csnprintf(ctx, " R=\"%u\"", role);
 
 	if (src) {
-		fputs(" Src=\"", out);
-		fputc(src, out);
-		fputc('"', out);
+		sputs(ctx, " Src=\"");
+		sputc(ctx, src);
+		sputc(ctx, '"');
 	}
 
 	/* finalise the tag */
-	fputs(">\n", out);
+	sputs(ctx, ">\n");
 
 #if 0
 /* not supported */
@@ -269,272 +343,291 @@ print_pty(const char *id, unsigned int role, char src, FILE *out, size_t indent)
 	}
 #endif	/* 0 */
 
-	print_indent(out, indent);
-	fputs("</Pty>\n", out);
+	print_indent(ctx, ind);
+	sputs(ctx, "</Pty>\n");
 	return;
 }
 
 static void
-print_rg_dtl(const char *name, const char *satellite, FILE *out, size_t indent)
+print_rg_dtl(__ctx_t ctx, const char *name, const char *satell, size_t indent)
 {
-	print_indent(out, indent);
-	fputs("<RgDtl>\n", out);
+	print_indent(ctx, indent);
+	sputs(ctx, "<RgDtl>\n");
 
 	/* do not use the pty printer as we need to go child-wards */
-	print_indent(out, indent + 2);
-	fputs("<Pty", out);
+	print_indent(ctx, indent + 2);
+	sputs(ctx, "<Pty");
 
 	if (name) {
-		fputs(" ID=\"", out);
-		fputs_encq(name, out);
-		fputc('"', out);
+		sputs(ctx, " ID=\"");
+		sputs_encq(ctx, name);
+		sputc(ctx, '"');
 	}
 
-	if (satellite) {
+	if (satell) {
 		/* finalise the tag */
-		fputs(">\n", out);
+		sputs(ctx, ">\n");
 
-		fputs_enc(satellite, out);
+		sputs_enc(ctx, satell);
 
-		print_indent(out, indent + 2);
-		fputs("</Pty>\n", out);
+		print_indent(ctx, indent + 2);
+		sputs(ctx, "</Pty>\n");
 	} else {
 		/* finalise the tag */
-		fputs("/>\n", out);
+		sputs(ctx, "/>\n");
 	}
 
-	print_indent(out, indent);
-	fputs("</RgDtl>\n", out);
+	print_indent(ctx, indent);
+	sputs(ctx, "</RgDtl>\n");
 	return;
 }
 
 static void
-print_req_for_poss(umpf_msg_t msg, FILE *out, size_t indent)
+print_req_for_poss(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 {
-	print_indent(out, indent);
-	fputs("<ReqForPoss", out);
+	print_indent(ctx, indent);
+	sputs(ctx, "<ReqForPoss");
 
 #if 0
 	if (r->req_id) {
-		fputs(" ReqId=\"", out);
-		fputs_encq(r->req_id, out);
-		fputc('"', out);
+		sputs(ctx, " ReqId=\"");
+		sputs_encq(ctx, r->req_id);
+		sputc(ctx, '"');
 	}
 #endif
 
 	if (msg->pf.clr_dt > 0) {
-		fputs(" BizDt=\"", out);
-		print_date(out, msg->pf.clr_dt);
-		fputc('"', out);
+		sputs(ctx, " BizDt=\"");
+		print_date(ctx, msg->pf.clr_dt);
+		sputc(ctx, '"');
 	}
 
-	fputs(" ReqTyp=\"0\"", out);
+	sputs(ctx, " ReqTyp=\"0\"");
 
 #if 0
 	if (r->set_ses_id) {
-		fputs(" SetSesID=\"", out);
-		fputs_encq(r->set_ses_id, out);
-		fputc('"', out);
+		sputs(ctx, " SetSesID=\"");
+		sputs_encq(ctx, r->set_ses_id);
+		sputc(ctx, '"');
 	}
 #endif
 
 	if (msg->pf.stamp > 0) {
-		fputs(" TxnTm=\"", out);
-		print_zulu(out, msg->pf.stamp);
-		fputc('"', out);
+		sputs(ctx, " TxnTm=\"");
+		print_zulu(ctx, msg->pf.stamp);
+		sputc(ctx, '"');
 	}
 
 	/* finalise the tag */
-	fputs(">\n", out);
+	sputs(ctx, ">\n");
 
-	print_pty(msg->pf.name, 0, '\0', out, indent + 2);
+	print_pty(ctx, msg->pf.name, 0, '\0', indent + 2);
 
-	print_indent(out, indent);
-	fputs("</ReqForPoss>\n", out);
+	print_indent(ctx, indent);
+	sputs(ctx, "</ReqForPoss>\n");
 	return;
 }
 
 static void
-print_req_for_poss_ack(umpf_msg_t msg, FILE *out, size_t indent)
+print_req_for_poss_ack(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 {
-	print_indent(out, indent);
-	fputs("<ReqForPossAck", out);
+	print_indent(ctx, indent);
+	sputs(ctx, "<ReqForPossAck");
 
 #if 0
 	if (r->rpt_id) {
-		fputs(" RptId=\"", out);
-		fputs_encq(r->rpt_id, out);
-		fputc('"', out);
+		sputs(ctx, " RptId=\"");
+		sputs_encq(ctx, r->rpt_id);
+		sputc(ctx, '"');
 	}
 #endif
 
 	if (msg->pf.clr_dt > 0) {
-		fputs(" BizDt=\"", out);
-		print_date(out, msg->pf.clr_dt);
-		fputc('"', out);
+		sputs(ctx, " BizDt=\"");
+		print_date(ctx, msg->pf.clr_dt);
+		sputc(ctx, '"');
 	}
 
-	fputs(" ReqTyp=\"0\"", out);
-	fprintf(out, " TotRpts=\"%zu\"", msg->pf.nposs);
-	fputs(" Rslt=\"0\" Stat=\"0\"", out);
+	sputs(ctx, " ReqTyp=\"0\"");
+	csnprintf(ctx, " TotRpts=\"%zu\"", msg->pf.nposs);
+	sputs(ctx, " Rslt=\"0\" Stat=\"0\"");
 
 #if 0
 	if (r->set_ses_id) {
-		fputs(" SetSesID=\"", out);
-		fputs_encq(r->set_ses_id, out);
-		fputc('"', out);
+		sputs(ctx, " SetSesID=\"");
+		sputs_encq(ctx, r->set_ses_id);
+		sputc(ctx, '"');
 	}
 #endif
 
 	if (msg->pf.stamp > 0) {
-		fputs(" TxnTm=\"", out);
-		print_zulu(out, msg->pf.stamp);
-		fputc('"', out);
+		sputs(ctx, " TxnTm=\"");
+		print_zulu(ctx, msg->pf.stamp);
+		sputc(ctx, '"');
 	}
 	/* finalise the tag */
-	fputs(">\n", out);
+	sputs(ctx, ">\n");
 
-	print_pty(msg->pf.name, 0, '\0', out, indent + 2);
+	print_pty(ctx, msg->pf.name, 0, '\0', indent + 2);
 
-	print_indent(out, indent);
-	fputs("</ReqForPossAck>\n", out);
+	print_indent(ctx, indent);
+	sputs(ctx, "</ReqForPossAck>\n");
 	return;
 }
 
 static void
-print_rgst_instrctns(umpf_msg_t msg, FILE *out, size_t indent)
+print_rgst_instrctns(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 {
-	print_indent(out, indent);
-	fputs("<RgstInstrctns TrsnTyp=\"0\">\n", out);
+	print_indent(ctx, indent);
+	sputs(ctx, "<RgstInstrctns TrsnTyp=\"0\">\n");
 
-	print_rg_dtl(msg->new_pf.name, msg->new_pf.satellite, out, indent + 2);
+	print_rg_dtl(ctx, msg->new_pf.name, msg->new_pf.satellite, indent + 2);
 
-	print_indent(out, indent);
-	fputs("</RgstInstrctns>\n", out);
+	print_indent(ctx, indent);
+	sputs(ctx, "</RgstInstrctns>\n");
 	return;
 }
 
 static void
-print_rgst_instrctns_rsp(umpf_msg_t msg, FILE *out, size_t indent)
+print_rgst_instrctns_rsp(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 {
-	print_indent(out, indent);
-	fputs("<RgstInstrctnsRsp TrsnTyp=\"0\"", out);
+	print_indent(ctx, indent);
+	sputs(ctx, "<RgstInstrctnsRsp TrsnTyp=\"0\"");
 
 	if (msg->new_pf.name) {
-		fputs(" RegStat=\"A\" ID=\"", out);
-		fputs_encq(msg->new_pf.name, out);
-		fputc('"', out);
+		sputs(ctx, " RegStat=\"A\" ID=\"");
+		sputs_encq(ctx, msg->new_pf.name);
+		sputc(ctx, '"');
 	} else {
-		fputs(" RegStat=\"R\"", out);
+		sputs(ctx, " RegStat=\"R\"");
 	}
 
-	fputs("/>\n", out);
+	sputs(ctx, "/>\n");
 	return;
 }
 
 static void
-print_pos_rpt(umpf_msg_t msg, size_t idx, FILE *out, size_t indent)
+print_pos_rpt(__ctx_t ctx, umpf_msg_t msg, size_t idx, size_t indent)
 {
-	print_indent(out, indent);
-	fputs("<PosRpt", out);
+	print_indent(ctx, indent);
+	sputs(ctx, "<PosRpt");
 
 #if 0
 	if (pr->rpt_id) {
-		fputs(" RptId=\"", out);
-		fputs_encq(pr->rpt_id, out);
-		fputc('"', out);
+		sputs(ctx, " RptId=\"");
+		sputs_encq(ctx, pr->rpt_id);
+		sputc(ctx, '"');
 	}
 	/* TotRpts makes no sense innit? */
 #endif
 
-	fputs(" Rslt=\"0\" ReqTyp=\"0\"", out);
+	sputs(ctx, " Rslt=\"0\" ReqTyp=\"0\"");
 
 	if (msg->pf.clr_dt > 0) {
-		fputs(" BizDt=\"", out);
-		print_date(out, msg->pf.clr_dt);
-		fputc('"', out);
+		sputs(ctx, " BizDt=\"");
+		print_date(ctx, msg->pf.clr_dt);
+		sputc(ctx, '"');
 	}
 
 #if 0
 	if (pr->set_ses_id) {
-		fputs(" SetSesID=\"", out);
-		fputs_encq(pr->set_ses_id, out);
-		fputc('"', out);
+		sputs(ctx, " SetSesID=\"");
+		sputs_encq(ctx, pr->set_ses_id);
+		sputc(ctx, '"');
 	}
 #endif
 	/* finalise the tag */
-	fputs(">\n", out);
+	sputs(ctx, ">\n");
 
-	print_pty(msg->pf.name, 0, '\0', out, indent + 2);
+	print_pty(ctx, msg->pf.name, 0, '\0', indent + 2);
 
-	print_instrmt(msg->pf.poss + idx, out, indent + 2);
-	print_qty(msg->pf.poss + idx, out, indent + 2);
+	print_instrmt(ctx, msg->pf.poss + idx, indent + 2);
+	print_qty(ctx, msg->pf.poss + idx, indent + 2);
 
 #if 0
 	for (size_t j = 0; j < pr->namt; j++) {
 		struct __amt_s *amt = pr->amt + j;
-		print_amt(amt, out, indent + 2);
+		print_amt(ctx, amt, indent + 2);
 	}
 #endif
 
-	print_indent(out, indent);
-	fputs("<PosRpt>\n", out);
+	print_indent(ctx, indent);
+	sputs(ctx, "<PosRpt>\n");
 	return;
 }
 
 static void
-print_msg(umpf_msg_t msg, FILE *out, size_t indent)
+print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 {
-	print_indent(out, indent);
-	fputs("<FIXML xmlns=\"", out);
-	fputs(fixml50_ns_uri, out);
-	fputs("\" v=\"5.0\">\n", out);
+	print_indent(ctx, indent);
+	sputs(ctx, "<FIXML xmlns=\"");
+	sputs(ctx, fixml50_ns_uri);
+	sputs(ctx, "\" v=\"5.0\">\n");
 
 	switch (msg->hdr.mt) {
 	case UMPF_MSG_NEW_PF * 2:
-		print_rgst_instrctns(msg, out, indent + 2);
+		print_rgst_instrctns(ctx, msg, indent + 2);
 		break;
 	case UMPF_MSG_NEW_PF * 2 + 1:
-		print_rgst_instrctns_rsp(msg, out, indent + 2);
+		print_rgst_instrctns_rsp(ctx, msg, indent + 2);
 		break;
 
 	case UMPF_MSG_SET_PF * 2 + 1:
 		/* answer to SET_PF is a GET_PF */
 	case UMPF_MSG_GET_PF * 2:
-		print_req_for_poss(msg, out, indent + 2);
+		print_req_for_poss(ctx, msg, indent + 2);
 		break;
 
 	case UMPF_MSG_GET_PF * 2 + 1:
 		/* answer to GET_PF is a SET_PF */
 	case UMPF_MSG_SET_PF * 2:
 		/* more than one child, so Batch it */
-		print_indent(out, indent + 2);
-		fputs("<Batch>\n", out);
+		print_indent(ctx, indent + 2);
+		sputs(ctx, "<Batch>\n");
 
-		print_req_for_poss_ack(msg, out, indent + 4);
+		print_req_for_poss_ack(ctx, msg, indent + 4);
 		for (size_t i = 0; i < msg->pf.nposs; i++) {
-			print_pos_rpt(msg, i, out, indent + 4);
+			print_pos_rpt(ctx, msg, i, indent + 4);
 		}
 
-		print_indent(out, indent + 2);
-		fputs("</Batch>\n", out);
+		print_indent(ctx, indent + 2);
+		sputs(ctx, "</Batch>\n");
 		break;
 	default:
 		break;
 	}
 
-	print_indent(out, indent);
-	fputs("</FIXML>\n", out);
+	print_indent(ctx, indent);
+	sputs(ctx, "</FIXML>\n");
 	return;
 }
 
 
 /* external stuff and helpers */
+static const char xml_hdr[] = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
+
 void
-umpf_print_msg(umpf_msg_t msg, FILE *out)
+umpf_seria_msg(char **tgt, size_t tsz, umpf_msg_t msg)
 {
-	fputs("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n", out);
-	print_msg(msg, out, 0);
+}
+
+void
+umpf_print_msg(int out, umpf_msg_t msg)
+{
+	static char gbuf[INITIAL_GBUF_SIZE];
+	static struct __ctx_s ctx[1];
+
+	ctx->gbuf = gbuf;
+	ctx->gbsz = INITIAL_GBUF_SIZE;
+	ctx->idx = 0;
+
+	snputs(ctx, xml_hdr, countof_m1(xml_hdr));
+	print_msg(ctx, msg, 0);
+
+	/* finish off with a \nul byte */
+	check_realloc(ctx, 1);
+	ctx->gbuf[ctx->idx] = '\0';
+	write(out, ctx->gbuf, ctx->idx);
 	return;
 }
 

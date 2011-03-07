@@ -38,7 +38,6 @@
 #if !defined INCLUDED_umpf_h_
 #define INCLUDED_umpf_h_
 
-#include <stdio.h>
 #include <stddef.h>
 #include <time.h>
 
@@ -142,8 +141,14 @@ umpf_parse_blob_r(umpf_ctx_t *ctx, const char *buf, size_t bsz);
 extern void umpf_free_msg(umpf_msg_t);
 
 /**
- * Print DOC to OUT. */
-extern void umpf_print_msg(umpf_msg_t, FILE *out);
+ * Print DOC to OUTFD. */
+extern void umpf_print_msg(int outfd, umpf_msg_t);
+
+/**
+ * Print DOC to *TGT of size TSZ, return the final size.
+ * If TSZ bytes are not enough to hold the entire contents
+ * the buffer *TGT will be resized using realloc(). */
+extern size_t umpf_seria_msg(char **tgt, size_t tsz, umpf_msg_t);
 
 /**
  * Name space URI for FIXML 5.0 */
