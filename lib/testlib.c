@@ -54,6 +54,13 @@ test_files(const char *file)
 
 	msg = umpf_parse_file_r(file);
 	umpf_print_msg(STDOUT_FILENO, msg);
+	{
+		/* test in-memory serialiser */
+		char *tgt = NULL;
+		size_t sz;
+		sz = umpf_seria_msg(&tgt, 0, msg);
+		fwrite(tgt, sizeof(*tgt), sz, stdout);
+	}
 	umpf_free_msg(msg);
 	return;
 }
