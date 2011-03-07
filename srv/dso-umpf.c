@@ -170,21 +170,37 @@ umpf_init_be_sql(ud_ctx_t ctx, void *s)
 	const char *user;
 	const char *pass;
 	const char *sch;
+	const char *db_file;
 	void *db;
+	dbconn_t conn;
 
-	if ((db = udcfg_tbl_lookup(ctx, s, "db")) == NULL) {
+	if ((udcfg_tbl_lookup_s(&db_file, ctx, s, "db"), db_file) != NULL) {
+		/* must be sqlite then */
+		return be_sql_connect(NULL, NULL, NULL, db_file);
+
+	} else if ((db = udcfg_tbl_lookup(ctx, s, "db")) == NULL) {
+		/* must be bollocks */
 		return NULL;
 	}
-	if ((udcfg_tbl_lookup_s(&host, ctx, db, "host"), host) == NULL ||
-	    (udcfg_tbl_lookup_s(&user, ctx, db, "user"), user) == NULL ||
-	    (udcfg_tbl_lookup_s(&pass, ctx, db, "pass"), pass) == NULL ||
-	    (udcfg_tbl_lookup_s(&sch, ctx, db, "schema"), sch) == NULL) {
-		udcfg_tbl_free(ctx, db);
-		return NULL;
+	/* otherwise it's a group of specs */
+	if ((udcfg_tbl_lookup_s(&db_file, ctx, db, "file"), db_file) != NULL) {
+		/* sqlite again */
+		conn = be_sql_connect(NULL, NULL, NULL, db_file);
+
+	} else if ((udcfg_tbl_lookup_s(&host, ctx, db, "host"), host) &&
+		   (udcfg_tbl_lookup_s(&user, ctx, db, "user"), user) &&
+		   (udcfg_tbl_lookup_s(&pass, ctx, db, "pass"), pass) &&
+		   (udcfg_tbl_lookup_s(&sch, ctx, db, "schema"), sch)) {
+		/* must be mysql */
+		conn = be_sql_connect(host, user, pass, sch);
+
+	} else {
+		/* must be utter bollocks */
+		conn = NULL;
 	}
 	/* free our settings */
 	udcfg_tbl_free(ctx, db);
-	return be_sql_connect(host, user, pass, sch);
+	return conn;
 }
 
 
