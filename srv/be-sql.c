@@ -363,11 +363,19 @@ be_sql_open(const char *h, const char *u, const char *pw, const char *sch)
 {
 	dbconn_t res;
 	if (h == NULL && u == NULL && pw == NULL && sch != NULL) {
+#if defined WITH_SQLITE
 		void *tmp = be_sqlite_open(sch);
 		res = be_sql_set_type(tmp, BE_SQL_SQLITE);
+#else  /* !WITH_SQLITE */
+		res = NULL;
+#endif	/* WITH_SQLITE */
 	} else {
+#if defined WITH_MYSQL
 		void *tmp = be_mysql_open(h, u, pw, sch);
 		res = be_sql_set_type(tmp, BE_SQL_MYSQL);
+#else  /* !WITH_MYSQL */
+		res = NULL;
+#endif	/* WITH_MYSQL */
 	}
 	UMPF_DEBUG(BE_SQL ": db handle %p\n", res);
 	return res;
@@ -382,10 +390,14 @@ be_sql_close(dbconn_t conn)
 		/* don't know what to do */
 		break;
 	case BE_SQL_MYSQL:
+#if defined WITH_MYSQL
 		be_mysql_close(be_sql_get_conn(conn));
+#endif	/* WITH_MYSQL */
 		break;
 	case BE_SQL_SQLITE:
+#if defined WITH_SQLITE
 		be_sqlite_close(be_sql_get_conn(conn));
+#endif	/* WITH_SQLITE */
 		break;
 	}
 	return;
