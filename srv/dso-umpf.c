@@ -41,6 +41,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <unserding/unserding-ctx.h>
 #include <unserding/unserding-cfg.h>
@@ -82,7 +83,7 @@ static void
 interpret_msg(int fd, umpf_msg_t msg)
 {
 #if defined DEBUG_FLAG
-	umpf_print_msg(msg, stdout);
+	umpf_print_msg(STDERR_FILENO, msg);
 #endif	/* DEBUG_FLAG */
 
 	switch (umpf_get_msg_type(msg)) {
@@ -94,14 +95,8 @@ interpret_msg(int fd, umpf_msg_t msg)
 		be_sql_new_pf(umpf_dbconn, mnemo, descr);
 
 		/* reuse the message to send the answer */
-		{
-			FILE *f = fdopen(fd, "w+");
-			msg->hdr.mt++;
-			umpf_print_msg(msg, f);
-			/* can't fclose() here or the underlying stream will
-			 * close too */
-			//fclose(f);
-		}
+		msg->hdr.mt++;
+		umpf_print_msg(fd, msg);
 		break;
 	}
 	case UMPF_MSG_GET_PF:
