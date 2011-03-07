@@ -39,6 +39,7 @@
 #define INCLUDED_be_sql_h_
 
 #include <stddef.h>
+#include <time.h>
 
 /* just some convenience aliases */
 typedef void *dbobj_t;
@@ -57,5 +58,9 @@ DECLF void be_sql_close(dbconn_t conn);
 /**
  * Corresponds to UMPF_MSG_NEW_PF */
 DECLF void be_sql_new_pf(dbconn_t, const char *mnemo, const char *descr);
+
+/**
+ * Corresponds to the first part of UMPF_MSG_SET_PF */
+DECLF dbobj_t be_sql_new_tag(dbconn_t, const char *mnemo, time_t stamp);
 
 #endif	/* INCLUDED_be_sql_h_ */

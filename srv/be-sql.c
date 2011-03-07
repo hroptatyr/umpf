@@ -38,6 +38,7 @@
 #if defined HAVE_CONFIG_H
 # include "config.h"
 #endif	/* HAVE_CONFIG_H */
+#include <stdint.h>
 #if defined WITH_MYSQL
 # include <mysql/mysql.h>
 #endif	/* WITH_MYSQL */
@@ -217,6 +218,12 @@ be_mysql_nrows(dbqry_t qry)
 	return mysql_num_rows(qry);
 }
 
+static uint64_t
+be_mysql_last_rowid(dbconn_t conn)
+{
+	return mysql_insert_id(conn);
+}
+
 #else  /* !WITH_MYSQL */
 /* mysql not support, provide stubs */
 static void
@@ -270,6 +277,12 @@ static size_t
 be_mysql_nrows(dbqry_t UNUSED(qry))
 {
 	return 0UL;
+}
+
+static uint64_t
+be_mysql_last_rowid(dbconn_t UNUSED(conn))
+{
+	return 0ULL;
 }
 #endif	/* WITH_MYSQL */
 
@@ -399,6 +412,12 @@ be_sqlite_nrows(dbqry_t qry)
 	return nrows;
 }
 
+static uint64_t
+be_sqlite_last_rowid(dbconn_t conn)
+{
+	return sqlite3_last_insert_rowid(conn);
+}
+
 #else  /* !WITH_SQLITE */
 /* sqlite not support, provide stubs */
 static void
@@ -451,6 +470,12 @@ be_sqlite_nrows(dbqry_t UNUSED(qry))
 {
 	return 0UL;
 }
+
+static uint64_t
+be_sqlite_last_rowid(dbconn_t UNUSED(conn))
+{
+	return 0ULL;
+}
 #endif	/* WITH_SQLITE */
 
 /* higher level alibi functions */
@@ -488,7 +513,7 @@ be_sql_close(dbconn_t conn)
 }
 
 
-/* actual actions */
+/* more sql-flavour independent helpers */
 static char*
 stpncpy_q(dbconn_t conn, char *tgt, const char *src, size_t max)
 {
@@ -502,6 +527,30 @@ stpncpy_q(dbconn_t conn, char *tgt, const char *src, size_t max)
 	}
 }
 
+static size_t
+print_zulu(char *tgt, time_t stamp)
+{
+	struct tm tm[1] = {{0}};
+
+	gmtime_r(&stamp, tm);
+	return strftime(tgt, 32, "%FT%T%z", tm);
+}
+
+static uint64_t
+be_sql_last_rowid(dbconn_t conn)
+{
+	switch (be_sql_get_type(conn)) {
+	case BE_SQL_MYSQL:
+		return be_mysql_last_rowid(be_sql_get_conn(conn));
+	case BE_SQL_SQLITE:
+		return be_sqlite_last_rowid(be_sql_get_conn(conn));
+	default:
+		return 0ULL;
+	}
+}
+
+
+/* actual actions */
 DEFUN void
 be_sql_new_pf(dbconn_t conn, const char *mnemo, const char *descr)
 {
@@ -573,6 +622,76 @@ INSERT INTO aou_umpf_portfolio (short, description) VALUES (";
 		break;
 	}
 	return;
+}
+
+DEFUN dbobj_t
+be_sql_new_tag(dbconn_t conn, const char *mnemo, time_t stamp)
+{
+	size_t mlen;
+	size_t tmplen;
+	char *qbuf, *tmp;
+	static const char pre[] = "\
+REPLACE INTO aou_umpf_tag (portfolio_id, tag_stamp) \
+SELECT portfolio_id, \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" \
+FROM aou_umpf_portfolio \
+WHERE short = \
+\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"";
+	/* we create a new tag and return its id */
+	uint64_t tag_id;
+
+	if (UNLIKELY(mnemo == NULL)) {
+		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
+		return NULL;
+	}
+	/* get some basic length info to decide whether to use
+	 * gbuf or an alloc'd buffer */
+	if ((mlen = strlen(mnemo)) > 64) {
+		mlen = 64;
+	}
+
+	/* get some resources for qbuf */
+	qbuf = malloc(sizeof(pre));
+	memcpy(qbuf, pre, sizeof(pre));
+	/* get them points to insert our variables */
+	tmp = qbuf + 52 + 22;
+	tmp += tmplen = print_zulu(tmp, stamp);
+	*tmp = '\"';
+	/* pad the rest with SPCs */
+	memset(tmp + 1, ' ', 32 - tmplen);
+
+	tmp = qbuf + 52 + 56 + 24 + 14 + 1;
+	tmp = stpncpy_q(conn, tmp, mnemo, mlen);
+	*tmp++ = '\"';
+	*tmp = '\0';
+
+	UMPF_DEBUG(BE_SQL ": -> %s\n", qbuf);
+
+	switch (be_sql_get_type(conn)) {
+		void *res;
+	case BE_SQL_UNK:
+	default:
+		break;
+	case BE_SQL_MYSQL:
+		res = be_mysql_qry(be_sql_get_conn(conn), qbuf, tmp - qbuf);
+		UMPF_DEBUG(BE_SQL ": <- %p\n", res);
+		if (res != NULL) {
+			/* um, that's weird */
+			abort();
+		}
+		break;
+	case BE_SQL_SQLITE:
+		res = be_sqlite_qry(be_sql_get_conn(conn), qbuf, tmp - qbuf);
+		UMPF_DEBUG(BE_SQL ": <- %p\n", res);
+		if (res != NULL) {
+			/* um, that's weird */
+			abort();
+		}
+		break;
+	}
+	/* retrieve our tag id */
+	tag_id = be_sql_last_rowid(conn);
+	UMPF_DEBUG(BE_SQL ": iid <- %lu\n", tag_id);
+	return (dbobj_t)tag_id;
 }
 
 /* be-sql.c ends here */

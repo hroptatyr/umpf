@@ -89,6 +89,7 @@ interpret_msg(int fd, umpf_msg_t msg)
 	switch (umpf_get_msg_type(msg)) {
 	case UMPF_MSG_NEW_PF: {
 		const char *mnemo, *descr;
+
 		UMPF_DEBUG(MOD_PRE ": new_pf();\n");
 		mnemo = msg->new_pf.name;
 		descr = msg->new_pf.satellite;
@@ -102,9 +103,16 @@ interpret_msg(int fd, umpf_msg_t msg)
 	case UMPF_MSG_GET_PF:
 		UMPF_DEBUG(MOD_PRE ": get_pf();\n");
 		break;
-	case UMPF_MSG_SET_PF:
+	case UMPF_MSG_SET_PF: {
+		const char *mnemo;
+		time_t stamp;
+
 		UMPF_DEBUG(MOD_PRE ": set_pf();\n");
+		mnemo = msg->pf.name;
+		stamp = msg->pf.stamp;
+		be_sql_new_tag(umpf_dbconn, mnemo, stamp);
 		break;
+	}
 	default:
 		UMPF_DEBUG(MOD_PRE ": unknown message %u\n", msg->hdr.mt);
 		break;
