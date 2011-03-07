@@ -497,9 +497,15 @@ print_msg(umpf_msg_t msg, FILE *out, size_t indent)
 	case UMPF_MSG_NEW_PF * 2 + 1:
 		print_rgst_instrctns_rsp(msg, out, indent + 2);
 		break;
+
+	case UMPF_MSG_SET_PF * 2 + 1:
+		/* answer to SET_PF is a GET_PF */
 	case UMPF_MSG_GET_PF * 2:
 		print_req_for_poss(msg, out, indent + 2);
 		break;
+
+	case UMPF_MSG_GET_PF * 2 + 1:
+		/* answer to GET_PF is a SET_PF */
 	case UMPF_MSG_SET_PF * 2:
 		/* more than one child, so Batch it */
 		print_indent(out, indent + 2);
