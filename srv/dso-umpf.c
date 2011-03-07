@@ -73,15 +73,27 @@
 
 #define MOD_PRE		"mod/umpf"
 
+/* global database connexion object */
+static dbconn_t umpf_dbconn;
+
 
 /* connexion<->proto glue */
 static void
 interpret_msg(umpf_msg_t msg)
 {
+#if defined DEBUG_FLAG
+	umpf_print_msg(msg, stdout);
+#endif	/* DEBUG_FLAG */
+
 	switch (umpf_get_msg_type(msg)) {
-	case UMPF_MSG_NEW_PF:
+	case UMPF_MSG_NEW_PF: {
+		const char *mnemo, *descr;
 		UMPF_DEBUG(MOD_PRE ": new_pf();\n");
+		mnemo = msg->new_pf.name;
+		descr = msg->new_pf.satellite;
+		be_sql_new_pf(umpf_dbconn, mnemo, descr);
 		break;
+	}
 	case UMPF_MSG_GET_PF:
 		UMPF_DEBUG(MOD_PRE ": get_pf();\n");
 		break;
@@ -92,7 +104,6 @@ interpret_msg(umpf_msg_t msg)
 		UMPF_DEBUG(MOD_PRE ": unknown message %u\n", msg->hdr.mt);
 		break;
 	}
-	umpf_print_msg(msg, stdout);
 	return;
 }
 
@@ -231,8 +242,6 @@ umpf_init_be_sql(ud_ctx_t ctx, void *s)
 
 
 /* unserding bindings */
-static dbconn_t umpf_dbconn;
-
 static volatile int umpf_sock_net = -1;
 static volatile int umpf_sock_uds = -1;
 /* path to unix domain socket */
