@@ -33,8 +33,8 @@ dso_umpf_la_LDFLAGS += $(MYSQL_LDFLAGS)
 dso_umpf_la_CPPFLAGS +=  $(MYSQL_CPPFLAGS)
 endif
 if USE_SQLITE
-dso_umpf_la_LDFLAGS += $(SQLITE_LIBS)
-dso_umpf_la_CPPFLAGS +=  $(SQLITE_CFLAGS)
+dso_umpf_la_LDFLAGS += $(sqlite_LIBS)
+dso_umpf_la_CPPFLAGS +=  $(sqlite_CFLAGS)
 endif
 dso_umpf_la_CPPFLAGS += -DHARD_INCLUDE_be_sql
 endif ## BUILD_SERVER
