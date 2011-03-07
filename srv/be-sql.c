@@ -122,6 +122,77 @@ be_mysql_close(dbconn_t conn)
 	return;
 }
 
+static dbqry_t
+be_mysql_qry(dbconn_t conn, const char *qry, size_t qlen)
+{
+	MYSQL_RES *res;
+	int err;
+
+	if (UNLIKELY(qlen == 0)) {
+		qlen = strlen(qry);
+	}
+	if (UNLIKELY((err = mysql_real_query(conn, qry, qlen)) != 0)) {
+		UMPF_DEBUG(BE_SQL ": query returned error %d\n", err);
+		return NULL;
+	}
+	/* always just `use' the result, i.e. prepare to fetch it later */
+	if ((res = mysql_use_result(conn)) == NULL) {
+		/* coulda been an INSERTion */
+		;
+	}
+	return res;
+}
+
+static void
+be_mysql_free_query(dbqry_t qry)
+{
+	mysql_free_result(qry);
+	return;
+}
+
+static dbobj_t
+be_mysql_fetch(dbqry_t qry, size_t row, size_t col)
+{
+	MYSQL_ROW r;
+
+	mysql_data_seek(qry, row);
+	r = mysql_fetch_row(qry);
+	return r[col];
+}
+
+static void
+be_mysql_rows(dbqry_t qry, dbrow_f rowf, void *clo)
+{
+	MYSQL_ROW r;
+	size_t num_fields;
+
+	num_fields = mysql_num_fields(qry);
+	while ((r = mysql_fetch_row(qry))) {
+		rowf((void**)r, num_fields, clo);
+	}
+	return;
+}
+
+static void
+be_mysql_rows_max(dbqry_t qry, dbrow_f rowf, void *clo, size_t max_rows)
+{
+/* like be_mysql_rows but processes at most MAX_ROWS */
+	MYSQL_ROW r;
+	size_t num_fields;
+
+	num_fields = mysql_num_fields(qry);
+	while (max_rows-- > 0UL && (r = mysql_fetch_row(qry))) {
+		rowf((void**)r, num_fields, clo);
+	}
+	return;
+}
+
+static size_t
+be_mysql_nrows(dbqry_t qry)
+{
+	return mysql_num_rows(qry);
+}
+
 #else
 /* mysql not support, provide stubs */
 static void
@@ -136,6 +207,45 @@ be_mysql_open(
 	const char *UNUSED(pw), const char *UNUSED(sch))
 {
 	return NULL;
+}
+
+static dbqry_t
+be_mysql_qry(dbconn_t UNUSED(conn), const char *UNUSED(q), size_t UNUSED(len))
+{
+	return NULL;
+}
+
+static void
+be_mysql_free_query(dbqry_t UNUSED(qry))
+{
+	return;
+}
+
+static dbobj_t
+be_mysql_fetch(dbqry_t UNUSED(qry), size_t UNUSED(row), size_t UNUSED(col))
+{
+	return NULL;
+}
+
+static void
+be_mysql_rows(dbqry_t UNUSED(qry), dbrow_f UNUSED(rowf), void *UNUSED(clo))
+{
+	return;
+}
+
+static void
+be_mysql_rows_max(
+	dbqry_t UNUSED(qry), dbrow_f UNUSED(rowf),
+	void *UNUSED(clo), size_t UNUSED(max_rows))
+{
+/* like be_mysql_rows but processes at most MAX_ROWS */
+	return;
+}
+
+static size_t
+be_mysql_nrows(dbqry_t UNUSED(qry))
+{
+	return 0UL;
 }
 #endif	/* WITH_MYSQL */
 
@@ -169,6 +279,12 @@ be_sqlite_open(const char *UNUSED(file))
 {
 	return NULL;
 }
+
+static dbqry_t
+be_sqlite_qry(dbconn_t UNUSED(conn), const char *UNUSED(q), size_t UNUSED(len))
+{
+	return NULL;
+}
 #endif	/* WITH_SQLITE */
 
 /* higher level alibi functions */
@@ -183,6 +299,7 @@ be_sql_open(const char *h, const char *u, const char *pw, const char *sch)
 		void *tmp = be_mysql_open(h, u, pw, sch);
 		res = be_sql_set_type(tmp, BE_SQL_MYSQL);
 	}
+	UMPF_DEBUG(BE_SQL ": db handle %p\n", res);
 	return res;
 }
 
@@ -253,6 +370,23 @@ INSERT INTO aou_umpf_portfolio (short, description) VALUES (";
 	}
 	tmp = stpncpy(tmp, pst, sizeof(pst));
 	UMPF_DEBUG(BE_SQL ": -> %s\n", qbuf);
+
+	switch (be_sql_get_type(conn)) {
+		void *res;
+	case BE_SQL_UNK:
+	default:
+		break;
+	case BE_SQL_MYSQL:
+		res = be_mysql_qry(be_sql_get_conn(conn), qbuf, tmp - qbuf);
+		UMPF_DEBUG(BE_SQL ": <- %p\n", res);
+		if (res != NULL) {
+			/* um, that's weird */
+			abort();
+		}
+		break;
+	case BE_SQL_SQLITE:
+		break;
+	}
 	return;
 }
 
