@@ -75,6 +75,32 @@ be_sql_get_conn(dbconn_t conn)
 	return (void*)((long int)conn & ~0x07);
 }
 
+static char gbuf[4096];
+
+
+/* sql helpers, quoted string copiers et al. */
+static char*
+stpncpy_q(char *tgt, const char *src, size_t max)
+{
+	static const char stpset[] = "'\\";
+	char *res = tgt;
+
+	for (size_t i; i = strcspn(src, stpset); src += i + sizeof(*src)) {
+		/* write what we've got */
+		res = stpncpy(res, src, i);
+		/* no need to inspect the character, just quote him */
+		if (i >= max || src[i] == '\0') {
+			/* bingo, we're finished or stumbled upon a
+			 * dickhead of UTF-8 character */
+			break;
+		}
+		*res++ = '\\';
+		*res++ = src[i];
+	}
+	return res;
+}
+
+
 #if defined WITH_MYSQL
 static dbconn_t
 be_mysql_open(const char *h, const char *u, const char *pw, const char *sch)
@@ -175,6 +201,58 @@ be_sql_close(dbconn_t conn)
 		be_sqlite_close(be_sql_get_conn(conn));
 		break;
 	}
+	return;
+}
+
+
+/* actual actions */
+DEFUN void
+be_sql_new_pf(dbconn_t conn, const char *mnemo, const char *descr)
+{
+	size_t mlen;
+	size_t dlen;
+	char *qbuf, *tmp;
+	static const char pre[] = "\
+INSERT INTO aou_umpf_portfolio (short, description) VALUES (";
+	static const char pst[] = "\
+);";
+
+	if (UNLIKELY(mnemo == NULL)) {
+		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
+		return;
+	}
+	/* get some basic length info to decide whether to use
+	 * gbuf or an alloc'd buffer */
+	if ((mlen = strlen(mnemo)) > 64) {
+		mlen = 64;
+	}
+	if (LIKELY(descr == NULL)) {
+		dlen = 0UL;
+	} else {
+		dlen = strlen(descr);
+	}
+	if (UNLIKELY(dlen > sizeof(gbuf) - 128)) {
+		/* need a new buffer */
+		qbuf = malloc(dlen + 128);
+	} else {
+		/* how about locking the bastard? */
+		qbuf = gbuf;
+	}
+
+	tmp = stpncpy(qbuf, pre, sizeof(pre));
+	*tmp++ = '\'';
+	tmp = stpncpy_q(tmp, mnemo, mlen);
+	*tmp++ = '\'';
+	*tmp++ = ',';
+	if (UNLIKELY(descr != NULL)) {
+		*tmp++ = '\'';
+		tmp = stpncpy_q(tmp, descr, dlen);
+		*tmp++ = '\'';
+	} else {
+		tmp = stpncpy(tmp, "NULL", 4);
+	}
+	tmp = stpncpy(tmp, pst, sizeof(pst));
+	UMPF_DEBUG(BE_SQL ": -> %s\n", qbuf);
 	return;
 }
 

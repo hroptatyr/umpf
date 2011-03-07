@@ -52,4 +52,10 @@ be_sql_open(
 	const char *passwd, const char *dbname);
 DECLF void be_sql_close(dbconn_t conn);
 
+
+/* actual actions */
+/**
+ * Corresponds to UMPF_MSG_NEW_PF */
+DECLF void be_sql_new_pf(dbconn_t, const char *mnemo, const char *descr);
+
 #endif	/* INCLUDED_be_sql_h_ */
