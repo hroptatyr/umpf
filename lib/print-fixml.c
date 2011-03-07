@@ -332,19 +332,23 @@ print_pty(__ctx_t ctx, const char *id, unsigned int role, char src, size_t ind)
 		sputc(ctx, '"');
 	}
 
+#if 0
 	/* finalise the tag */
 	sputs(ctx, ">\n");
 
-#if 0
 /* not supported */
 	for (size_t j = 0; j < p->nsub; j++) {
 		struct __sub_s *sub = p->sub + j;
 		print_sub(sub, out, indent + 2);
 	}
-#endif	/* 0 */
 
 	print_indent(ctx, ind);
 	sputs(ctx, "</Pty>\n");
+
+#else
+	/* finalise the tag */
+	sputs(ctx, "/>\n");
+#endif	/* 0 */
 	return;
 }
 
