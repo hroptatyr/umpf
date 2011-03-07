@@ -56,7 +56,7 @@
 # pragma warning (disable:424)
 #endif	/* __INTEL_COMPILER */
 
-#define INITIAL_GBUF_SIZE	(4096)
+#define INITIAL_GBUF_SIZE	(4096UL)
 
 typedef struct __ctx_s {
 	char *gbuf;
@@ -608,12 +608,26 @@ print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 /* external stuff and helpers */
 static const char xml_hdr[] = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
 
-void
+size_t
 umpf_seria_msg(char **tgt, size_t tsz, umpf_msg_t msg)
 {
+	struct __ctx_s ctx[1];
+
+	ctx->gbuf = *tgt;
+	ctx->gbsz = tsz;
+	ctx->idx = 0;
+
+	snputs(ctx, xml_hdr, countof_m1(xml_hdr));
+	print_msg(ctx, msg, 0);
+
+	/* finish off with a \nul byte */
+	check_realloc(ctx, 1);
+	ctx->gbuf[ctx->idx] = '\0';
+	*tgt = ctx->gbuf;
+	return ctx->idx;
 }
 
-void
+size_t
 umpf_print_msg(int out, umpf_msg_t msg)
 {
 	static char gbuf[INITIAL_GBUF_SIZE];
@@ -630,7 +644,12 @@ umpf_print_msg(int out, umpf_msg_t msg)
 	check_realloc(ctx, 1);
 	ctx->gbuf[ctx->idx] = '\0';
 	write(out, ctx->gbuf, ctx->idx);
-	return;
+
+	/* check if we need to free stuff */
+	if (ctx->gbsz != -INITIAL_GBUF_SIZE) {
+		free(ctx->gbuf);
+	}
+	return ctx->idx;
 }
 
 /* print-fixml.c ends here */

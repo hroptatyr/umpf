@@ -142,7 +142,7 @@ extern void umpf_free_msg(umpf_msg_t);
 
 /**
  * Print DOC to OUTFD. */
-extern void umpf_print_msg(int outfd, umpf_msg_t);
+extern size_t umpf_print_msg(int outfd, umpf_msg_t);
 
 /**
  * Print DOC to *TGT of size TSZ, return the final size.
