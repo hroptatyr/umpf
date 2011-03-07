@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<!--
+
+Set the positions of a portfolio.
+
+FIX normally does not allow this transaction but with a little
+broader interpretion we can do it anyway.  ReqForPossAck (the
+response to ReqForPoss) can be interpreted as a sender's request
+to the client to update their portfolio according to the
+sender's portfolio.
+
+We mechanise the same trick here and just send a `response' as
+request.
+
+-->
+<FIXML xmlns="http://www.fixprotocol.org/FIXML-5-0" v="5.0">
+	<Batch>
+		<ReqForPossAck RptID="1234567"
+			BizDt="2009-10-27"
+			ReqTyp="0"
+			TotRpts="2"
+			Rslt="0"
+			Stat="0"
+			SetSesID="ITD"
+			TxnTm="2010-02-25T14:40:31">
+			<Pty ID="me_currencies"/>
+		</ReqForPossAck>
+
+		<PosRpt RptID="1234567"
+			BizDt="2009-10-27"
+			ReqTyp="0"
+			SetSesID="ITD">
+			<Pty ID="me_currencies"/>
+			<Instrmt Sym="EUR"/>
+			<Qty Long="0" Short="142550.00"/>
+		</PosRpt>
+
+		<PosRpt RptID="1234567"
+			BizDt="2009-10-27"
+			ReqTyp="0"
+			SetSesID="ITD">
+			<Pty ID="me_currencies"/>
+			<Instrmt Sym="GBP"/>
+			<Qty Long="97488.88" Short="80700.25"/>
+		</PosRpt>
+	</Batch>
+</FIXML>
+
+<!-- response -->
+<?xml version="1.0"?>
+<FIXML xmlns="http://www.fixprotocol.org/FIXML-5-0" v="5.0">
+	<ReqForPoss BizDt="2009-10-27"
+		ReqTyp="0" ReqID="1234567"
+		TxnTm="2010-02-25T14:40:31">
+		<!-- name of the portfolio -->
+		<Pty ID="me_currencies"/>
+	</ReqForPoss>
+</FIXML>
