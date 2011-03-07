@@ -147,7 +147,7 @@ be_sqlite_open(const char *UNUSED(file))
 
 /* higher level alibi functions */
 DEFUN dbconn_t
-be_sql_connect(const char *h, const char *u, const char *pw, const char *sch)
+be_sql_open(const char *h, const char *u, const char *pw, const char *sch)
 {
 	dbconn_t res;
 	if (h == NULL && u == NULL && pw == NULL && sch != NULL) {

@@ -176,7 +176,7 @@ umpf_init_be_sql(ud_ctx_t ctx, void *s)
 
 	if ((udcfg_tbl_lookup_s(&db_file, ctx, s, "db"), db_file) != NULL) {
 		/* must be sqlite then */
-		return be_sql_connect(NULL, NULL, NULL, db_file);
+		return be_sql_open(NULL, NULL, NULL, db_file);
 
 	} else if ((db = udcfg_tbl_lookup(ctx, s, "db")) == NULL) {
 		/* must be bollocks */
@@ -185,14 +185,14 @@ umpf_init_be_sql(ud_ctx_t ctx, void *s)
 	/* otherwise it's a group of specs */
 	if ((udcfg_tbl_lookup_s(&db_file, ctx, db, "file"), db_file) != NULL) {
 		/* sqlite again */
-		conn = be_sql_connect(NULL, NULL, NULL, db_file);
+		conn = be_sql_open(NULL, NULL, NULL, db_file);
 
 	} else if ((udcfg_tbl_lookup_s(&host, ctx, db, "host"), host) &&
 		   (udcfg_tbl_lookup_s(&user, ctx, db, "user"), user) &&
 		   (udcfg_tbl_lookup_s(&pass, ctx, db, "pass"), pass) &&
 		   (udcfg_tbl_lookup_s(&sch, ctx, db, "schema"), sch)) {
 		/* must be mysql */
-		conn = be_sql_connect(host, user, pass, sch);
+		conn = be_sql_open(host, user, pass, sch);
 
 	} else {
 		/* must be utter bollocks */
@@ -268,7 +268,7 @@ deinit(void *clo)
 	if (umpf_sock_path != NULL) {
 		unlink(umpf_sock_path);
 	}
-	/* lose our db connection */
+	/* close our db connection */
 	if (umpf_dbconn) {
 		be_sql_close(umpf_dbconn);
 	}

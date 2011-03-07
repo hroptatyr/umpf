@@ -47,7 +47,7 @@ typedef void *dbqry_t;
 typedef void (*dbrow_f)(dbobj_t *row, size_t num_fields, void *closure);
 
 DECLF dbconn_t
-be_sql_connect(
+be_sql_open(
 	const char *host, const char *user,
 	const char *passwd, const char *dbname);
 DECLF void be_sql_close(dbconn_t conn);
