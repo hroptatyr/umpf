@@ -707,4 +707,17 @@ WHERE short = \
 	return (dbobj_t)tag_id;
 }
 
+DEFUN void
+be_sql_set_pos(
+	dbconn_t conn, dbobj_t tag_id, const char *mnemo, double l, double s)
+{
+	static const char pre[] = "\
+INSERT INTO aou_umpf_position (tag_id, security_id, long_qty, short_qty) \
+SELECT portfolio_id, \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" \
+FROM aou_umpf_portfolio \
+WHERE short = \
+\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"";
+	return;
+}
+
 /* be-sql.c ends here */

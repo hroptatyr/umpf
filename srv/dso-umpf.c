@@ -106,11 +106,23 @@ interpret_msg(int fd, umpf_msg_t msg)
 	case UMPF_MSG_SET_PF: {
 		const char *mnemo;
 		time_t stamp;
+		dbobj_t tag_id;
 
 		UMPF_DEBUG(MOD_PRE ": set_pf();\n");
 		mnemo = msg->pf.name;
 		stamp = msg->pf.stamp;
-		be_sql_new_tag(umpf_dbconn, mnemo, stamp);
+		tag_id = be_sql_new_tag(umpf_dbconn, mnemo, stamp);
+
+		for (size_t i = 0; i < msg->pf.nposs; i++) {
+			const char *sec = msg->pf.poss[i].instr;
+			double l = msg->pf.poss[i].qty->_long;
+			double s = msg->pf.poss[i].qty->_shrt;
+			be_sql_set_pos(umpf_dbconn, tag_id, sec, l, s);
+		}
+
+		/* reuse the message to send the answer */
+		msg->hdr.mt++;
+		umpf_print_msg(fd, msg);
 		break;
 	}
 	default:
