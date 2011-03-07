@@ -150,18 +150,44 @@ handle_close(umpf_conn_t ctx)
 # include "con6ity.c"
 #endif	/* HARD_INCLUDE_con6ity */
 
-static volatile int umpf_sock_net = -1;
-static volatile int umpf_sock_uds = -1;
-/* path to unix domain socket */
-const char *umpf_sock_path;
-
 
 /* our database connexion */
 #if defined HARD_INCLUDE_be_sql
 # include "be-sql.c"
 #endif	/* HARD_INCLUDE_be_sql */
 
-static dbconn_t umpf_dbconn;
+
+static int
+umpf_init_uds_sock(const char **sock_path, ud_ctx_t ctx, void *settings)
+{
+	volatile int res = -1;
+
+	udcfg_tbl_lookup_s(sock_path, ctx, settings, "sock");
+	if (*sock_path != NULL &&
+	    (res = conn_listener_uds(*sock_path)) > 0) {
+		/* set up the IO watcher and timer */
+		init_conn_watchers(ctx->mainloop, res);
+	} else {
+		/* make sure we don't accidentally delete arbitrary files */
+		*sock_path = NULL;
+	}
+	return res;
+}
+
+static int
+umpf_init_net_sock(ud_ctx_t ctx, void *settings)
+{
+	volatile int res = -1;
+	int port;
+
+	port = udcfg_tbl_lookup_i(ctx, settings, "port");
+	if (port &&
+	    (res = conn_listener_net(port)) > 0) {
+		/* set up the IO watcher and timer */
+		init_conn_watchers(ctx->mainloop, res);
+	}
+	return res;
+}
 
 static dbconn_t
 umpf_init_be_sql(ud_ctx_t ctx, void *s)
@@ -205,13 +231,18 @@ umpf_init_be_sql(ud_ctx_t ctx, void *s)
 
 
 /* unserding bindings */
+static dbconn_t umpf_dbconn;
+
+static volatile int umpf_sock_net = -1;
+static volatile int umpf_sock_uds = -1;
+/* path to unix domain socket */
+const char *umpf_sock_path;
+
 void
 init(void *clo)
 {
 	ud_ctx_t ctx = clo;
 	void *settings;
-	/* port to assign to */
-	int port;
 
 	UMPF_DEBUG(MOD_PRE ": loading ...");
 
@@ -222,24 +253,11 @@ init(void *clo)
 	}
 	UMPF_DBGCONT("\n");
 	/* obtain the unix domain sock from our settings */
-	udcfg_tbl_lookup_s(&umpf_sock_path, ctx, settings, "sock");
-	if (umpf_sock_path != NULL &&
-	    (umpf_sock_uds = conn_listener_uds(umpf_sock_path)) > 0) {
-		/* set up the IO watcher and timer */
-		init_conn_watchers(ctx->mainloop, umpf_sock_uds);
-	} else {
-		/* make sure we don't accidentally delete arbitrary files */
-		umpf_sock_path = NULL;
-	}
+	umpf_sock_uds = umpf_init_uds_sock(&umpf_sock_path, ctx, settings);
 	/* obtain port number for our network socket */
-	port = udcfg_tbl_lookup_i(ctx, settings, "port");
-	if (port &&
-	    (umpf_sock_net = conn_listener_net(port)) > 0) {
-		/* set up the IO watcher and timer */
-		init_conn_watchers(ctx->mainloop, umpf_sock_net);
-	}
+	umpf_sock_net = umpf_init_net_sock(ctx, settings);
 	/* connect to our database */
-	umpf_init_be_sql(ctx, settings);
+	umpf_dbconn = umpf_init_be_sql(ctx, settings);
 
 	UMPF_DEBUG(MOD_PRE ": ... loaded\n");
 
