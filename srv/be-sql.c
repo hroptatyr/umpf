@@ -193,7 +193,7 @@ be_mysql_nrows(dbqry_t qry)
 	return mysql_num_rows(qry);
 }
 
-#else
+#else  /* !WITH_MYSQL */
 /* mysql not support, provide stubs */
 static void
 be_mysql_close(dbconn_t UNUSED(conn))
@@ -266,6 +266,115 @@ be_sqlite_open(const char *file)
 	return res;
 }
 
+static dbqry_t
+be_sqlite_qry(dbconn_t conn, const char *qry, size_t qlen)
+{
+	const char *UNUSED(tmp);
+	sqlite3_stmt *stmt;
+	int res;
+
+	sqlite3_prepare_v2(conn, qry, qlen, &stmt, &tmp);
+	if (UNLIKELY(stmt == NULL)) {
+		return NULL;
+	}
+	switch ((res = sqlite3_step(stmt))) {
+	case SQLITE_DONE:
+		/* the sequence below seems legit for this one */
+	case SQLITE_ERROR:
+	case SQLITE_MISUSE:
+	case SQLITE_BUSY:
+	default:
+		UMPF_DEBUG(BE_SQL ": res %i\n", res);
+		sqlite3_reset(stmt);
+		sqlite3_finalize(stmt);
+		stmt = NULL;
+		break;
+	case SQLITE_ROW:
+		sqlite3_reset(stmt);
+		break;
+	}
+	return stmt;
+}
+
+static void
+be_sqlite_free_query(dbqry_t qry)
+{
+	sqlite3_finalize(qry);
+	return;
+}
+
+static dbobj_t
+be_sqlite_fetch(dbqry_t qry, size_t row, size_t col)
+{
+	sqlite3_value *res;
+
+	/* `seek' to ROW-th row */
+	for (size_t i = 0; i < row; i++) {
+		sqlite3_step(qry);
+	}
+	/* now get the data for it */
+	switch (sqlite3_step(qry)) {
+	case SQLITE_ROW:
+		res = sqlite3_column_value(qry, col);
+		break;
+	default:
+		res = NULL;
+		break;
+	}
+	sqlite3_reset(qry);
+	return res;
+}
+
+static void
+be_sqlite_rows(dbqry_t qry, dbrow_f rowf, void *clo)
+{
+	size_t num_fields;
+
+	num_fields = sqlite3_column_count(qry);
+	while ((sqlite3_step(qry) == SQLITE_ROW)) {
+		/* VLA */
+		sqlite3_value *res[num_fields];
+
+		for (size_t j = 0; j < num_fields; j++) {
+			res[0] = sqlite3_column_value(qry, j);
+		}
+		rowf((void**)res, num_fields, clo);
+	}
+	sqlite3_reset(qry);
+	return;
+}
+
+static void
+be_sqlite_rows_max(dbqry_t qry, dbrow_f rowf, void *clo, size_t max_rows)
+{
+/* like be_sqlite_rows but processes at most MAX_ROWS */
+	size_t num_fields;
+
+	num_fields = sqlite3_column_count(qry);
+	while (max_rows-- > 0UL && (sqlite3_step(qry) == SQLITE_ROW)) {
+		/* VLA */
+		sqlite3_value *res[num_fields];
+
+		for (size_t j = 0; j < num_fields; j++) {
+			res[0] = sqlite3_column_value(qry, j);
+		}
+		rowf((void**)res, num_fields, clo);
+	}
+	sqlite3_reset(qry);
+	return;
+}
+
+static size_t
+be_sqlite_nrows(dbqry_t qry)
+{
+	size_t nrows = 0;
+	while (sqlite3_step(qry) == SQLITE_ROW) {
+		nrows++;
+	}
+	sqlite3_reset(qry);
+	return nrows;
+}
+
 #else  /* !WITH_SQLITE */
 /* sqlite not support, provide stubs */
 static void
@@ -284,6 +393,39 @@ static dbqry_t
 be_sqlite_qry(dbconn_t UNUSED(conn), const char *UNUSED(q), size_t UNUSED(len))
 {
 	return NULL;
+}
+
+static void
+be_sqlite_free_query(dbqry_t UNUSED(qry))
+{
+	return;
+}
+
+static dbobj_t
+be_sqlite_fetch(dbqry_t UNUSED(qry), size_t UNUSED(row), size_t UNUSED(col))
+{
+	return NULL;
+}
+
+static void
+be_sqlite_rows(dbqry_t UNUSED(qry), dbrow_f UNUSED(rowf), void *UNUSED(clo))
+{
+	return;
+}
+
+static void
+be_sqlite_rows_max(
+	dbqry_t UNUSED(qry), dbrow_f UNUSED(rowf),
+	void *UNUSED(clo), size_t UNUSED(max_rows))
+{
+/* like be_mysql_rows but processes at most MAX_ROWS */
+	return;
+}
+
+static size_t
+be_sqlite_nrows(dbqry_t UNUSED(qry))
+{
+	return 0UL;
 }
 #endif	/* WITH_SQLITE */
 
@@ -385,6 +527,12 @@ INSERT INTO aou_umpf_portfolio (short, description) VALUES (";
 		}
 		break;
 	case BE_SQL_SQLITE:
+		res = be_sqlite_qry(be_sql_get_conn(conn), qbuf, tmp - qbuf);
+		UMPF_DEBUG(BE_SQL ": <- %p\n", res);
+		if (res != NULL) {
+			/* um, that's weird */
+			abort();
+		}
 		break;
 	}
 	return;
