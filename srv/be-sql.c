@@ -223,71 +223,9 @@ be_mysql_last_rowid(dbconn_t conn)
 {
 	return mysql_insert_id(conn);
 }
-
-#else  /* !WITH_MYSQL */
-/* mysql not support, provide stubs */
-static void
-be_mysql_close(dbconn_t UNUSED(conn))
-{
-	return;
-}
-
-static dbconn_t
-be_mysql_open(
-	const char *UNUSED(h), const char *UNUSED(u),
-	const char *UNUSED(pw), const char *UNUSED(sch))
-{
-	return NULL;
-}
-
-static dbqry_t
-be_mysql_qry(dbconn_t UNUSED(conn), const char *UNUSED(q), size_t UNUSED(len))
-{
-	return NULL;
-}
-
-static void
-be_mysql_free_query(dbqry_t UNUSED(qry))
-{
-	return;
-}
-
-static dbobj_t
-be_mysql_fetch(dbqry_t UNUSED(qry), size_t UNUSED(row), size_t UNUSED(col))
-{
-	return NULL;
-}
-
-static void
-be_mysql_rows(dbqry_t UNUSED(qry), dbrow_f UNUSED(rowf), void *UNUSED(clo))
-{
-	return;
-}
-
-static void
-be_mysql_rows_max(
-	dbqry_t UNUSED(qry), dbrow_f UNUSED(rowf),
-	void *UNUSED(clo), size_t UNUSED(max_rows))
-{
-/* like be_mysql_rows but processes at most MAX_ROWS */
-	return;
-}
-
-static size_t
-be_mysql_nrows(dbqry_t UNUSED(qry))
-{
-	return 0UL;
-}
-
-static uint64_t
-be_mysql_last_rowid(dbconn_t UNUSED(conn))
-{
-	return 0ULL;
-}
 #endif	/* WITH_MYSQL */
 
 #if defined WITH_SQLITE
-
 static void
 be_sqlite_close(dbconn_t conn)
 {
@@ -417,65 +355,6 @@ be_sqlite_last_rowid(dbconn_t conn)
 {
 	return sqlite3_last_insert_rowid(conn);
 }
-
-#else  /* !WITH_SQLITE */
-/* sqlite not support, provide stubs */
-static void
-be_sqlite_close(dbconn_t UNUSED(conn))
-{
-	return;
-}
-
-static dbconn_t
-be_sqlite_open(const char *UNUSED(file))
-{
-	return NULL;
-}
-
-static dbqry_t
-be_sqlite_qry(dbconn_t UNUSED(conn), const char *UNUSED(q), size_t UNUSED(len))
-{
-	return NULL;
-}
-
-static void
-be_sqlite_free_query(dbqry_t UNUSED(qry))
-{
-	return;
-}
-
-static dbobj_t
-be_sqlite_fetch(dbqry_t UNUSED(qry), size_t UNUSED(row), size_t UNUSED(col))
-{
-	return NULL;
-}
-
-static void
-be_sqlite_rows(dbqry_t UNUSED(qry), dbrow_f UNUSED(rowf), void *UNUSED(clo))
-{
-	return;
-}
-
-static void
-be_sqlite_rows_max(
-	dbqry_t UNUSED(qry), dbrow_f UNUSED(rowf),
-	void *UNUSED(clo), size_t UNUSED(max_rows))
-{
-/* like be_mysql_rows but processes at most MAX_ROWS */
-	return;
-}
-
-static size_t
-be_sqlite_nrows(dbqry_t UNUSED(qry))
-{
-	return 0UL;
-}
-
-static uint64_t
-be_sqlite_last_rowid(dbconn_t UNUSED(conn))
-{
-	return 0ULL;
-}
 #endif	/* WITH_SQLITE */
 
 /* higher level alibi functions */
@@ -512,6 +391,183 @@ be_sql_close(dbconn_t conn)
 	return;
 }
 
+static dbqry_t
+be_sql_qry(dbconn_t conn, const char *qry, size_t qlen)
+{
+	switch (be_sql_get_type(conn)) {
+	case BE_SQL_UNK:
+	default:
+		return NULL;
+
+	case BE_SQL_MYSQL:
+#if defined WITH_MYSQL
+		return be_mysql_qry(be_sql_get_conn(conn), qry, qlen);
+#else  /* !WITH_MYSQL */
+		return NULL;
+#endif	/* WITH_MYSQL */
+
+	case BE_SQL_SQLITE:
+#if defined WITH_SQLITE
+		return be_sqlite_qry(be_sql_get_conn(conn), qry, qlen);
+#else  /* !WITH_SQLITE */
+		return NULL;
+#endif	/* WITH_SQLITE */
+	}
+}
+
+static void
+be_sql_free_query(dbconn_t conn, dbqry_t qry)
+{
+	switch (be_sql_get_type(conn)) {
+	case BE_SQL_UNK:
+	default:
+		break;
+
+	case BE_SQL_MYSQL:
+#if defined WITH_MYSQL
+		be_mysql_free_query(qry);
+		break;
+#else  /* !WITH_MYSQL */
+		break;
+#endif	/* WITH_MYSQL */
+
+	case BE_SQL_SQLITE:
+#if defined WITH_SQLITE
+		be_sqlite_free_query(qry);
+		break;
+#else  /* !WITH_SQLITE */
+		break;
+#endif	/* WITH_SQLITE */
+	}
+	return;
+}
+
+static dbobj_t
+be_sql_fetch(dbconn_t conn, dbqry_t qry, size_t row, size_t col)
+{
+	switch (be_sql_get_type(conn)) {
+	case BE_SQL_UNK:
+	default:
+		return NULL;
+
+	case BE_SQL_MYSQL:
+#if defined WITH_MYSQL
+		return be_mysql_fetch(qry, row, col);
+#else  /* !WITH_MYSQL */
+		return NULL;
+#endif	/* WITH_MYSQL */
+
+	case BE_SQL_SQLITE:
+#if defined WITH_SQLITE
+		return be_sqlite_fetch(qry, row, col);
+#else  /* !WITH_SQLITE */
+		return NULL;
+#endif	/* WITH_SQLITE */
+	}
+}
+
+static void
+be_sql_rows(dbconn_t conn, dbqry_t qry, dbrow_f rowf, void *clo)
+{
+	switch (be_sql_get_type(conn)) {
+	case BE_SQL_UNK:
+	default:
+		break;
+
+	case BE_SQL_MYSQL:
+#if defined WITH_MYSQL
+		be_mysql_rows(qry, rowf, clo);
+		break;
+#else  /* !WITH_MYSQL */
+		break;
+#endif	/* WITH_MYSQL */
+
+	case BE_SQL_SQLITE:
+#if defined WITH_SQLITE
+		be_sqlite_rows(qry, rowf, clo);
+		break;
+#else  /* !WITH_SQLITE */
+		break;
+#endif	/* WITH_SQLITE */
+	}
+	return;
+}
+
+static void
+be_sql_rows_max(dbconn_t c, dbqry_t q, dbrow_f rowf, void *clo, size_t max_rows)
+{
+	switch (be_sql_get_type(c)) {
+	case BE_SQL_UNK:
+	default:
+		break;
+
+	case BE_SQL_MYSQL:
+#if defined WITH_MYSQL
+		be_mysql_rows_max(q, rowf, clo, max_rows);
+		break;
+#else  /* !WITH_MYSQL */
+		break;
+#endif	/* WITH_MYSQL */
+
+	case BE_SQL_SQLITE:
+#if defined WITH_SQLITE
+		be_sqlite_rows_max(q, rowf, clo, max_rows);
+		break;
+#else  /* !WITH_SQLITE */
+		break;
+#endif	/* WITH_SQLITE */
+	}
+	return;
+}
+
+static size_t
+be_sql_nrows(dbconn_t conn, dbqry_t qry)
+{
+	switch (be_sql_get_type(conn)) {
+	case BE_SQL_UNK:
+	default:
+		return 0UL;
+
+	case BE_SQL_MYSQL:
+#if defined WITH_MYSQL
+		return be_mysql_nrows(qry);
+#else  /* !WITH_MYSQL */
+		return 0UL;
+#endif	/* WITH_MYSQL */
+
+	case BE_SQL_SQLITE:
+#if defined WITH_SQLITE
+		return be_sqlite_nrows(qry);
+#else  /* !WITH_SQLITE */
+		return 0UL;
+#endif	/* WITH_SQLITE */
+	}
+}
+
+static uint64_t
+be_sql_last_rowid(dbconn_t conn)
+{
+	switch (be_sql_get_type(conn)) {
+	case BE_SQL_UNK:
+	default:
+		return 0UL;
+
+	case BE_SQL_MYSQL:
+#if defined WITH_MYSQL
+		return be_mysql_last_rowid(be_sql_get_conn(conn));
+#else  /* !WITH_MYSQL */
+		return 0UL;
+#endif	/* WITH_MYSQL */
+
+	case BE_SQL_SQLITE:
+#if defined WITH_SQLITE
+		return be_sqlite_last_rowid(be_sql_get_conn(conn));
+#else  /* !WITH_SQLITE */
+		return 0UL;
+#endif	/* WITH_SQLITE */
+	}
+}
+
 
 /* more sql-flavour independent helpers */
 static char*
@@ -534,19 +590,6 @@ print_zulu(char *tgt, time_t stamp)
 
 	gmtime_r(&stamp, tm);
 	return strftime(tgt, 32, "%FT%T%z", tm);
-}
-
-static uint64_t
-be_sql_last_rowid(dbconn_t conn)
-{
-	switch (be_sql_get_type(conn)) {
-	case BE_SQL_MYSQL:
-		return be_mysql_last_rowid(be_sql_get_conn(conn));
-	case BE_SQL_SQLITE:
-		return be_sqlite_last_rowid(be_sql_get_conn(conn));
-	default:
-		return 0ULL;
-	}
 }
 
 
