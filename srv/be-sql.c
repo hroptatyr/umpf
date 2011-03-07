@@ -80,8 +80,9 @@ static char gbuf[4096];
 
 /* sql helpers, quoted string copiers et al. */
 static char*
-stpncpy_q(char *tgt, const char *src, size_t max)
+stpncpy_mysql_q(char *tgt, const char *src, size_t max)
 {
+/* mysql needs escaping of \ and ' */
 	static const char stpset[] = "'\\";
 	char *res = tgt;
 
@@ -95,6 +96,29 @@ stpncpy_q(char *tgt, const char *src, size_t max)
 			break;
 		}
 		*res++ = '\\';
+		*res++ = src[i];
+	}
+	return res;
+}
+
+static char*
+stpncpy_sqlite_q(char *tgt, const char *src, size_t max)
+{
+/* sqlite needs escaping of ' only */
+	static const char stpset[] = "'";
+	char *res = tgt;
+
+	for (size_t i; i = strcspn(src, stpset); src += i + sizeof(*src)) {
+		/* write what we've got */
+		res = stpncpy(res, src, i);
+		/* no need to inspect the character, just quote him */
+		if (i >= max || src[i] == '\0') {
+			/* bingo, we're finished or stumbled upon a
+			 * dickhead of UTF-8 character */
+			break;
+		}
+		/* sqlite loves doubling the to-be-escaped character */
+		*res++ = src[i];
 		*res++ = src[i];
 	}
 	return res;
@@ -465,6 +489,19 @@ be_sql_close(dbconn_t conn)
 
 
 /* actual actions */
+static char*
+stpncpy_q(dbconn_t conn, char *tgt, const char *src, size_t max)
+{
+	switch (be_sql_get_type(conn)) {
+	case BE_SQL_MYSQL:
+		return stpncpy_mysql_q(tgt, src, max);
+	case BE_SQL_SQLITE:
+		return stpncpy_sqlite_q(tgt, src, max);
+	default:
+		return tgt;
+	}
+}
+
 DEFUN void
 be_sql_new_pf(dbconn_t conn, const char *mnemo, const char *descr)
 {
@@ -500,12 +537,12 @@ INSERT INTO aou_umpf_portfolio (short, description) VALUES (";
 
 	tmp = stpncpy(qbuf, pre, sizeof(pre));
 	*tmp++ = '\'';
-	tmp = stpncpy_q(tmp, mnemo, mlen);
+	tmp = stpncpy_q(conn, tmp, mnemo, mlen);
 	*tmp++ = '\'';
 	*tmp++ = ',';
 	if (UNLIKELY(descr != NULL)) {
 		*tmp++ = '\'';
-		tmp = stpncpy_q(tmp, descr, dlen);
+		tmp = stpncpy_q(conn, tmp, descr, dlen);
 		*tmp++ = '\'';
 	} else {
 		tmp = stpncpy(tmp, "NULL", 4);
