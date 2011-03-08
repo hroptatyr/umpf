@@ -719,24 +719,33 @@ be_sql_exec_stmt(dbconn_t conn, dbstmt_t stmt)
 }
 
 static dbobj_t
-be_sql_fetchXXX(dbconn_t conn, dbstmt_t UNUSED(stmt))
+be_sql_fetch1(dbconn_t conn, dbstmt_t stmt)
 {
+/* get one return value from the cursor in stmt */
 	switch (be_sql_get_type(conn)) {
 	case BE_SQL_UNK:
 	default:
 		return NULL;
 
-	case BE_SQL_MYSQL:
+	case BE_SQL_MYSQL: {
 #if defined WITH_MYSQL
-		/* do me */
+		/* do some more here, set up bind buffers etc. */
+		mysql_stmt_fetch(stmt);
+		return NULL;
+#else  /* !WITH_MYSQL */
+		return NULL;
 #endif	/* WITH_MYSQL */
-		return NULL;
-	
-	case BE_SQL_SQLITE:
+	}
+
+	case BE_SQL_SQLITE: {
 #if defined WITH_SQLITE
-		/* do me */
-#endif	/* WITH_SQLITE */
+		dbobj_t res = sqlite3_column_value(stmt, 0);
+		sqlite3_step(stmt);
+		return res;
+#else  /* !WITH_SQLITE */
 		return NULL;
+#endif	/* WITH_SQLITE */
+	}
 	}
 }
 
