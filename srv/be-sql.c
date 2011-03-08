@@ -798,9 +798,15 @@ be_sqlite_bind1(dbstmt_t stmt, int idx, __bind_t src)
 		sqlite3_bind_double(stmt, idx, src->dbl);
 		break;
 
-	case BE_BIND_TYPE_STAMP:
-		sqlite3_bind_int64(stmt, idx, src->tm);
+	case BE_BIND_TYPE_STAMP: {
+		struct tm tm = {0};
+		size_t len;
+
+		gmtime_r(&src->tm, &tm);
+		len = strftime(gbuf, 32, "%FT%T%z", &tm);
+		sqlite3_bind_text(stmt, idx, gbuf, len, SQLITE_STATIC);
 		break;
+	}
 	}
 	return;
 }
