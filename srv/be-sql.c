@@ -849,7 +849,6 @@ be_sql_column_int64(dbconn_t conn, dbstmt_t stmt, int idx)
 			.length = &len,
 		};
 		mysql_stmt_bind_result(stmt, &b);
-		UMPF_DEBUG(" FETCH %d\n", mysql_stmt_fetch(stmt));
 		gbuf[len] = '\0';
 		res = strtoul(gbuf, NULL, 10);
 #endif	/* WITH_MYSQL */
@@ -982,7 +981,6 @@ INSERT INTO aou_umpf_portfolio (short) VALUES (?)";
 	}
 	be_sql_fin(conn, stmt);
 
-	UMPF_DEBUG(BE_SQL ": pf_id <- %lu\n", pf_id);
 	if (pf_id > 0) {
 		return pf_id;
 	}
@@ -998,7 +996,6 @@ INSERT INTO aou_umpf_portfolio (short) VALUES (?)";
 		pf_id = be_sql_last_rowid(conn);
 	}
 
-	UMPF_DEBUG(BE_SQL ": pf_id <- %lu\n", pf_id);
 	be_sql_fin(conn, stmt);
 	return pf_id;
 }
