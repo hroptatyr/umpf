@@ -453,19 +453,44 @@ be_sql_prep(dbconn_t conn, const char *qry, size_t qlen)
 	default:
 		/* don't know what to do */
 		break;
+
 	case BE_SQL_MYSQL:
 #if defined WITH_MYSQL
 		return be_mysql_prep(be_sql_get_conn(conn), qry, qlen);
 #endif	/* WITH_MYSQL */
 		break;
+
 	case BE_SQL_SQLITE:
 #if defined WITH_SQLITE
 		return be_sqlite_prep(be_sql_get_conn(conn), qry, qlen);
-#else  /* !WITH_SQLITE */
-		break;
 #endif	/* WITH_SQLITE */
+		break;
 	}
 	return NULL;
+}
+
+static void
+be_sql_fin(dbconn_t conn, dbstmt_t stmt)
+{
+	switch (be_sql_get_type(conn)) {
+	case BE_SQL_UNK:
+	default:
+		/* don't know what to do */
+		break;
+
+	case BE_SQL_MYSQL:
+#if defined WITH_MYSQL
+		mysql_stmt_close(stmt);
+#endif	/* WITH_MYSQL */
+		break;
+
+	case BE_SQL_SQLITE:
+#if defined WITH_SQLITE
+		sqlite3_finalize(stmt);
+#endif	/* WITH_SQLITE */
+		break;
+	}
+	return;
 }
 
 static dbqry_t
