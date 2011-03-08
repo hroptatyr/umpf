@@ -850,6 +850,7 @@ be_sql_column_int64(dbconn_t conn, dbstmt_t stmt, int idx)
 			.length = &len,
 		};
 		mysql_stmt_bind_result(stmt, &b);
+		mysql_stmt_fetch(stmt);
 		gbuf[len] = '\0';
 		res = strtoul(gbuf, NULL, 10);
 #endif	/* WITH_MYSQL */
