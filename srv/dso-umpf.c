@@ -89,15 +89,19 @@ interpret_msg(int fd, umpf_msg_t msg)
 	switch (umpf_get_msg_type(msg)) {
 	case UMPF_MSG_NEW_PF: {
 		const char *mnemo, *descr;
+		dbobj_t pf;
 
 		UMPF_DEBUG(MOD_PRE ": new_pf();\n");
 		mnemo = msg->new_pf.name;
 		descr = msg->new_pf.satellite;
-		be_sql_new_pf(umpf_dbconn, mnemo, descr);
+		pf = be_sql_new_pf(umpf_dbconn, mnemo, descr);
 
 		/* reuse the message to send the answer */
 		msg->hdr.mt++;
 		umpf_print_msg(fd, msg);
+
+		/* free resources */
+		be_sql_free_pf(umpf_dbconn, pf);
 		break;
 	}
 	case UMPF_MSG_GET_PF: {
@@ -124,6 +128,9 @@ interpret_msg(int fd, umpf_msg_t msg)
 		/* reuse the message to send the answer */
 		msg->hdr.mt++;
 		umpf_print_msg(fd, msg);
+
+		/* free resources */
+		be_sql_free_tag(umpf_dbconn, tag);
 		break;
 	}
 	default:
