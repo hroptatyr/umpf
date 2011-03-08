@@ -1005,9 +1005,6 @@ INSERT INTO aou_umpf_portfolio (short) VALUES (?)";
 	/* execute */
 	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
 		pf_id = be_sql_last_rowid(conn);
-	} else {
-		/* grrr */
-		pf_id = 0;
 	}
 
 	be_sql_fin(conn, stmt);
