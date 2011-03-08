@@ -50,11 +50,37 @@
 
 #define BE_SQL		"mod/umpf/sql"
 
+typedef void *dbstmt_t;
+
 typedef enum {
 	BE_SQL_UNK,
 	BE_SQL_MYSQL,
 	BE_SQL_SQLITE,
 } be_sql_type_t;
+
+typedef enum {
+	BE_BIND_TYPE_UNK,
+	BE_BIND_TYPE_TEXT,
+	BE_BIND_TYPE_INT32,
+	BE_BIND_TYPE_INT64,
+	BE_BIND_TYPE_STAMP,
+	BE_BIND_TYPE_DOUBLE,
+	BE_BIND_TYPE_NULL,
+} be_bind_type_t;
+
+typedef struct __bind_s *__bind_t;
+
+struct __bind_s {
+	be_bind_type_t type;
+	union {
+		const char *txt;
+		int32_t i32;
+		int64_t i64;
+		time_t tm;
+		double dbl;
+	};
+	size_t len;
+};
 
 static inline dbconn_t
 be_sql_set_type(void *conn, be_sql_type_t type)
@@ -670,15 +696,107 @@ be_sql_last_rowid(dbconn_t conn)
 	}
 }
 
+#if defined WITH_MYSQL
 static void
-be_sql_bind_text(
-	dbconn_t conn, dbstmt_t stmt, int idx, const char *text, size_t tlen)
+be_mysql_bind1(MYSQL_BIND *tgt, __bind_t src)
 {
-	/* service to the user */
-	if (tlen == 0) {
-		tlen = strlen(text);
-	}
+	switch (src->type) {
+	case BE_BIND_TYPE_UNK:
+	default:
+		break;
 
+	case BE_BIND_TYPE_TEXT:
+		tgt->buffer_type = MYSQL_TYPE_STRING;
+		/* get around const qualifier, sigh */
+		tgt->buffer = strchr(src->txt, *src->txt);
+		if (src->len > 0) {
+			tgt->buffer_length = src->len;
+		} else {
+			tgt->buffer_length = strlen(src->txt);
+		}
+		tgt->is_null = NULL;
+		tgt->length = &src->len;
+		break;
+
+	case BE_BIND_TYPE_NULL:
+		tgt->buffer_type = MYSQL_TYPE_NULL;
+		break;
+
+	case BE_BIND_TYPE_INT64:
+		tgt->buffer_type = MYSQL_TYPE_LONG;
+		tgt->buffer = (char*)&src->i64;
+		tgt->is_null = 0;
+		tgt->length = 0;
+		break;
+
+	case BE_BIND_TYPE_INT32:
+		tgt->buffer_type = MYSQL_TYPE_LONG;
+		tgt->buffer = (char*)&src->i32;
+		tgt->is_null = 0;
+		tgt->length = 0;
+		break;
+
+	case BE_BIND_TYPE_DOUBLE:
+		tgt->buffer_type = MYSQL_TYPE_DOUBLE;
+		tgt->buffer = (char*)&src->dbl;
+		tgt->is_null = 0;
+		tgt->length = 0;
+		break;
+
+	case BE_BIND_TYPE_STAMP:
+		tgt->buffer_type = MYSQL_TYPE_LONG;
+		tgt->buffer = (char*)&src->tm;
+		tgt->is_null = 0;
+		tgt->length = 0;
+		break;
+	}
+	return;
+}
+#endif	/* WITH_MYSQL */
+
+#if defined WITH_SQLITE
+static void
+be_sqlite_bind1(dbstmt_t stmt, int idx, __bind_t src)
+{
+	switch (src->type) {
+	case BE_BIND_TYPE_UNK:
+	default:
+		break;
+
+	case BE_BIND_TYPE_TEXT:
+		if (src->len == 0) {
+			src->len = strlen(src->txt);
+		}
+		sqlite3_bind_text(stmt, idx, src->txt, src->len, SQLITE_STATIC);
+		break;
+
+	case BE_BIND_TYPE_NULL:
+		sqlite3_bind_null(stmt, idx);
+		break;
+
+	case BE_BIND_TYPE_INT64:
+		sqlite3_bind_int64(stmt, idx, src->i64);
+		break;
+
+	case BE_BIND_TYPE_INT32:
+		sqlite3_bind_int(stmt, idx, src->i32);
+		break;
+
+	case BE_BIND_TYPE_DOUBLE:
+		sqlite3_bind_double(stmt, idx, src->dbl);
+		break;
+
+	case BE_BIND_TYPE_STAMP:
+		sqlite3_bind_int64(stmt, idx, src->tm);
+		break;
+	}
+	return;
+}
+#endif	/* WITH_MYSQL */
+
+static void
+be_sql_bind(dbconn_t conn, dbstmt_t stmt, __bind_t b, size_t nb)
+{
 	switch (be_sql_get_type(conn)) {
 	case BE_SQL_UNK:
 	default:
@@ -686,29 +804,26 @@ be_sql_bind_text(
 
 	case BE_SQL_MYSQL: {
 #if defined WITH_MYSQL
-		MYSQL_BIND b = {
-			/* STRING PARAM */
-			.buffer_type = MYSQL_TYPE_STRING,
-			.buffer = text,
-			.buffer_length = tlen,
-			.is_null = 0,
-			.length = &tlen,
-		};
-		int res = mysql_stmt_bind_param(stmt, &b);
-		UMPF_DEBUG(BE_SQL ": bind_param %d\n", res);
-		break;
-#else  /* !WITH_MYSQL */
-		break;
+		/* just take our gbuf for this non-sense, makes this
+		 * routine non-reentrant of course */
+		MYSQL_BIND *mb = (void*)gbuf;
+
+		memset(b, 0, nb * sizeof(*b));
+		for (size_t i = 0; i < nb; i++) {
+			be_mysql_bind1(mb + i, b + i);
+		}
+		mysql_stmt_bind_param(stmt, mb);
 #endif	/* WITH_MYSQL */
+		break;
 	}
 
 	case BE_SQL_SQLITE:
 #if defined WITH_SQLITE
-		sqlite3_bind_text(stmt, idx, text, tlen, SQLITE_STATIC);
-		break;
-#else  /* !WITH_SQLITE */
-		break;
+		for (size_t i = 0; i < nb; i++) {
+			be_sqlite_bind1(stmt, i, b + i);
+		}
 #endif	/* WITH_SQLITE */
+		break;
 	}
 	return;
 }
@@ -858,7 +973,14 @@ INSERT INTO aou_umpf_portfolio (short) VALUES (?)";
 	mnlen = strlen(mnemo);
 
 	/* bind the params */
-	be_sql_bind_text(conn, stmt, 1, mnemo, mnlen);
+	{
+		struct __bind_s b[1] = {{
+				.type = BE_BIND_TYPE_TEXT,
+				.txt = mnemo,
+				.len = mnlen,
+			}};
+		be_sql_bind(conn, stmt, b, countof(b));
+	}
 	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
 		pf_id = be_sql_column_int64(conn, stmt, 0);
 	}
@@ -870,7 +992,14 @@ INSERT INTO aou_umpf_portfolio (short) VALUES (?)";
 	}
 	/* otherwise create a new one */
 	stmt = be_sql_prep(conn, qry2, countof_m1(qry2));
-	be_sql_bind_text(conn, stmt, 1, mnemo, mnlen);
+	{
+		struct __bind_s b[1] = {{
+				.type = BE_BIND_TYPE_TEXT,
+				.txt = mnemo,
+				.len = mnlen,
+			}};
+		be_sql_bind(conn, stmt, b, countof(b));
+	}
 	if (UNLIKELY(be_sql_exec_stmt(conn, stmt) != 0)) {
 		/* grrr */
 		pf_id = 0;
@@ -890,50 +1019,26 @@ be_sql_get_sec_id(dbconn_t conn, uint64_t pf_id, const char *mnemo)
 SELECT security_id FROM aou_umpf_security WHERE portfolio_id = ? AND short = ?";
 	static const char qry2[] = "\
 INSERT INTO aou_umpf_security (portfolio_id, short) VALUES (?, ?)";
-	size_t mnlen;
+	size_t mnlen = strlen(mnemo);
 	uint64_t sec_id = 0UL;
 	dbstmt_t stmt;
+	/* for our parameter binding later on */
+	struct __bind_s b[2] = {{
+			.type = BE_BIND_TYPE_INT64,
+			.i64 = pf_id,
+		}, {
+			.type = BE_BIND_TYPE_TEXT,
+			.txt = mnemo,
+			.len = mnlen,
+		}};
 
 	if ((stmt = be_sql_prep(conn, qry1, countof_m1(qry1))) == NULL) {
 		return 0UL;
 	}
-	/* otherwise proceed as usual */
-	mnlen = strlen(mnemo);
 
 	/* bind the params */
-	switch (be_sql_get_type(conn)) {
-	case BE_SQL_MYSQL: {
-#if defined WITH_MYSQL
-		MYSQL_BIND b[2] = {
-			{
-				/* INTEGER PARAM */
-				.buffer_type = MYSQL_TYPE_LONG,
-				.buffer = (char*)&pf_id,
-				.is_null = 0,
-				.length = 0,
-			}, {
-				/* STRING PARAM */
-				.buffer_type = MYSQL_TYPE_STRING,
-				.buffer = mnemo,
-				.buffer_length = mnlen,
-				.is_null = 0,
-				.length = &mnlen,
-			}
-		};
-		mysql_stmt_bind_param(stmt, b);
-#endif	/* WITH_MYSQL */
-		break;
-	}
-
-	case BE_SQL_SQLITE:
-#if defined WITH_SQLITE
-		sqlite3_bind_int64(stmt, 1, pf_id);
-		sqlite3_bind_text(stmt, 2, mnemo, mnlen, SQLITE_STATIC);
-#endif	 /* WITH_SQLITE */
-		break;
-	default:
-		break;
-	}
+	be_sql_bind(conn, stmt, b, countof(b));
+	/* execute */
 	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
 		pf_id = be_sql_column_int64(conn, stmt, 0);
 	}
@@ -944,46 +1049,9 @@ INSERT INTO aou_umpf_security (portfolio_id, short) VALUES (?, ?)";
 	}
 	/* otherwise create a new one */
 	stmt = be_sql_prep(conn, qry2, countof_m1(qry2));
-
-	switch (be_sql_get_type(conn)) {
-	case BE_SQL_MYSQL: {
-#if defined WITH_MYSQL
-		MYSQL_BIND b[2] = {
-			{
-				/* INTEGER PARAM */
-				.buffer_type = MYSQL_TYPE_LONG,
-				.buffer = (char*)&pf_id,
-				.is_null = 0,
-				.length = 0,
-			}, {
-				/* STRING PARAM */
-				.buffer_type = MYSQL_TYPE_STRING,
-				.buffer = mnemo,
-				.buffer_length = mnlen,
-				.is_null = 0,
-				.length = &mnlen,
-			}
-		};
-		mysql_stmt_bind_param(stmt, b);
-#endif	/* WITH_MYSQL */
-		break;
-	}
-
-	case BE_SQL_SQLITE:
-#if defined WITH_SQLITE
-		sqlite3_bind_int64(stmt, 1, pf_id);
-		sqlite3_bind_text(stmt, 2, mnemo, mnlen, SQLITE_STATIC);
-		switch (sqlite3_step(stmt)) {
-		case SQLITE_DONE:
-			/* bingo! */
-			sec_id = be_sql_last_rowid(conn);
-		default:
-			break;
-		}
-#endif	 /* WITH_SQLITE */
-	default:
-		break;
-	}
+	/* bind the params again */
+	be_sql_bind(conn, stmt, b, countof(b));
+	/* execute */
 	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
 		pf_id = be_sql_column_int64(conn, stmt, 0);
 	}
@@ -1004,59 +1072,27 @@ INSERT INTO aou_umpf_tag (portfolio_id, tag_stamp) VALUES (?, ?)";
 	}
 
 	/* bind the params */
-	switch (be_sql_get_type(conn)) {
-	case BE_SQL_MYSQL: {
-#if defined WITH_MYSQL
-		MYSQL_BIND b[2] = {
-			{
-				/* INTEGER PARAM */
-				.buffer_type = MYSQL_TYPE_LONG,
-				.buffer = (char*)&pf_id,
-				.is_null = 0,
-				.length = 0,
+	{
+		struct __bind_s b[2] = {{
+				.type = BE_BIND_TYPE_INT64,
+				.i64 = pf_id,
 			}, {
-				/* INTEGER PARAM */
-				.buffer_type = MYSQL_TYPE_LONG,
-				.buffer = (char*)&stamp,
-				.is_null = 0,
-				.length = 0,
-			}
-		};
-		mysql_stmt_bind_param(stmt, b);
-		mysql_stmt_execute(stmt);
-		if (mysql_stmt_affected_rows(stmt) != 1) {
-			/* bummer */
-			goto out;
-		}
-#endif	/* WITH_MYSQL */
-		break;
+				.type = BE_BIND_TYPE_STAMP,
+				.tm = stamp,
+			}};
+		be_sql_bind(conn, stmt, b, countof(b));
 	}
-
-	case BE_SQL_SQLITE:
-#if defined WITH_SQLITE
-		sqlite3_bind_int64(stmt, 1, pf_id);
-		sqlite3_bind_int64(stmt, 2, stamp);
-		switch (sqlite3_step(stmt)) {
-		case SQLITE_DONE:
-			/* bingo! */
-			break;
-		default:
-			goto out;
-		}
-#endif	 /* WITH_SQLITE */
-		break;
-
-	default:
-		break;
+	/* execute */
+	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
+		tag_id = be_sql_last_rowid(conn);
 	}
-
-	tag_id = be_sql_last_rowid(conn);
-out:
 	be_sql_fin(conn, stmt);
 	return tag_id;
 }
 
-DEFUN void
+
+/* public functions */
+DEFUN dbobj_t
 be_sql_new_pf(dbconn_t conn, const char *mnemo, const char *descr)
 {
 /* new_pf is a get_pf_id + update the description */
@@ -1070,125 +1106,119 @@ UPDATE aou_umpf_portfolio SET description = ? WHERE portfolio_id = ?";
 
 	if (UNLIKELY(mnemo == NULL)) {
 		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
-		return;
+		return NULL;
 	} else if ((pf_id = be_sql_get_pf_id(conn, mnemo)) == 0) {
 		/* portfolio getter is fucked */
 		UMPF_DEBUG(BE_SQL ": could not obtain portfolio id\n");
-		return;
+		return NULL;
 	}
 
 	if (LIKELY(descr == NULL)) {
-		return;
+		return (dbobj_t)pf_id;
 	}
 	/* otherwise there's more work to be done */
 	dlen = strlen(descr);
 	stmt = be_sql_prep(conn, pre, countof_m1(pre));
 
-	switch (be_sql_get_type(conn)) {
-	case BE_SQL_MYSQL: {
-#if defined WITH_MYSQL
-		MYSQL_BIND b[2] = {
-			{
-				/* STRING PARAM */
-				.buffer_type = MYSQL_TYPE_STRING,
-				.buffer = descr,
-				.buffer_length = dlen,
-				.is_null = 0,
-				.length = &dlen,
+	/* bind the params */
+	{
+		struct __bind_s b[2] = {{
+				.type = BE_BIND_TYPE_TEXT,
+				.txt = descr,
+				.len = dlen,
 			}, {
-				/* INTEGER PARAM */
-				.buffer_type = MYSQL_TYPE_LONG,
-				.buffer = (char*)&pf_id,
-				.is_null = 0,
-				.length = 0,
-			}
-		};
-		mysql_stmt_bind_param(stmt, b);
-#endif	/* WITH_MYSQL */
-		break;
+				.type = BE_BIND_TYPE_INT64,
+				.i64 = pf_id,
+			}};
+		be_sql_bind(conn, stmt, b, countof(b));
 	}
 
-	case BE_SQL_SQLITE:
-#if defined WITH_SQLITE
-		sqlite3_bind_int64(stmt, 1, pf_id);
-		sqlite3_bind_text(stmt, 2, descr, dlen, SQLITE_STATIC);
-#endif	 /* WITH_SQLITE */
-		break;
-	default:
-		break;
-	}
-
-	UMPF_DEBUG(": SET DESCR\n");
 	be_sql_exec_stmt(conn, stmt);
 	be_sql_fin(conn, stmt);
+	return (dbobj_t)pf_id;
+}
+
+DEFUN void
+be_sql_free_pf(dbconn_t UNUSED(conn), dbobj_t UNUSED(pf))
+{
+	/* it's just a uint64 so do fuckall */
 	return;
 }
+
+/* tag mumbo jumbo */
+struct __tag_s {
+	uint64_t pf_id;
+	uint64_t tag_id;
+};
 
 DEFUN dbobj_t
 be_sql_new_tag(dbconn_t conn, const char *mnemo, time_t stamp)
 {
-	size_t mlen;
-	size_t tmplen;
-	char *qbuf, *tmp;
-	static const char pre[] = "\
-REPLACE INTO aou_umpf_tag (portfolio_id, tag_stamp) \
-SELECT portfolio_id, \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" \
-FROM aou_umpf_portfolio \
-WHERE short = \
-\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"";
+	struct __tag_s *tag = xnew(*tag);
+
+	/* get portfolio */
+	tag->pf_id = be_sql_get_pf_id(conn, mnemo);
 	/* we create a new tag and return its id */
-	uint64_t tag_id;
-	void *res;
+	tag->tag_id = be_sql_new_tag_id(conn, tag->pf_id, stamp);
+	return (dbobj_t)tag;
+}
 
-	if (UNLIKELY(mnemo == NULL)) {
-		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
-		return NULL;
-	}
-	/* get some basic length info to decide whether to use
-	 * gbuf or an alloc'd buffer */
-	if ((mlen = strlen(mnemo)) > 64) {
-		mlen = 64;
-	}
+DEFUN dbobj_t
+be_sql_new_tag_pf(dbconn_t conn, dbobj_t pf, time_t stamp)
+{
+	struct __tag_s *tag = xnew(*tag);
 
-	/* get some resources for qbuf */
-	qbuf = malloc(sizeof(pre));
-	memcpy(qbuf, pre, sizeof(pre));
-	/* get them points to insert our variables */
-	tmp = qbuf + 52 + 22;
-	tmp += tmplen = print_zulu(tmp, stamp);
-	*tmp = '\"';
-	/* pad the rest with SPCs */
-	memset(tmp + 1, ' ', 32 - tmplen);
+	/* get portfolio */
+	tag->pf_id = (uint64_t)pf;
+	/* we create a new tag and return its id */
+	tag->tag_id = be_sql_new_tag_id(conn, tag->pf_id, stamp);
+	return (dbobj_t)tag;
+}
 
-	tmp = qbuf + 52 + 56 + 24 + 14 + 1;
-	tmp = stpncpy_q(conn, tmp, mnemo, mlen);
-	*tmp++ = '\"';
-	*tmp = '\0';
-
-	UMPF_DEBUG(BE_SQL ": -> %s\n", qbuf);
-
-	res = be_sql_qry(conn, qbuf, tmp - qbuf);
-	UMPF_DEBUG(BE_SQL ": <- %p\n", res);
-	if (res != NULL) {
-		/* um, that's weird */
-		abort();
-	}
-	/* retrieve our tag id */
-	tag_id = be_sql_last_rowid(conn);
-	UMPF_DEBUG(BE_SQL ": iid <- %lu\n", tag_id);
-	return (dbobj_t)tag_id;
+DECLF void
+be_sql_free_tag(dbconn_t UNUSED(conn), dbobj_t tag)
+{
+	free((struct __tag_s*)tag);
+	return;
 }
 
 DEFUN void
-be_sql_set_pos(
-	dbconn_t conn, dbobj_t tag_id, const char *mnemo, double l, double s)
+be_sql_set_pos(dbconn_t c, dbobj_t tag, const char *mnemo, double l, double s)
 {
-	static const char pre[] = "\
+	struct __tag_s *t = tag;
+	/* get security */
+	uint64_t sec_id;
+	dbstmt_t stmt;
+	static const char qry[] = "\
 INSERT INTO aou_umpf_position (tag_id, security_id, long_qty, short_qty) \
-SELECT portfolio_id, \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" \
-FROM aou_umpf_portfolio \
-WHERE short = \
-\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"";
+VALUES (?, ?, ?, ?)";
+
+	/* obtain a sec id first, get/creator */
+	sec_id = be_sql_get_sec_id(c, t->pf_id, mnemo);
+
+	if ((stmt = be_sql_prep(c, qry, countof_m1(qry))) == NULL) {
+		return;
+	}
+	/* bind the params */
+	{
+		struct __bind_s b[4] = {{
+				.type = BE_BIND_TYPE_INT64,
+				.i64 = t->tag_id,
+			}, {
+				.type = BE_BIND_TYPE_INT64,
+				.i64 = sec_id,
+			}, {
+				.type = BE_BIND_TYPE_DOUBLE,
+				.dbl = l,
+			}, {
+				.type = BE_BIND_TYPE_DOUBLE,
+				.dbl = s,
+			}};
+		be_sql_bind(c, stmt, b, countof(b));
+	}
+	/* execute */
+	be_sql_exec_stmt(c, stmt);
+	be_sql_fin(c, stmt);
 	return;
 }
 

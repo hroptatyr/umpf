@@ -45,7 +45,6 @@
 typedef void *dbobj_t;
 typedef void *dbconn_t;
 typedef void *dbqry_t;
-typedef void *dbstmt_t;
 typedef void (*dbrow_f)(dbobj_t *row, size_t num_fields, void *closure);
 
 DECLF dbconn_t
@@ -58,13 +57,25 @@ DECLF void be_sql_close(dbconn_t conn);
 /* actual actions */
 /**
  * Corresponds to UMPF_MSG_NEW_PF */
-DECLF void be_sql_new_pf(dbconn_t, const char *mnemo, const char *descr);
+DECLF dbobj_t be_sql_new_pf(dbconn_t, const char *mnemo, const char *descr);
+
+/**
+ * Free resources associated with PF as obtained by `be_sql_new_pf()'. */
+DECLF void be_sql_free_pf(dbconn_t, dbobj_t pf);
 
 /**
  * Corresponds to the first part of UMPF_MSG_SET_PF.
  * \param MNEMO is the mnemonic of the portfolio.
  * \param STAMP is the time stamp at which positions are to be recorded. */
 DECLF dbobj_t be_sql_new_tag(dbconn_t, const char *mnemo, time_t stamp);
+
+/**
+ * Like `be_sql_new_tag()' but for portfolio objects instead of mnemo. */
+DECLF dbobj_t be_sql_new_tag_pf(dbconn_t, dbobj_t pf, time_t stamp);
+
+/**
+ * Free resources associated with TAG as obtained by `be_sql_new_tag()'. */
+DECLF void be_sql_free_tag(dbconn_t, dbobj_t tag);
 
 /**
  * Corresponds to the iteration part of UMPF_MSG_SET_PF.
