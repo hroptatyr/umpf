@@ -761,6 +761,7 @@ be_sqlite_bind1(dbstmt_t stmt, int idx, __bind_t src)
 	switch (src->type) {
 	case BE_BIND_TYPE_UNK:
 	default:
+		UMPF_DEBUG(BE_SQL ": binding unknown type :O\n");
 		break;
 
 	case BE_BIND_TYPE_TEXT:
