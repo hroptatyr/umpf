@@ -1052,7 +1052,7 @@ INSERT INTO aou_umpf_security (portfolio_id, short) VALUES (?, ?)";
 	be_sql_bind(conn, stmt, b, countof(b));
 	/* execute */
 	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
-		sec_id = be_sql_column_int64(conn, stmt, 0);
+		sec_id = be_sql_last_rowid(conn);
 	}
 	be_sql_fin(conn, stmt);
 	return sec_id;
