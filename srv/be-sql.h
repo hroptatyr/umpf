@@ -74,6 +74,12 @@ DECLF dbobj_t be_sql_new_tag(dbconn_t, const char *mnemo, time_t stamp);
 DECLF dbobj_t be_sql_new_tag_pf(dbconn_t, dbobj_t pf, time_t stamp);
 
 /**
+ * Corresponds to the first part of UMPF_MSG_GET_PF.
+ * \param MNEMO is the mnemonic of the portfolio.
+ * \param STAMP is the time stamp at which positions have been recorded. */
+DECLF dbobj_t be_sql_get_tag(dbconn_t, const char *mnemo, time_t stamp);
+
+/**
  * Free resources associated with TAG as obtained by `be_sql_new_tag()'. */
 DECLF void be_sql_free_tag(dbconn_t, dbobj_t tag);
 

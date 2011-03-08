@@ -1093,6 +1093,39 @@ INSERT INTO aou_umpf_tag (portfolio_id, tag_stamp) VALUES (?, ?)";
 	return tag_id;
 }
 
+static uint64_t
+be_sql_get_tag_id(dbconn_t conn, uint64_t pf_id, time_t stamp)
+{
+/* finds the largest tag id whose tag_stamp is before STAMP */
+	static const char qry[] = "\
+SELECT tag_id FROM aou_umpf_tag \
+WHERE portfolio_id = ? AND tag_stamp <= ? \
+ORDER BY tag_stamp DESC, tag_id DESC \
+LIMIT 1";
+	uint64_t tag_id = 0UL;
+	dbstmt_t stmt;
+	struct __bind_s b[2] = {{
+			.type = BE_BIND_TYPE_INT64,
+			.i64 = pf_id,
+		}, {
+			.type = BE_BIND_TYPE_STAMP,
+			.tm = stamp,
+		}};
+
+	if ((stmt = be_sql_prep(conn, qry, countof_m1(qry))) == NULL) {
+		return 0UL;
+	}
+
+	/* bind the params */
+	be_sql_bind(conn, stmt, b, countof(b));
+	/* execute */
+	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
+		tag_id = be_sql_column_int64(conn, stmt, 0);
+	}
+	be_sql_fin(conn, stmt);
+	return tag_id;
+}
+
 
 /* public functions */
 DEFUN dbobj_t
@@ -1175,6 +1208,28 @@ be_sql_new_tag_pf(dbconn_t conn, dbobj_t pf, time_t stamp)
 	tag->pf_id = (uint64_t)pf;
 	/* we create a new tag and return its id */
 	tag->tag_id = be_sql_new_tag_id(conn, tag->pf_id, stamp);
+	return (dbobj_t)tag;
+}
+
+DEFUN dbobj_t
+be_sql_get_tag(dbconn_t conn, const char *mnemo, time_t stamp)
+{
+	struct __tag_s *tag;
+	uint64_t tag_id;
+	uint64_t pf_id;
+
+	/* get portfolio */
+	if ((pf_id = be_sql_get_pf_id(conn, mnemo)) == 0) {
+		UMPF_DEBUG(BE_SQL ": uh oh, no portfolio id for %s\n", mnemo);
+		return NULL;
+	} else if ((tag_id = be_sql_get_tag_id(conn, pf_id, stamp)) == 0) {
+		return NULL;
+	}
+	/* oh we seem to have hit the jackpot */
+	tag = xnew(*tag);
+	tag->pf_id = pf_id;
+	tag->tag_id = tag_id;
+	UMPF_DEBUG(BE_SQL ": tag_id <- %lu (%lu, %ld)\n", tag_id, pf_id, stamp);
 	return (dbobj_t)tag;
 }
 

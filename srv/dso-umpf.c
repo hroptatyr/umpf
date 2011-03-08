@@ -105,7 +105,22 @@ interpret_msg(int fd, umpf_msg_t msg)
 		break;
 	}
 	case UMPF_MSG_GET_PF: {
+		const char *mnemo;
+		time_t stamp;
+		dbobj_t tag;
+
 		UMPF_DEBUG(MOD_PRE ": get_pf();\n");
+		mnemo = msg->pf.name;
+		stamp = msg->pf.stamp;
+
+		tag = be_sql_get_tag(umpf_dbconn, mnemo, stamp);
+
+		/* reuse the message to send the answer */
+		msg->hdr.mt++;
+		umpf_print_msg(fd, msg);
+
+		/* free resources */
+		be_sql_free_tag(umpf_dbconn, tag);
 		break;
 	}
 	case UMPF_MSG_SET_PF: {
