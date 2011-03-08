@@ -887,12 +887,11 @@ be_sql_new_pf(dbconn_t conn, const char *mnemo, const char *descr)
 {
 	size_t mlen;
 	size_t dlen;
-	char *qbuf, *tmp;
 	static const char pre[] = "\
-INSERT INTO aou_umpf_portfolio (short, description) VALUES (";
-	static const char pst[] = "\
-);";
+INSERT INTO aou_umpf_portfolio (short, description) VALUES (?, ?)";
+	dbstmt_t stmt;
 	void *res;
+	uint64_t pf_id;
 
 	if (UNLIKELY(mnemo == NULL)) {
 		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
@@ -908,35 +907,60 @@ INSERT INTO aou_umpf_portfolio (short, description) VALUES (";
 	} else {
 		dlen = strlen(descr);
 	}
-	if (UNLIKELY(dlen > sizeof(gbuf) - 128)) {
-		/* need a new buffer */
-		qbuf = malloc(dlen + 128);
-	} else {
-		/* how about locking the bastard? */
-		qbuf = gbuf;
+
+	/* otherwise create a new one */
+	stmt = be_sql_prep(conn, pre, countof_m1(pre));
+
+	switch (be_sql_get_type(conn)) {
+	case BE_SQL_MYSQL: {
+#if defined WITH_MYSQL
+		MYSQL_BIND b[2] = {
+			{
+				/* STRING PARAM */
+				.buffer_type = MYSQL_TYPE_STRING,
+				.buffer = mnemo,
+				.buffer_length = mlen,
+				.is_null = 0,
+				.length = &mlen,
+			}, {
+				/* STRING PARAM */
+				.buffer_type = MYSQL_TYPE_STRING,
+				.buffer = descr,
+				.buffer_length = dlen,
+				.is_null = dlen == 0,
+				.length = &dlen,
+			}
+		};
+		mysql_stmt_execute(stmt);
+#endif	/* WITH_MYSQL */
+		break;
 	}
 
-	tmp = stpncpy(qbuf, pre, sizeof(pre));
-	*tmp++ = '\'';
-	tmp = stpncpy_q(conn, tmp, mnemo, mlen);
-	*tmp++ = '\'';
-	*tmp++ = ',';
-	if (UNLIKELY(descr != NULL)) {
-		*tmp++ = '\'';
-		tmp = stpncpy_q(conn, tmp, descr, dlen);
-		*tmp++ = '\'';
-	} else {
-		tmp = stpncpy(tmp, "NULL", 4);
+	case BE_SQL_SQLITE:
+#if defined WITH_SQLITE
+		sqlite3_bind_text(stmt, 1, mnemo, mlen, SQLITE_STATIC);
+		if (dlen > 0) {
+			sqlite3_bind_text(stmt, 2, descr, dlen, SQLITE_STATIC);
+		} else {
+			sqlite3_bind_null(stmt, 2);
+		}
+		switch (sqlite3_step(stmt)) {
+		case SQLITE_DONE:
+			/* bingo! */
+			break;
+		default:
+			goto out;
+		}
+#endif	 /* WITH_SQLITE */
+		break;
+	default:
+		break;
 	}
-	tmp = stpncpy(tmp, pst, sizeof(pst));
-	UMPF_DEBUG(BE_SQL ": -> %s\n", qbuf);
 
-	res = be_sql_qry(conn, qbuf, tmp - qbuf);
-	UMPF_DEBUG(BE_SQL ": <- %p\n", res);
-	if (res != NULL) {
-		/* um, that's weird */
-		abort();
-	}
+	pf_id = be_sql_last_rowid(conn);
+	UMPF_DEBUG(": pf_id <- %lu\n", pf_id);
+out:
+	be_sql_free_query(conn, stmt);
 	return;
 }
 
