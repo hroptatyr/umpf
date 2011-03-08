@@ -703,10 +703,15 @@ be_sql_exec_stmt(dbconn_t conn, dbstmt_t stmt)
 #endif	/* WITH_MYSQL */
 	
 	case BE_SQL_SQLITE:
-		/* there is no explicit execute */
+		/* there is no explicit execute, we do the step here,
+		 * then when we fetch results we do another step */
 #if defined WITH_SQLITE
-		if (LIKELY(stmt != NULL)) {
+		switch (sqlite3_step(stmt)) {
+		case SQLITE_DONE:
+		case SQLITE_ROW:
 			return 0;
+		default:
+			break;
 		}
 #endif	/* WITH_SQLITE */
 		return -1;
