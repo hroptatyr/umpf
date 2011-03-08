@@ -1182,9 +1182,9 @@ INSERT INTO aou_umpf_position (tag_id, security_id, long_qty, short_qty) \
 VALUES (?, ?, ?, ?)";
 
 	/* obtain a sec id first, get/creator */
-	sec_id = be_sql_get_sec_id(c, t->pf_id, mnemo);
-
-	if ((stmt = be_sql_prep(c, qry, countof_m1(qry))) == NULL) {
+	if ((sec_id = be_sql_get_sec_id(c, t->pf_id, mnemo)) == 0UL) {
+		return;
+	} else if ((stmt = be_sql_prep(c, qry, countof_m1(qry))) == NULL) {
 		return;
 	}
 	/* bind the params */
