@@ -841,18 +841,17 @@ be_sql_column_int64(dbconn_t conn, dbstmt_t stmt, int idx)
 	case BE_SQL_MYSQL: {
 #if defined WITH_MYSQL
 		/* we only support the 0-th column */
-		char buf[32];
 		size_t len;
 		MYSQL_BIND b = {
 			/* STRING PARAM */
-			.buffer = buf,
-			.buffer_length = sizeof(buf),
+			.buffer = gbuf,
+			.buffer_length = sizeof(gbuf),
 			.length = &len,
 		};
 		mysql_stmt_bind_result(stmt, &b);
-		mysql_stmt_fetch(stmt);
-		buf[len] = '\0';
-		res = strtoul(buf, NULL, 10);
+		UMPF_DEBUG(" FETCH %d\n", mysql_stmt_fetch(stmt));
+		gbuf[len] = '\0';
+		res = strtoul(gbuf, NULL, 10);
 #endif	/* WITH_MYSQL */
 		break;
 	}
