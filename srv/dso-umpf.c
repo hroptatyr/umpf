@@ -100,9 +100,16 @@ interpret_msg(int fd, umpf_msg_t msg)
 		umpf_print_msg(fd, msg);
 		break;
 	}
-	case UMPF_MSG_GET_PF:
+	case UMPF_MSG_GET_PF: {
+		const char *mnemo;
+		uint64_t pf_id;
+
 		UMPF_DEBUG(MOD_PRE ": get_pf();\n");
+		mnemo = msg->pf.name;
+		pf_id = be_sql_get_pf_id(umpf_dbconn, mnemo);
+		UMPF_DEBUG(MOD_PRE ": <- %lu\n", pf_id);
 		break;
+	}
 	case UMPF_MSG_SET_PF: {
 		const char *mnemo;
 		time_t stamp;

@@ -45,6 +45,7 @@
 typedef void *dbobj_t;
 typedef void *dbconn_t;
 typedef void *dbqry_t;
+typedef void *dbstmt_t;
 typedef void (*dbrow_f)(dbobj_t *row, size_t num_fields, void *closure);
 
 DECLF dbconn_t
@@ -73,5 +74,10 @@ DECLF dbobj_t be_sql_new_tag(dbconn_t, const char *mnemo, time_t stamp);
  * \param S is the short side of the position. */
 DECLF void
 be_sql_set_pos(dbconn_t, dbobj_t tag, const char *mnemo, double l, double s);
+
+/**
+ * Test function, don't use me (yet). */
+DECLF uint64_t
+be_sql_get_pf_id(dbconn_t, const char *mnemo);
 
 #endif	/* INCLUDED_be_sql_h_ */

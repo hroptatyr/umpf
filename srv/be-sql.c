@@ -147,6 +147,24 @@ be_mysql_close(dbconn_t conn)
 	return;
 }
 
+static dbstmt_t
+be_mysql_prep(dbconn_t conn, const char *qry, size_t qlen)
+{
+	MYSQL_STMT *stmt = mysql_stmt_init(conn);
+	if (mysql_stmt_prepare(stmt, qry, qlen) == 0) {
+		return stmt;
+	}
+	mysql_stmt_close(stmt);
+	return NULL;
+}
+
+static void
+be_mysql_fin(dbstmt_t stmt)
+{
+	mysql_stmt_close(stmt);
+	return;
+}
+
 static dbqry_t
 be_mysql_qry(dbconn_t conn, const char *qry, size_t qlen)
 {
@@ -239,6 +257,30 @@ be_sqlite_open(const char *file)
 	sqlite3 *res;
 	sqlite3_open(file, &res);
 	return res;
+}
+
+static dbstmt_t
+be_sqlite_prep(dbconn_t conn, const char *qry, size_t qlen)
+{
+	sqlite3_stmt *stmt;
+	const char *UNUSED(tmp);
+
+	sqlite3_prepare_v2(conn, qry, qlen, &stmt, &tmp);
+	return stmt;
+}
+
+static void
+be_sqlite_fin(dbstmt_t stmt)
+{
+	sqlite3_finalize(stmt);
+	return;
+}
+
+static void
+be_sqlite_bind(dbstmt_t stmt, int idx, dbobj_t obj)
+{
+	sqlite3_bind_value(stmt, idx, obj);
+	return;
 }
 
 static dbqry_t
@@ -401,6 +443,29 @@ be_sql_close(dbconn_t conn)
 		break;
 	}
 	return;
+}
+
+static dbstmt_t
+be_sql_prep(dbconn_t conn, const char *qry, size_t qlen)
+{
+	switch (be_sql_get_type(conn)) {
+	case BE_SQL_UNK:
+	default:
+		/* don't know what to do */
+		break;
+	case BE_SQL_MYSQL:
+#if defined WITH_MYSQL
+		return be_mysql_prep(be_sql_get_conn(conn), qry, qlen);
+#endif	/* WITH_MYSQL */
+		break;
+	case BE_SQL_SQLITE:
+#if defined WITH_SQLITE
+		return be_sqlite_prep(be_sql_get_conn(conn), qry, qlen);
+#else  /* !WITH_SQLITE */
+		break;
+#endif	/* WITH_SQLITE */
+	}
+	return NULL;
 }
 
 static dbqry_t
@@ -580,6 +645,38 @@ be_sql_last_rowid(dbconn_t conn)
 	}
 }
 
+static void
+be_sql_bind_text(
+	dbconn_t conn, dbstmt_t stmt, int idx, const char *text, size_t tlen)
+{
+	switch (be_sql_get_type(conn)) {
+	case BE_SQL_UNK:
+	default:
+		break;
+
+	case BE_SQL_MYSQL:
+#if defined WITH_MYSQL
+		/* do me */
+		break;
+#else  /* !WITH_MYSQL */
+		break;
+#endif	/* WITH_MYSQL */
+
+	case BE_SQL_SQLITE: {
+#if defined WITH_SQLITE
+		if (tlen == 0) {
+			tlen = strlen(text);
+		}
+		sqlite3_bind_text(stmt, idx, text, tlen, SQLITE_STATIC);
+		break;
+#else  /* !WITH_SQLITE */
+		break;
+#endif	/* WITH_SQLITE */
+	}
+	}
+	return;
+}
+
 
 /* more sql-flavour independent helpers */
 static char*
@@ -606,6 +703,65 @@ print_zulu(char *tgt, time_t stamp)
 
 
 /* actual actions */
+DEFUN uint64_t
+be_sql_get_pf_id(dbconn_t conn, const char *mnemo)
+{
+	static const char qry1[] = "\
+SELECT portfolio_id FROM aou_umpf_portfolio WHERE short = ?";
+	static const char qry2[] = "\
+INSERT INTO aou_umpf_portfolio (short) VALUES (?)";
+	size_t mnlen;
+	uint64_t pf_id = 0UL;
+	dbstmt_t stmt;
+
+	if ((stmt = be_sql_prep(conn, qry1, countof_m1(qry1))) == NULL) {
+		return 0UL;
+	}
+	/* otherwise proceed as usual */
+	mnlen = strlen(mnemo);
+
+	/* bind the params */
+	be_sql_bind_text(conn, stmt, 1, mnemo, mnlen);
+	switch (be_sql_get_type(conn)) {
+	case BE_SQL_SQLITE:
+#if defined WITH_SQLITE
+		switch (sqlite3_step(stmt)) {
+		case SQLITE_ROW:
+			/* bingo! */
+			pf_id = sqlite3_column_int64(stmt, 0);
+		default:
+			break;
+		}
+#endif	 /* WITH_SQLITE */
+	default:
+		break;
+	}
+	be_sql_free_query(conn, stmt);
+
+	if (pf_id > 0) {
+		return pf_id;
+	}
+	/* otherwise create a new one */
+	stmt = be_sql_prep(conn, qry2, countof_m1(qry2));
+	be_sql_bind_text(conn, stmt, 1, mnemo, mnlen);
+	switch (be_sql_get_type(conn)) {
+	case BE_SQL_SQLITE:
+#if defined WITH_SQLITE
+		switch (sqlite3_step(stmt)) {
+		case SQLITE_DONE:
+			/* bingo! */
+			pf_id = be_sql_last_rowid(conn);
+		default:
+			break;
+		}
+#endif	 /* WITH_SQLITE */
+	default:
+		break;
+	}
+	be_sql_free_query(conn, stmt);
+	return pf_id;
+}
+
 DEFUN void
 be_sql_new_pf(dbconn_t conn, const char *mnemo, const char *descr)
 {
