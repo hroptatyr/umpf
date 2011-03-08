@@ -92,4 +92,8 @@ DECLF void be_sql_free_tag(dbconn_t, dbobj_t tag);
 DECLF void
 be_sql_set_pos(dbconn_t, dbobj_t tag, const char *mnemo, double l, double s);
 
+/**
+ * Return the number of positions in the tag TAG. */
+DECLF size_t be_sql_get_npos(dbconn_t c, dbobj_t tag);
+
 #endif	/* INCLUDED_be_sql_h_ */

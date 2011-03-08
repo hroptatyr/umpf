@@ -108,12 +108,16 @@ interpret_msg(int fd, umpf_msg_t msg)
 		const char *mnemo;
 		time_t stamp;
 		dbobj_t tag;
+		size_t nposs;
 
 		UMPF_DEBUG(MOD_PRE ": get_pf();\n");
 		mnemo = msg->pf.name;
 		stamp = msg->pf.stamp;
 
 		tag = be_sql_get_tag(umpf_dbconn, mnemo, stamp);
+		nposs = be_sql_get_npos(umpf_dbconn, tag);
+
+		UMPF_DEBUG(MOD_PRE ": found %zu positions\n", nposs);
 
 		/* reuse the message to send the answer */
 		msg->hdr.mt++;

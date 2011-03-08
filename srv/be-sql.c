@@ -1282,4 +1282,31 @@ VALUES (?, ?, ?, ?)";
 	return;
 }
 
+DEFUN size_t
+be_sql_get_npos(dbconn_t conn, dbobj_t tag)
+{
+	struct __tag_s *t = tag;
+	dbstmt_t stmt;
+	static const char qry[] = "\
+SELECT COUNT(security_id) FROM aou_umpf_position \
+WHERE tag_id = ?";
+	struct __bind_s b[1] = {{
+			.type = BE_BIND_TYPE_INT64,
+			.i64 = t->tag_id,
+		}};
+	size_t npos = 0UL;
+
+	if ((stmt = be_sql_prep(conn, qry, countof_m1(qry))) == NULL) {
+		return 0UL;
+	}
+	/* bind the params */
+	be_sql_bind(conn, stmt, b, countof(b));
+	/* execute */
+	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
+		npos = be_sql_column_int64(conn, stmt, 0);
+	}
+	be_sql_fin(conn, stmt);
+	return npos;
+}
+
 /* be-sql.c ends here */
