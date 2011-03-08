@@ -1159,6 +1159,7 @@ be_sql_new_tag(dbconn_t conn, const char *mnemo, time_t stamp)
 	tag->pf_id = be_sql_get_pf_id(conn, mnemo);
 	/* we create a new tag and return its id */
 	tag->tag_id = be_sql_new_tag_id(conn, tag->pf_id, stamp);
+	UMPF_DEBUG("tag_id <- %lu for pf_id %lu\n", tag->tag_id, tag->pf_id);
 	return (dbobj_t)tag;
 }
 
@@ -1194,6 +1195,8 @@ VALUES (?, ?, ?, ?)";
 
 	/* obtain a sec id first, get/creator */
 	if ((sec_id = be_sql_get_sec_id(c, t->pf_id, mnemo)) == 0UL) {
+		UMPF_DEBUG(BE_SQL ": no security id for pf %lu %s\n",
+			   t->pf_id, mnemo);
 		return;
 	} else if ((stmt = be_sql_prep(c, qry, countof_m1(qry))) == NULL) {
 		return;
