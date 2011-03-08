@@ -808,7 +808,7 @@ be_sql_bind(dbconn_t conn, dbstmt_t stmt, __bind_t b, size_t nb)
 		 * routine non-reentrant of course */
 		MYSQL_BIND *mb = (void*)gbuf;
 
-		memset(b, 0, nb * sizeof(*b));
+		memset(mb, 0, nb * sizeof(*mb));
 		for (size_t i = 0; i < nb; i++) {
 			be_mysql_bind1(mb + i, b + i);
 		}
