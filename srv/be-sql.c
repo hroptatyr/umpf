@@ -961,25 +961,22 @@ be_sql_get_pf_id(dbconn_t conn, const char *mnemo)
 SELECT portfolio_id FROM aou_umpf_portfolio WHERE short = ?";
 	static const char qry2[] = "\
 INSERT INTO aou_umpf_portfolio (short) VALUES (?)";
-	size_t mnlen;
+	size_t mnlen = strlen(mnemo);
 	uint64_t pf_id = 0UL;
 	dbstmt_t stmt;
+	struct __bind_s b[1] = {{
+			.type = BE_BIND_TYPE_TEXT,
+			.txt = mnemo,
+			.len = mnlen,
+		}};
 
 	if ((stmt = be_sql_prep(conn, qry1, countof_m1(qry1))) == NULL) {
 		return 0UL;
 	}
-	/* otherwise proceed as usual */
-	mnlen = strlen(mnemo);
 
 	/* bind the params */
-	{
-		struct __bind_s b[1] = {{
-				.type = BE_BIND_TYPE_TEXT,
-				.txt = mnemo,
-				.len = mnlen,
-			}};
-		be_sql_bind(conn, stmt, b, countof(b));
-	}
+	be_sql_bind(conn, stmt, b, countof(b));
+	/* execute */
 	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
 		pf_id = be_sql_column_int64(conn, stmt, 0);
 	}
@@ -991,14 +988,9 @@ INSERT INTO aou_umpf_portfolio (short) VALUES (?)";
 	}
 	/* otherwise create a new one */
 	stmt = be_sql_prep(conn, qry2, countof_m1(qry2));
-	{
-		struct __bind_s b[1] = {{
-				.type = BE_BIND_TYPE_TEXT,
-				.txt = mnemo,
-				.len = mnlen,
-			}};
-		be_sql_bind(conn, stmt, b, countof(b));
-	}
+	/* bind params */
+	be_sql_bind(conn, stmt, b, countof(b));
+	/* execute */
 	if (UNLIKELY(be_sql_exec_stmt(conn, stmt) != 0)) {
 		/* grrr */
 		pf_id = 0;
@@ -1065,22 +1057,20 @@ be_sql_new_tag_id(dbconn_t conn, uint64_t pf_id, time_t stamp)
 INSERT INTO aou_umpf_tag (portfolio_id, tag_stamp) VALUES (?, ?)";
 	uint64_t tag_id = 0UL;
 	dbstmt_t stmt;
+	struct __bind_s b[2] = {{
+			.type = BE_BIND_TYPE_INT64,
+			.i64 = pf_id,
+		}, {
+			.type = BE_BIND_TYPE_STAMP,
+			.tm = stamp,
+		}};
 
 	if ((stmt = be_sql_prep(conn, qry, countof_m1(qry))) == NULL) {
 		return 0UL;
 	}
 
 	/* bind the params */
-	{
-		struct __bind_s b[2] = {{
-				.type = BE_BIND_TYPE_INT64,
-				.i64 = pf_id,
-			}, {
-				.type = BE_BIND_TYPE_STAMP,
-				.tm = stamp,
-			}};
-		be_sql_bind(conn, stmt, b, countof(b));
-	}
+	be_sql_bind(conn, stmt, b, countof(b));
 	/* execute */
 	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
 		tag_id = be_sql_last_rowid(conn);
@@ -1130,10 +1120,9 @@ UPDATE aou_umpf_portfolio SET description = ? WHERE portfolio_id = ?";
 				.i64 = pf_id,
 			}};
 		be_sql_bind(conn, stmt, b, countof(b));
+		be_sql_exec_stmt(conn, stmt);
+		be_sql_fin(conn, stmt);
 	}
-
-	be_sql_exec_stmt(conn, stmt);
-	be_sql_fin(conn, stmt);
 	return (dbobj_t)pf_id;
 }
 
@@ -1214,10 +1203,10 @@ VALUES (?, ?, ?, ?)";
 				.dbl = s,
 			}};
 		be_sql_bind(c, stmt, b, countof(b));
+		/* execute */
+		be_sql_exec_stmt(c, stmt);
+		be_sql_fin(c, stmt);
 	}
-	/* execute */
-	be_sql_exec_stmt(c, stmt);
-	be_sql_fin(c, stmt);
 	return;
 }
 
