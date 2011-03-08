@@ -803,6 +803,7 @@ print_zulu(char *tgt, time_t stamp)
 DEFUN uint64_t
 be_sql_get_pf_id(dbconn_t conn, const char *mnemo)
 {
+/* this is really a get-create */
 	static const char qry1[] = "\
 SELECT portfolio_id FROM aou_umpf_portfolio WHERE short = ?";
 	static const char qry2[] = "\
@@ -855,7 +856,7 @@ INSERT INTO aou_umpf_portfolio (short) VALUES (?)";
 	default:
 		break;
 	}
-	be_sql_free_query(conn, stmt);
+	be_sql_fin(conn, stmt);
 	return pf_id;
 }
 
@@ -917,8 +918,73 @@ INSERT INTO aou_umpf_security (portfolio_id, short) VALUES (?, ?)";
 	default:
 		break;
 	}
-	be_sql_free_query(conn, stmt);
+	be_sql_fin(conn, stmt);
 	return sec_id;
+}
+
+static uint64_t
+be_sql_new_tag_id(dbconn_t conn, uint64_t pf_id, time_t stamp)
+{
+	static const char qry[] = "\
+INSERT INTO aou_umpf_tag (portfolio_id, tag_stamp) VALUES (?, ?)";
+	uint64_t tag_id = 0UL;
+	dbstmt_t stmt;
+
+	if ((stmt = be_sql_prep(conn, qry, countof_m1(qry))) == NULL) {
+		return 0UL;
+	}
+
+	/* bind the params */
+	switch (be_sql_get_type(conn)) {
+	case BE_SQL_MYSQL: {
+#if defined WITH_MYSQL
+		MYSQL_BIND b[2] = {
+			{
+				/* INTEGER PARAM */
+				.buffer_type = MYSQL_TYPE_LONG,
+				.buffer = (char*)&pf_id,
+				.is_null = 0,
+				.length = 0,
+			}, {
+				/* INTEGER PARAM */
+				.buffer_type = MYSQL_TYPE_LONG,
+				.buffer = (char*)&stamp,
+				.is_null = 0,
+				.length = 0,
+			}
+		};
+		mysql_stmt_bind_param(stmt, bind);
+		mysql_stmt_execute(stmt);
+		if (mysql_stmt_affected_rows(stmt) != 1) {
+			/* bummer */
+			goto out;
+		}
+#endif	/* WITH_MYSQL */
+		break;
+	}
+
+	case BE_SQL_SQLITE:
+#if defined WITH_SQLITE
+		sqlite3_bind_int64(stmt, 1, pf_id);
+		sqlite3_bind_int64(stmt, 2, stamp);
+		switch (sqlite3_step(stmt)) {
+		case SQLITE_DONE:
+			/* bingo! */
+			break;
+		default:
+			goto out;
+		}
+#endif	 /* WITH_SQLITE */
+		break;
+
+	default:
+		break;
+	}
+
+	tag_id = be_sql_last_rowid(conn);
+out:
+	be_sql_fin(conn, stmt);
+	return tag_id;
 }
 
 DEFUN void
@@ -999,7 +1065,7 @@ INSERT INTO aou_umpf_portfolio (short, description) VALUES (?, ?)";
 	pf_id = be_sql_last_rowid(conn);
 	UMPF_DEBUG(": pf_id <- %lu\n", pf_id);
 out:
-	be_sql_free_query(conn, stmt);
+	be_sql_fin(conn, stmt);
 	return;
 }
 
