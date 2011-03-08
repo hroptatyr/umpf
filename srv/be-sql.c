@@ -833,7 +833,7 @@ be_sql_bind(dbconn_t conn, dbstmt_t stmt, __bind_t b, size_t nb)
 	case BE_SQL_SQLITE:
 #if defined WITH_SQLITE
 		for (size_t i = 0; i < nb; i++) {
-			be_sqlite_bind1(stmt, i, b + i);
+			be_sqlite_bind1(stmt, /* starts at 1*/i + 1, b + i);
 		}
 #endif	/* WITH_SQLITE */
 		break;
