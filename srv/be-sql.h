@@ -45,6 +45,7 @@
 typedef void *dbobj_t;
 typedef void *dbconn_t;
 typedef void *dbqry_t;
+typedef void *dbstmt_t;
 typedef void (*dbrow_f)(dbobj_t *row, size_t num_fields, void *closure);
 
 DECLF dbconn_t
@@ -60,7 +61,18 @@ DECLF void be_sql_close(dbconn_t conn);
 DECLF void be_sql_new_pf(dbconn_t, const char *mnemo, const char *descr);
 
 /**
- * Corresponds to the first part of UMPF_MSG_SET_PF */
+ * Corresponds to the first part of UMPF_MSG_SET_PF.
+ * \param MNEMO is the mnemonic of the portfolio.
+ * \param STAMP is the time stamp at which positions are to be recorded. */
 DECLF dbobj_t be_sql_new_tag(dbconn_t, const char *mnemo, time_t stamp);
+
+/**
+ * Corresponds to the iteration part of UMPF_MSG_SET_PF.
+ * \param TAG is the portfolio tag as obtained by `be_sql_new_tag()'.
+ * \param MNEMO is the mnemonic of the security.
+ * \param L is the long side of the position.
+ * \param S is the short side of the position. */
+DECLF void
+be_sql_set_pos(dbconn_t, dbobj_t tag, const char *mnemo, double l, double s);
 
 #endif	/* INCLUDED_be_sql_h_ */
