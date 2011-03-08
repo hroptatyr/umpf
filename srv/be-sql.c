@@ -698,7 +698,7 @@ be_sql_last_rowid(dbconn_t conn)
 
 #if defined WITH_MYSQL
 static void
-be_mysql_bind1(MYSQL_BIND *tgt, __bind_t src)
+be_mysql_bind1(MYSQL_BIND *tgt, __bind_t src, void **extra)
 {
 	switch (src->type) {
 	case BE_BIND_TYPE_UNK:
@@ -725,30 +725,41 @@ be_mysql_bind1(MYSQL_BIND *tgt, __bind_t src)
 	case BE_BIND_TYPE_INT64:
 		tgt->buffer_type = MYSQL_TYPE_LONG;
 		tgt->buffer = (char*)&src->i64;
-		tgt->is_null = 0;
-		tgt->length = 0;
 		break;
 
 	case BE_BIND_TYPE_INT32:
 		tgt->buffer_type = MYSQL_TYPE_LONG;
 		tgt->buffer = (char*)&src->i32;
-		tgt->is_null = 0;
-		tgt->length = 0;
 		break;
 
 	case BE_BIND_TYPE_DOUBLE:
 		tgt->buffer_type = MYSQL_TYPE_DOUBLE;
 		tgt->buffer = (char*)&src->dbl;
-		tgt->is_null = 0;
-		tgt->length = 0;
 		break;
 
-	case BE_BIND_TYPE_STAMP:
-		tgt->buffer_type = MYSQL_TYPE_LONG;
-		tgt->buffer = (char*)&src->tm;
-		tgt->is_null = 0;
-		tgt->length = 0;
+	case BE_BIND_TYPE_STAMP: {
+		MYSQL_TIME *mytm = *extra;
+		struct tm tm = {0};
+
+		src->len = sizeof(*mytm);
+		tgt->buffer_type = MYSQL_TYPE_TIMESTAMP;
+		tgt->buffer = (char*)mytm;
+		tgt->length = &src->len;
+		/* wind extra */
+		*extra = (char*)mytm + sizeof(*mytm);
+		/* get gm time */
+		gmtime_r(&src->tm, &tm);
+		/* assign to mysql struct */
+		mytm->year = tm.tm_year + 1900;
+		mytm->month = tm.tm_mon + 1;
+		mytm->day = tm.tm_mday;
+		mytm->hour = tm.tm_hour;
+		mytm->minute = tm.tm_min;
+		mytm->second = tm.tm_sec;
+		mytm->second_part = 0UL;
+		mytm->neg = 0;
 		break;
+	}
 	}
 	return;
 }
@@ -808,10 +819,11 @@ be_sql_bind(dbconn_t conn, dbstmt_t stmt, __bind_t b, size_t nb)
 		/* just take our gbuf for this non-sense, makes this
 		 * routine non-reentrant of course */
 		MYSQL_BIND *mb = (void*)gbuf;
+		void *extra = (mb + nb);
 
 		memset(mb, 0, nb * sizeof(*mb));
 		for (size_t i = 0; i < nb; i++) {
-			be_mysql_bind1(mb + i, b + i);
+			be_mysql_bind1(mb + i, b + i, &extra);
 		}
 		mysql_stmt_bind_param(stmt, mb);
 #endif	/* WITH_MYSQL */
