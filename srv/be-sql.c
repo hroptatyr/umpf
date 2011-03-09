@@ -802,6 +802,81 @@ be_sql_column_int64(dbconn_t conn, dbstmt_t stmt, int idx)
 	return res;
 }
 
+#if defined WITH_MYSQL
+static enum enum_field_types
+bind_type_to_mysql_type(be_bind_type_t t)
+{
+	switch (t) {
+	case BE_BIND_TYPE_UNK:
+	default:
+		return MYSQL_TYPE_NULL;
+	case BE_BIND_TYPE_TEXT:
+		return MYSQL_TYPE_STRING;
+	case BE_BIND_TYPE_INT32:
+	case BE_BIND_TYPE_INT64:
+		return MYSQL_TYPE_LONG;
+	case BE_BIND_TYPE_STAMP:
+		return MYSQL_TYPE_TIMESTAMP;
+	case BE_BIND_TYPE_DOUBLE:
+		/* oculd be MYSQL_TYPE_NEWDECIMAL */
+		return MYSQL_TYPE_DOUBLE;
+	case BE_BIND_TYPE_NULL:
+		return MYSQL_TYPE_NULL;
+	}
+}
+
+static void
+be_mysql_fetch1(__bind_t tgt, MYSQL_BIND *src, int idx)
+{
+	UMPF_DEBUG(BE_SQL ": mysql result %d\n", src->buffer_type);
+	if (*src->is_null) {
+		tgt->type = BE_BIND_TYPE_NULL;
+		UMPF_DEBUG(BE_SQL ": mysql result is NULL\n");
+	}
+	switch (src->buffer_type) {
+	default:
+		UMPF_DEBUG(BE_SQL ": mysql returned unknown type\n");
+		break;
+
+	case MYSQL_TYPE_STRING:
+		UMPF_DEBUG(BE_SQL ": string act %zu buf %zu\n",
+			   *src->length, src->buffer_length);
+
+		tgt->type = BE_BIND_TYPE_TEXT;
+		tgt->len = *src->length;
+		if (*src->length > src->buffer_length) {
+			/* should reget the bugger */
+			UMPF_DEBUG(BE_SQL ": large string, IMPLEMENT ME\n");
+			tgt->ptr = NULL;
+		} else {
+			tgt->ptr = strndup(src->buffer, tgt->len);
+		}
+		break;
+
+	case MYSQL_TYPE_NULL:
+		tgt->type = BE_BIND_TYPE_NULL;
+		break;
+
+	case MYSQL_TYPE_LONG:
+		tgt->type = BE_BIND_TYPE_INT64;
+		tgt->i64 = *(int64_t*)src->buffer;
+		break;
+
+	case MYSQL_TYPE_DOUBLE:
+		tgt->type = BE_BIND_TYPE_DOUBLE;
+		tgt->dbl = *(double*)src->buffer;
+		break;
+
+	case MYSQL_TYPE_TIMESTAMP: {
+		UMPF_DEBUG(BE_SQL ": mysql time stamp, IMPLEMENT ME\n");
+		tgt->type = BE_BIND_TYPE_STAMP;
+		break;
+	}
+	}
+	return;
+}
+#endif	/* WITH_MYSQL */
+
 static int
 be_sql_fetch(dbconn_t conn, dbstmt_t stmt, __bind_t b, size_t nb)
 {
@@ -815,17 +890,40 @@ be_sql_fetch(dbconn_t conn, dbstmt_t stmt, __bind_t b, size_t nb)
 	case BE_SQL_MYSQL: {
 #if defined WITH_MYSQL
 		/* we only support the 0-th column */
-		size_t len;
-		MYSQL_BIND b = {
-			/* STRING PARAM */
-			.buffer = gbuf,
-			.buffer_length = sizeof(gbuf),
-			.length = &len,
-		};
-		mysql_stmt_bind_result(stmt, &b);
-		mysql_stmt_fetch(stmt);
-		gbuf[len] = '\0';
-		res = strtoul(gbuf, NULL, 10);
+		MYSQL_BIND *mb = (void*)gbuf;
+		size_t *lens = (void*)(mb + nb);
+		my_bool *nullps = (void*)(lens + nb);
+		union {
+			MYSQL_TIME tm;
+			void *ptr;
+		} *extra = (void*)(nullps + nb);
+		static int setupp = 0;
+
+		/* rinse and set up */
+		if (!setupp) {
+			UMPF_DEBUG(BE_SQL ": thorough rinse\n");
+			memset(mb, 0, (char*)(extra + nb) - (char*)mb);
+			for (size_t i = 0; i < nb; i++) {
+				mb[i].buffer_type =
+					bind_type_to_mysql_type(b[i].type);
+				mb[i].buffer = extra + i;
+				mb[i].buffer_length = sizeof(*extra);
+				mb[i].is_null = nullps + i;
+				mb[i].length = lens + i;
+			}
+			/* bind */
+			mysql_stmt_bind_result(stmt, mb);
+			setupp = 1;
+		} else {
+			/* just rinse our buffers */
+			memset(lens, 0, (char*)(extra + nb) - (char*)lens);
+		}
+		/* fetch */
+		setupp = (res = mysql_stmt_fetch(stmt)) == 0;
+		/* sort our results */
+		for (size_t i = 0; i < nb; i++) {
+			be_mysql_fetch1(b + i, mb + i, i);
+		}
 #endif	/* WITH_MYSQL */
 		break;
 	}
