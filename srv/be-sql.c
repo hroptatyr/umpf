@@ -220,16 +220,6 @@ be_mysql_free_query(dbqry_t qry)
 	return;
 }
 
-static dbobj_t
-be_mysql_fetch(dbqry_t qry, size_t row, size_t col)
-{
-	MYSQL_ROW r;
-
-	mysql_data_seek(qry, row);
-	r = mysql_fetch_row(qry);
-	return r[col];
-}
-
 static void
 be_mysql_rows(dbqry_t qry, dbrow_f rowf, void *clo)
 {
@@ -879,6 +869,41 @@ be_mysql_fetch1(__bind_t tgt, MYSQL_BIND *src, int idx)
 	}
 	return;
 }
+
+static int
+be_mysql_fetch(dbstmt_t stmt, __bind_t b, size_t nb)
+{
+	/* we only support the 0-th column */
+	MYSQL_BIND *mb = (void*)gbuf;
+	size_t *lens = (void*)(mb + nb);
+	my_bool *nullps = (void*)(lens + nb);
+	union {
+		MYSQL_TIME tm;
+		void *ptr;
+	} *extra = (void*)(nullps + nb);
+	int res;
+
+	/* rinse and set up */
+	UMPF_DEBUG(BE_SQL ": thorough rinse\n");
+	memset(mb, 0, (char*)(extra + nb) - (char*)mb);
+	for (size_t i = 0; i < nb; i++) {
+		mb[i].buffer_type =
+			bind_type_to_mysql_type(b[i].type);
+		mb[i].buffer = extra + i;
+		mb[i].buffer_length = sizeof(*extra);
+		mb[i].is_null = nullps + i;
+		mb[i].length = lens + i;
+	}
+	/* bind and fetch*/
+	mysql_stmt_bind_result(stmt, mb);
+	if (LIKELY((res = mysql_stmt_fetch(stmt)) == 0)) {
+		/* sort our results */
+		for (size_t i = 0; i < nb; i++) {
+			be_mysql_fetch1(b + i, mb + i, i);
+		}
+	}
+	return res;
+}
 #endif	/* WITH_MYSQL */
 
 static int
@@ -893,41 +918,7 @@ be_sql_fetch(dbconn_t conn, dbstmt_t stmt, __bind_t b, size_t nb)
 
 	case BE_SQL_MYSQL: {
 #if defined WITH_MYSQL
-		/* we only support the 0-th column */
-		MYSQL_BIND *mb = (void*)gbuf;
-		size_t *lens = (void*)(mb + nb);
-		my_bool *nullps = (void*)(lens + nb);
-		union {
-			MYSQL_TIME tm;
-			void *ptr;
-		} *extra = (void*)(nullps + nb);
-		static int setupp = 0;
-
-		/* rinse and set up */
-		if (!setupp) {
-			UMPF_DEBUG(BE_SQL ": thorough rinse\n");
-			memset(mb, 0, (char*)(extra + nb) - (char*)mb);
-			for (size_t i = 0; i < nb; i++) {
-				mb[i].buffer_type =
-					bind_type_to_mysql_type(b[i].type);
-				mb[i].buffer = extra + i;
-				mb[i].buffer_length = sizeof(*extra);
-				mb[i].is_null = nullps + i;
-				mb[i].length = lens + i;
-			}
-			/* bind */
-			mysql_stmt_bind_result(stmt, mb);
-			setupp = 1;
-		} else {
-			/* just rinse our buffers */
-			memset(lens, 0, (char*)(extra + nb) - (char*)lens);
-		}
-		/* fetch */
-		setupp = (res = mysql_stmt_fetch(stmt)) == 0;
-		/* sort our results */
-		for (size_t i = 0; i < nb; i++) {
-			be_mysql_fetch1(b + i, mb + i, i);
-		}
+		res = be_mysql_fetch(stmt, b, nb);
 #endif	/* WITH_MYSQL */
 		break;
 	}
