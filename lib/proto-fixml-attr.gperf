@@ -51,6 +51,8 @@ typedef enum {
 %define hash-function-name __aid_hash
 %define lookup-function-name __aiddify
 %null-strings
+/* we need this one as we plan on passing parts of a string */
+%compare-strncmp
 %enum
 
 struct umpf_attr_s {

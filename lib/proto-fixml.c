@@ -392,24 +392,18 @@ static void
 proc_FIXML_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	umpf_aid_t aid;
 
-	if (UNLIKELY(rattr > attr && ctx->ns[0].href == NULL)) {
-		const struct umpf_attr_s *a = __aiddify(attr, rattr - attr);
-
-		if (a && a->aid == UMPF_ATTR_XMLNS) {
-			proc_FIXML_xmlns(ctx, rattr, value);
-			return;
-		}
-	} else if (rattr > attr && !umpf_pref_p(ctx, attr, rattr - attr)) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
+	if (UNLIKELY(rattr > attr && !umpf_pref_p(ctx, attr, rattr - attr))) {
+		const struct umpf_attr_s *a = __aiddify(attr, rattr - attr - 1);
+		aid = a ? a->aid : UMPF_ATTR_UNK;
+	} else {
+		aid = sax_aid_from_attr(rattr);
 	}
 
 	switch (aid) {
 	case UMPF_ATTR_XMLNS:
-		proc_FIXML_xmlns(ctx, NULL, value);
+		proc_FIXML_xmlns(ctx, rattr == attr ? NULL : rattr, value);
 		break;
 	case UMPF_ATTR_S:
 	case UMPF_ATTR_R:
