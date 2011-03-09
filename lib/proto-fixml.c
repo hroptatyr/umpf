@@ -1082,13 +1082,17 @@ umpf_free_msg(umpf_msg_t msg)
 
 	case UMPF_MSG_GET_PF:
 	case UMPF_MSG_SET_PF:
+#if 0
 		/* the ins_qty's must be freed too */
+		/* wrong, the ins_qty's are contiguous and stem
+		 * from realloc'ing */
 		for (size_t j = 0; j < msg->pf.nposs; j++) {
 			struct __ins_qty_s *iq = msg->pf.poss + j;
 			if (iq->instr) {
 				free(iq->instr);
 			}
 		}
+#endif	/* 0 */
 	common:
 		/* common to all messages */
 		if (msg->pf.name) {
