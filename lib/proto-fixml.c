@@ -639,7 +639,7 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		}
 
 		/* generate a massage */
-		ctx->msg = msg = calloc(sizeof(*msg), 1);
+		ctx->msg = msg = calloc(1, sizeof(*msg));
 		/* sigh, subtle differences */
 		switch (tid) {
 		case UMPF_TAG_REQ_FOR_POSS:
@@ -990,7 +990,7 @@ umpf_parse_file(const char *file)
 umpf_msg_t
 umpf_parse_file_r(const char *file)
 {
-	__ctx_t ctx = calloc(sizeof(*ctx), 1);
+	__ctx_t ctx = calloc(1, sizeof(*ctx));
 	umpf_msg_t res = __umpf_parse_file(ctx, file);
 	free_ctx(ctx);
 	return res;
@@ -1070,7 +1070,7 @@ umpf_parse_blob_r(umpf_ctx_t *ctx, const char *buf, size_t bsz)
 	umpf_msg_t res;
 
 	if (UNLIKELY(*ctx == NULL)) {
-		*ctx = calloc(sizeof(struct __ctx_s), 1);
+		*ctx = calloc(1, sizeof(struct __ctx_s));
 		__umpf_parse_blob(*ctx, buf, bsz);
 	} else {
 		__umpf_parse_more_blob(*ctx, buf, bsz);
