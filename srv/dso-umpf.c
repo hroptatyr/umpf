@@ -130,13 +130,17 @@ interpret_msg(int fd, umpf_msg_t msg)
 		stamp = msg->pf.stamp;
 
 		tag = be_sql_get_tag(umpf_dbconn, mnemo, stamp);
-		npos = be_sql_get_npos(umpf_dbconn, tag);
+		if (LIKELY(tag != NULL)) {
+			/* set correct tag stamp */
+			msg->pf.stamp = be_sql_get_stamp(umpf_dbconn, tag);
+			/* get the number of positions */
+			npos = be_sql_get_npos(umpf_dbconn, tag);
+			UMPF_DEBUG(MOD_PRE ": found %zu positions\n", npos);
 
-		UMPF_DEBUG(MOD_PRE ": found %zu positions\n", npos);
-		/* should be a lib thing */
-		msg = umpf_msg_add_pos(msg, npos);
-		msg->pf.nposs = 0;
-		be_sql_get_pos(umpf_dbconn, tag, get_cb, msg);
+			msg = umpf_msg_add_pos(msg, npos);
+			msg->pf.nposs = 0;
+			be_sql_get_pos(umpf_dbconn, tag, get_cb, msg);
+		}
 
 		/* reuse the message to send the answer */
 		msg->hdr.mt++;
