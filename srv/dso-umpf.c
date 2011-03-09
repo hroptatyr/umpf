@@ -175,6 +175,8 @@ interpret_msg(int fd, umpf_msg_t msg)
 		UMPF_DEBUG(MOD_PRE ": unknown message %u\n", msg->hdr.mt);
 		break;
 	}
+	/* free 'im 'ere */
+	umpf_free_msg(msg);
 	return;
 }
 
@@ -193,7 +195,6 @@ handle_data(umpf_conn_t ctx, char *msg, size_t msglen)
 	if ((umsg = umpf_parse_blob_r(&p, msg, msglen)) != NULL) {
 		/* definite success */
 		interpret_msg(get_fd(ctx), umsg);
-		umpf_free_msg(umsg);
 
 	} else if (/* umsg == NULL && */ctx == NULL) {
 		/* error occurred */
