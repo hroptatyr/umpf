@@ -80,13 +80,13 @@ static dbconn_t umpf_dbconn;
 
 /* connexion<->proto glue */
 static int
-get_cb(const char *mnemo, double l, double s, void *clo)
+get_cb(char *mnemo, double l, double s, void *clo)
 {
 	umpf_msg_t msg = clo;
 	size_t idx = msg->pf.nposs;
 
 	UMPF_DEBUG(MOD_PRE ": %s %2.4f %2.4f\n", mnemo, l, s);
-	msg->pf.poss[idx].instr = strdup(mnemo);
+	msg->pf.poss[idx].instr = mnemo;
 	msg->pf.poss[idx].qty->_long = l;
 	msg->pf.poss[idx].qty->_shrt = s;
 	msg->pf.nposs++;

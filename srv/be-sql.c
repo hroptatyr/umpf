@@ -1267,7 +1267,7 @@ WHERE tag_id = ?";
 DECLF void
 be_sql_get_pos(
 	dbconn_t conn, dbobj_t tag,
-	int(*cb)(const char*, double, double, void*), void *clo)
+	int(*cb)(char*, double, double, void*), void *clo)
 {
 	struct __tag_s *t = tag;
 	dbstmt_t stmt;
@@ -1295,7 +1295,7 @@ WHERE tag_id = ?";
 		b[2].type = BE_BIND_TYPE_DOUBLE;
 
 		while (be_sql_fetch(conn, stmt, b, countof(b)) == 0 &&
-		       cb(b[0].txt, b[1].dbl, b[2].dbl, clo) == 0);
+		       cb(b[0].ptr, b[1].dbl, b[2].dbl, clo) == 0);
 	}
 	be_sql_fin(conn, stmt);
 	return;

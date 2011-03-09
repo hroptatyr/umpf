@@ -101,10 +101,11 @@ DECLF size_t be_sql_get_npos(dbconn_t c, dbobj_t tag);
  * first argument of which is the security mnemonic, second and third are
  * long and short position respectively and fourth is a closure pointer.
  * Iterating over the result set is stopped once the callback returns a
- * non-0 value. */
+ * non-0 value.
+ * Free()ing the mnemonic string is up to the caller. */
 DECLF void
 be_sql_get_pos(
 	dbconn_t conn, dbobj_t tag,
-	int(*cb)(const char*, double, double, void*), void *clo);
+	int(*cb)(char*, double, double, void*), void *clo);
 
 #endif	/* INCLUDED_be_sql_h_ */
