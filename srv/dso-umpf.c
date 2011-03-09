@@ -79,6 +79,21 @@ static dbconn_t umpf_dbconn;
 
 
 /* connexion<->proto glue */
+static int
+get_cb(const char *mnemo, double l, double s, void *clo)
+{
+	umpf_msg_t msg = clo;
+	size_t idx = msg->pf.nposs;
+
+	UMPF_DEBUG(MOD_PRE ": %s %2.4f %2.4f\n", mnemo, l, s);
+	msg->pf.poss[idx].instr = strdup(mnemo);
+	msg->pf.poss[idx].qty->_long = l;
+	msg->pf.poss[idx].qty->_shrt = s;
+	msg->pf.nposs++;
+	/* don't stop on our kind, request more grub */
+	return 0;
+}
+
 static void
 interpret_msg(int fd, umpf_msg_t msg)
 {
@@ -108,16 +123,20 @@ interpret_msg(int fd, umpf_msg_t msg)
 		const char *mnemo;
 		time_t stamp;
 		dbobj_t tag;
-		size_t nposs;
+		size_t npos;
 
 		UMPF_DEBUG(MOD_PRE ": get_pf();\n");
 		mnemo = msg->pf.name;
 		stamp = msg->pf.stamp;
 
 		tag = be_sql_get_tag(umpf_dbconn, mnemo, stamp);
-		nposs = be_sql_get_npos(umpf_dbconn, tag);
+		npos = be_sql_get_npos(umpf_dbconn, tag);
 
-		UMPF_DEBUG(MOD_PRE ": found %zu positions\n", nposs);
+		UMPF_DEBUG(MOD_PRE ": found %zu positions\n", npos);
+		/* should be a lib thing */
+		msg = realloc(msg, sizeof(*msg) + npos * sizeof(*msg->pf.poss));
+		msg->pf.nposs = 0;
+		be_sql_get_pos(umpf_dbconn, tag, get_cb, msg);
 
 		/* reuse the message to send the answer */
 		msg->hdr.mt++;

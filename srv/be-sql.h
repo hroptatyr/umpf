@@ -96,4 +96,15 @@ be_sql_set_pos(dbconn_t, dbobj_t tag, const char *mnemo, double l, double s);
  * Return the number of positions in the tag TAG. */
 DECLF size_t be_sql_get_npos(dbconn_t c, dbobj_t tag);
 
+/**
+ * Retrieve positions in TAG calling a callback for each,
+ * first argument of which is the security mnemonic, second and third are
+ * long and short position respectively and fourth is a closure pointer.
+ * Iterating over the result set is stopped once the callback returns a
+ * non-0 value. */
+DECLF void
+be_sql_get_pos(
+	dbconn_t conn, dbobj_t tag,
+	int(*cb)(const char*, double, double, void*), void *clo);
+
 #endif	/* INCLUDED_be_sql_h_ */

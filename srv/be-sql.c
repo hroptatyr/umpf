@@ -1309,4 +1309,33 @@ WHERE tag_id = ?";
 	return npos;
 }
 
+DECLF void
+be_sql_get_pos(
+	dbconn_t conn, dbobj_t tag,
+	int(*cb)(const char*, double, double, void*), void *clo)
+{
+	struct __tag_s *t = tag;
+	dbstmt_t stmt;
+	static const char qry[] = "\
+SELECT short, long_qty, short_qty FROM aou_umpf_position \
+LEFT JOIN aou_umpf_security USING (security_id) \
+WHERE tag_id = ?";
+	struct __bind_s b[1] = {{
+			.type = BE_BIND_TYPE_INT64,
+			.i64 = t->tag_id,
+		}};
+
+	if ((stmt = be_sql_prep(conn, qry, countof_m1(qry))) == NULL) {
+		return;
+	}
+	/* bind the params */
+	be_sql_bind(conn, stmt, b, countof(b));
+	/* execute */
+	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
+		//be_sql_column_int64(conn, stmt, 0);
+	}
+	be_sql_fin(conn, stmt);
+	return;
+}
+
 /* be-sql.c ends here */
