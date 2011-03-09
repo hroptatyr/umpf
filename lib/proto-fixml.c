@@ -111,7 +111,7 @@ struct __ctx_s {
 const char fixml50_ns_uri[] = "http://www.fixprotocol.org/FIXML-5-0";
 const char fixml44_ns_uri[] = "http://www.fixprotocol.org/FIXML-4-4";
 
-#if defined DEBUG_FLAG
+#if defined DEBUG_FLAG && 0
 # include <stdint.h>
 # undef xfree
 static void
