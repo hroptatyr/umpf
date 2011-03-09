@@ -338,6 +338,26 @@ umpf_pref_p(__ctx_t ctx, const char *pref, size_t pref_len)
 	}
 }
 
+static const char*
+__pref_to_uri(__ctx_t ctx, const char *pref, size_t pref_len)
+{
+	if (LIKELY(pref_len == 0 && ctx->ns[0].pref == NULL)) {
+		return ctx->ns[0].href;
+	}
+	for (size_t i = 1; i < ctx->nns; i++) {
+		/* special service for us because we're lazy:
+		 * you can pass pref = "foo:" and say pref_len is 4
+		 * easier to deal with when strings are const etc. */
+		if (pref[pref_len - 1] == ':') {
+			pref_len--;
+		}
+		if (strncmp(ctx->ns[i].pref, pref, pref_len) == 0) {
+			return ctx->ns[i].href;
+		}
+	}
+	return NULL;
+}
+
 /* stuff buf handling */
 static void
 stuff_buf_reset(__ctx_t ctx)
@@ -383,7 +403,7 @@ sax_aid_from_attr(const char *attr)
 static void
 proc_FIXML_xmlns(__ctx_t ctx, const char *pref, const char *value)
 {
-	UMPF_DEBUG(PFIXML_PRE ": reg'ging name space %s\n", pref);
+	UMPF_DEBUG(PFIXML_PRE ": reg'ging name space %s <- %s\n", pref, value);
 	umpf_reg_ns(ctx, pref, value);
 	return;
 }
@@ -421,7 +441,7 @@ static void
 proc_REQ_FOR_POSS_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	umpf_msg_t msg = ctx->msg;
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
@@ -457,7 +477,7 @@ static void
 proc_REQ_FOR_POSS_ACK_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	umpf_msg_t msg = ctx->msg;
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
@@ -502,7 +522,7 @@ static void
 proc_PTY_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	umpf_msg_t msg = get_state_object(ctx);
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
@@ -536,7 +556,7 @@ static void
 proc_INSTRMT_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
@@ -561,7 +581,7 @@ static void
 proc_QTY_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	struct __ins_qty_s *iq = get_state_object(ctx);
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
@@ -599,8 +619,10 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 	const umpf_tid_t tid = sax_tid_from_tag(rname);
 
 	if (!umpf_pref_p(ctx, name, rname - name) && ctx->msg != NULL) {
+		const char *ns_uri = __pref_to_uri(ctx, name, rname - name);
 		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", name);
+		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s (%s)\n",
+			   name, ns_uri);
 		return;
 	}
 
