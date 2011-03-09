@@ -759,10 +759,15 @@ bind_type_to_mysql_type(be_bind_type_t t)
 static void
 be_mysql_fetch1(__bind_t tgt, dbstmt_t stmt, MYSQL_BIND *src, int idx)
 {
-	UMPF_DEBUG(BE_SQL ": mysql result %d\n", src->buffer_type);
+	/* i'm not sure about this, we may change the type slot
+	 * of TGT in accordance to what mysql deems feasible,
+	 * i.e. if you request a INT64 in TGT and mysql comes up
+	 * with MYSQL_TYPE_TIMESTAMP we'd change the type to
+	 * BE_BIND_TYPE_STAMP, consecutive calls will then
+	 * request a time stamp. */
 	if (*src->is_null) {
-		tgt->type = BE_BIND_TYPE_NULL;
 		UMPF_DEBUG(BE_SQL ": mysql result is NULL\n");
+		return;
 	}
 	switch (src->buffer_type) {
 	default:
@@ -770,9 +775,6 @@ be_mysql_fetch1(__bind_t tgt, dbstmt_t stmt, MYSQL_BIND *src, int idx)
 		break;
 
 	case MYSQL_TYPE_STRING:
-		UMPF_DEBUG(BE_SQL ": string act %zu buf %zu\n",
-			   *src->length, src->buffer_length);
-
 		tgt->type = BE_BIND_TYPE_TEXT;
 		tgt->len = *src->length;
 		if (*src->length > src->buffer_length) {
@@ -829,7 +831,6 @@ be_mysql_fetch(dbstmt_t stmt, __bind_t b, size_t nb)
 	} *extra = (void*)(nullps + nb);
 
 	/* rinse and set up */
-	UMPF_DEBUG(BE_SQL ": thorough rinse\n");
 	memset(mb, 0, (char*)(extra + nb) - (char*)mb);
 	for (size_t i = 0; i < nb; i++) {
 		mb[i].buffer_type =
