@@ -570,108 +570,6 @@ be_sql_free_query(dbconn_t conn, dbqry_t qry)
 	return;
 }
 
-static dbobj_t
-be_sql_fetch(dbconn_t conn, dbqry_t qry, size_t row, size_t col)
-{
-	switch (be_sql_get_type(conn)) {
-	case BE_SQL_UNK:
-	default:
-		return NULL;
-
-	case BE_SQL_MYSQL:
-#if defined WITH_MYSQL
-		return be_mysql_fetch(qry, row, col);
-#else  /* !WITH_MYSQL */
-		return NULL;
-#endif	/* WITH_MYSQL */
-
-	case BE_SQL_SQLITE:
-#if defined WITH_SQLITE
-		return be_sqlite_fetch(qry, row, col);
-#else  /* !WITH_SQLITE */
-		return NULL;
-#endif	/* WITH_SQLITE */
-	}
-}
-
-static void
-be_sql_rows(dbconn_t conn, dbqry_t qry, dbrow_f rowf, void *clo)
-{
-	switch (be_sql_get_type(conn)) {
-	case BE_SQL_UNK:
-	default:
-		break;
-
-	case BE_SQL_MYSQL:
-#if defined WITH_MYSQL
-		be_mysql_rows(qry, rowf, clo);
-		break;
-#else  /* !WITH_MYSQL */
-		break;
-#endif	/* WITH_MYSQL */
-
-	case BE_SQL_SQLITE:
-#if defined WITH_SQLITE
-		be_sqlite_rows(qry, rowf, clo);
-		break;
-#else  /* !WITH_SQLITE */
-		break;
-#endif	/* WITH_SQLITE */
-	}
-	return;
-}
-
-static void
-be_sql_rows_max(dbconn_t c, dbqry_t q, dbrow_f rowf, void *clo, size_t max_rows)
-{
-	switch (be_sql_get_type(c)) {
-	case BE_SQL_UNK:
-	default:
-		break;
-
-	case BE_SQL_MYSQL:
-#if defined WITH_MYSQL
-		be_mysql_rows_max(q, rowf, clo, max_rows);
-		break;
-#else  /* !WITH_MYSQL */
-		break;
-#endif	/* WITH_MYSQL */
-
-	case BE_SQL_SQLITE:
-#if defined WITH_SQLITE
-		be_sqlite_rows_max(q, rowf, clo, max_rows);
-		break;
-#else  /* !WITH_SQLITE */
-		break;
-#endif	/* WITH_SQLITE */
-	}
-	return;
-}
-
-static size_t
-be_sql_nrows(dbconn_t conn, dbqry_t qry)
-{
-	switch (be_sql_get_type(conn)) {
-	case BE_SQL_UNK:
-	default:
-		return 0UL;
-
-	case BE_SQL_MYSQL:
-#if defined WITH_MYSQL
-		return be_mysql_nrows(qry);
-#else  /* !WITH_MYSQL */
-		return 0UL;
-#endif	/* WITH_MYSQL */
-
-	case BE_SQL_SQLITE:
-#if defined WITH_SQLITE
-		return be_sqlite_nrows(qry);
-#else  /* !WITH_SQLITE */
-		return 0UL;
-#endif	/* WITH_SQLITE */
-	}
-}
-
 static uint64_t
 be_sql_last_rowid(dbconn_t conn)
 {
@@ -878,6 +776,43 @@ be_sql_column_int64(dbconn_t conn, dbstmt_t stmt, int idx)
 	case BE_SQL_SQLITE:
 #if defined WITH_SQLITE
 		res = sqlite3_column_int64(stmt, idx);
+#endif	/* WITH_SQLITE */
+		break;
+	}
+	return res;
+}
+
+static int
+be_sql_fetch(dbconn_t conn, dbstmt_t stmt, __bind_t b, size_t nb)
+{
+	int res;
+
+	switch (be_sql_get_type(conn)) {
+	case BE_SQL_UNK:
+	default:
+		break;
+
+	case BE_SQL_MYSQL: {
+#if defined WITH_MYSQL
+		/* we only support the 0-th column */
+		size_t len;
+		MYSQL_BIND b = {
+			/* STRING PARAM */
+			.buffer = gbuf,
+			.buffer_length = sizeof(gbuf),
+			.length = &len,
+		};
+		mysql_stmt_bind_result(stmt, &b);
+		mysql_stmt_fetch(stmt);
+		gbuf[len] = '\0';
+		res = strtoul(gbuf, NULL, 10);
+#endif	/* WITH_MYSQL */
+		break;
+	}
+
+	case BE_SQL_SQLITE:
+#if defined WITH_SQLITE
+		//res = sqlite3_column_int64(stmt, idx);
 #endif	/* WITH_SQLITE */
 		break;
 	}
@@ -1332,7 +1267,15 @@ WHERE tag_id = ?";
 	be_sql_bind(conn, stmt, b, countof(b));
 	/* execute */
 	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
-		//be_sql_column_int64(conn, stmt, 0);
+		struct __bind_s b[3];
+
+		/* just assign the type wishes for the results */
+		b[0].type = BE_BIND_TYPE_TEXT;
+		b[1].type = BE_BIND_TYPE_DOUBLE;
+		b[2].type = BE_BIND_TYPE_DOUBLE;
+
+		while (be_sql_fetch(conn, stmt, b, countof(b)) &&
+		       cb(b[0].txt, b[1].dbl, b[2].dbl, clo) == 0);
 	}
 	be_sql_fin(conn, stmt);
 	return;
