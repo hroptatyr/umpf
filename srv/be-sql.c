@@ -74,6 +74,7 @@ struct __bind_s {
 	be_bind_type_t type;
 	union {
 		const char *txt;
+		char *ptr;
 		int32_t i32;
 		int64_t i64;
 		time_t tm;
@@ -606,7 +607,7 @@ be_mysql_bind1(MYSQL_BIND *tgt, __bind_t src, void **extra)
 	case BE_BIND_TYPE_TEXT:
 		tgt->buffer_type = MYSQL_TYPE_STRING;
 		/* get around const qualifier, sigh */
-		tgt->buffer = strchr(src->txt, *src->txt);
+		tgt->buffer = src->ptr;
 		if (src->len > 0) {
 			tgt->buffer_length = src->len;
 		} else {
