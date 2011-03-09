@@ -111,6 +111,21 @@ struct __ctx_s {
 const char fixml50_ns_uri[] = "http://www.fixprotocol.org/FIXML-5-0";
 const char fixml44_ns_uri[] = "http://www.fixprotocol.org/FIXML-4-4";
 
+#if defined DEBUG_FLAG
+# include <stdint.h>
+# undef xfree
+static void
+__dbg_free(void *ptr)
+{
+/* assume it's at least 8 bytes */
+	*(uint64_t*)ptr = 0xDEADBEEFCAFEBABE;
+	free(ptr);
+	return;
+}
+
+# define xfree(x)	(__dbg_free(x), x = (void*)0xDEADBEEFCAFEBABEUL)
+#endif	/* DEBUG_FLAG */
+
 
 static void
 init_ctxcb(__ctx_t ctx)
@@ -917,11 +932,11 @@ deinit(__ctx_t ctx)
 
 	for (size_t i = 0; i < ctx->nns; i++) {
 		if (ctx->ns[i].pref) {
-			free(ctx->ns[i].pref);
+			xfree(ctx->ns[i].pref);
 		}
 		ctx->ns[i].pref = NULL;
 		if (ctx->ns[i].href) {
-			free(ctx->ns[i].href);
+			xfree(ctx->ns[i].href);
 		}
 		ctx->ns[i].href = NULL;
 	}
@@ -941,9 +956,9 @@ free_ctx(__ctx_t ctx)
 		xmlFreeParserCtxt(ctx->pp);
 	}
 	if (ctx->sbuf) {
-		free(ctx->sbuf);
+		xfree(ctx->sbuf);
 	}
-	free(ctx);
+	xfree(ctx);
 	return;
 }
 
@@ -1076,7 +1091,7 @@ umpf_free_msg(umpf_msg_t msg)
 	case UMPF_MSG_NEW_PF:
 		/* satellite only occurs in new pf */
 		if (msg->new_pf.satellite) {
-			free(msg->new_pf.satellite);
+			xfree(msg->new_pf.satellite);
 		}
 		goto common;
 
@@ -1089,19 +1104,19 @@ umpf_free_msg(umpf_msg_t msg)
 		for (size_t j = 0; j < msg->pf.nposs; j++) {
 			struct __ins_qty_s *iq = msg->pf.poss + j;
 			if (iq->instr) {
-				free(iq->instr);
+				xfree(iq->instr);
 			}
 		}
 #endif	/* 0 */
 	common:
 		/* common to all messages */
 		if (msg->pf.name) {
-			free(msg->pf.name);
+			xfree(msg->pf.name);
 		}
 	default:
 		break;
 	}
-	free(msg);
+	xfree(msg);
 	return;
 }
 
