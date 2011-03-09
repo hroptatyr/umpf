@@ -134,7 +134,7 @@ interpret_msg(int fd, umpf_msg_t msg)
 
 		UMPF_DEBUG(MOD_PRE ": found %zu positions\n", npos);
 		/* should be a lib thing */
-		msg = realloc(msg, sizeof(*msg) + npos * sizeof(*msg->pf.poss));
+		msg = umpf_msg_add_pos(msg, npos);
 		msg->pf.nposs = 0;
 		be_sql_get_pos(umpf_dbconn, tag, get_cb, msg);
 
