@@ -794,7 +794,7 @@ bind_type_to_mysql_type(be_bind_type_t t)
 }
 
 static void
-be_mysql_fetch1(__bind_t tgt, MYSQL_BIND *src, int idx)
+be_mysql_fetch1(__bind_t tgt, dbstmt_t stmt, MYSQL_BIND *src, int idx)
 {
 	UMPF_DEBUG(BE_SQL ": mysql result %d\n", src->buffer_type);
 	if (*src->is_null) {
@@ -814,8 +814,13 @@ be_mysql_fetch1(__bind_t tgt, MYSQL_BIND *src, int idx)
 		tgt->len = *src->length;
 		if (*src->length > src->buffer_length) {
 			/* should reget the bugger */
-			UMPF_DEBUG(BE_SQL ": large string, IMPLEMENT ME\n");
-			tgt->ptr = NULL;
+			size_t new_size = *src->length;
+
+			tgt->ptr = malloc(new_size + 1);
+			src->buffer = tgt->ptr;
+			src->buffer_length = new_size;
+			mysql_stmt_fetch_column(stmt, src, idx, 0);
+			tgt->ptr[new_size] = '\0';
 		} else {
 			tgt->ptr = strndup(src->buffer, tgt->len);
 		}
@@ -859,7 +864,6 @@ be_mysql_fetch(dbstmt_t stmt, __bind_t b, size_t nb)
 		MYSQL_TIME tm;
 		void *ptr;
 	} *extra = (void*)(nullps + nb);
-	int res;
 
 	/* rinse and set up */
 	UMPF_DEBUG(BE_SQL ": thorough rinse\n");
@@ -874,13 +878,17 @@ be_mysql_fetch(dbstmt_t stmt, __bind_t b, size_t nb)
 	}
 	/* bind and fetch*/
 	mysql_stmt_bind_result(stmt, mb);
-	if (LIKELY((res = mysql_stmt_fetch(stmt)) == 0)) {
+	switch (mysql_stmt_fetch(stmt)) {
+	case MYSQL_NO_DATA:
+	case 1:
+		return -1;
+	default:
 		/* sort our results */
 		for (size_t i = 0; i < nb; i++) {
-			be_mysql_fetch1(b + i, mb + i, i);
+			be_mysql_fetch1(b + i, stmt, mb + i, i);
 		}
 	}
-	return res;
+	return 0;
 }
 #endif	/* WITH_MYSQL */
 
