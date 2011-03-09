@@ -597,6 +597,32 @@ be_sql_last_rowid(dbconn_t conn)
 
 #if defined WITH_MYSQL
 static void
+tm_to_mysql_time(MYSQL_TIME *tgt, struct tm *src)
+{
+	tgt->year = src->tm_year + 1900;
+	tgt->month = src->tm_mon + 1;
+	tgt->day = src->tm_mday;
+	tgt->hour = src->tm_hour;
+	tgt->minute = src->tm_min;
+	tgt->second = src->tm_sec;
+	tgt->second_part = 0UL;
+	tgt->neg = 0;
+	return;
+}
+
+static void
+mysql_time_to_tm(struct tm *tgt, MYSQL_TIME *src)
+{
+	tgt->tm_year = src->year - 1900;
+	tgt->tm_mon = src->month + 1;
+	tgt->tm_mday = src->day;
+	tgt->tm_hour = src->hour;
+	tgt->tm_min = src->minute;
+	tgt->tm_sec = src->second;
+	return;
+}
+
+static void
 be_mysql_bind1(MYSQL_BIND *tgt, __bind_t src, void **extra)
 {
 	switch (src->type) {
@@ -649,14 +675,7 @@ be_mysql_bind1(MYSQL_BIND *tgt, __bind_t src, void **extra)
 		/* get gm time */
 		gmtime_r(&src->tm, &tm);
 		/* assign to mysql struct */
-		mytm->year = tm.tm_year + 1900;
-		mytm->month = tm.tm_mon + 1;
-		mytm->day = tm.tm_mday;
-		mytm->hour = tm.tm_hour;
-		mytm->minute = tm.tm_min;
-		mytm->second = tm.tm_sec;
-		mytm->second_part = 0UL;
-		mytm->neg = 0;
+		tm_to_mysql_time(mytm, &tm);
 		break;
 	}
 	}
