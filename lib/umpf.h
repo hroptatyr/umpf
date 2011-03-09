@@ -151,6 +151,10 @@ extern size_t umpf_print_msg(int outfd, umpf_msg_t);
 extern size_t umpf_seria_msg(char **tgt, size_t tsz, umpf_msg_t);
 
 /**
+ * Resize message to take NPOS additional positions. */
+extern umpf_msg_t umpf_msg_add_pos(umpf_msg_t msg, size_t npos);
+
+/**
  * Name space URI for FIXML 5.0 */
 extern const char fixml50_ns_uri[];
 

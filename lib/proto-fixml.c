@@ -1101,4 +1101,17 @@ umpf_free_msg(umpf_msg_t msg)
 	return;
 }
 
+umpf_msg_t
+umpf_msg_add_pos(umpf_msg_t msg, size_t npos)
+{
+	size_t cur_nposs = msg->pf.nposs;
+	size_t new_nposs = cur_nposs + npos;
+
+	msg = realloc(msg, sizeof(*msg) + new_nposs * sizeof(*msg->pf.poss));
+	msg->pf.nposs = new_nposs;
+	/* rinse */
+	memset(msg->pf.poss + cur_nposs, 0, npos * sizeof(*msg->pf.poss));
+	return msg;
+}
+
 /* proto-xml.c ends here */
