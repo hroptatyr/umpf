@@ -868,8 +868,12 @@ be_mysql_fetch1(__bind_t tgt, MYSQL_BIND *src, int idx)
 		break;
 
 	case MYSQL_TYPE_TIMESTAMP: {
-		UMPF_DEBUG(BE_SQL ": mysql time stamp, IMPLEMENT ME\n");
+		MYSQL_TIME *mytm = (void*)src->buffer;
+		struct tm tm = {0};
+
 		tgt->type = BE_BIND_TYPE_STAMP;
+		mysql_time_to_tm(&tm, mytm);
+		tgt->tm = timegm(&tm);
 		break;
 	}
 	}
