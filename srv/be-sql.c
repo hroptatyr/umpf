@@ -337,28 +337,6 @@ be_sqlite_free_query(dbqry_t qry)
 	return;
 }
 
-static dbobj_t
-be_sqlite_fetch(dbqry_t qry, size_t row, size_t col)
-{
-	sqlite3_value *res;
-
-	/* `seek' to ROW-th row */
-	for (size_t i = 0; i < row; i++) {
-		sqlite3_step(qry);
-	}
-	/* now get the data for it */
-	switch (sqlite3_step(qry)) {
-	case SQLITE_ROW:
-		res = sqlite3_column_value(qry, col);
-		break;
-	default:
-		res = NULL;
-		break;
-	}
-	sqlite3_reset(qry);
-	return res;
-}
-
 static void
 be_sqlite_rows(dbqry_t qry, dbrow_f rowf, void *clo)
 {
@@ -906,6 +884,75 @@ be_mysql_fetch(dbstmt_t stmt, __bind_t b, size_t nb)
 }
 #endif	/* WITH_MYSQL */
 
+#if defined WITH_SQLITE
+static void
+be_sqlite_fetch1(__bind_t tgt, dbstmt_t stmt, int idx)
+{
+	UMPF_DEBUG(BE_SQL ": sqlite result\n");
+
+	switch (tgt->type) {
+	case BE_BIND_TYPE_UNK:
+	case BE_BIND_TYPE_NULL:
+	default:
+		break;
+
+	case BE_BIND_TYPE_TEXT: {
+		const char *tmp = (const char*)sqlite3_column_text(stmt, idx);
+
+		if (LIKELY(tmp != NULL)) {
+			size_t len = strlen(tmp);
+
+			tgt->ptr = strndup(tmp, len);
+			tgt->len = len;
+		} else {
+			tgt->ptr = NULL;
+		}
+		break;
+	}
+
+	case BE_BIND_TYPE_INT32:
+		tgt->i32 = sqlite3_column_int(stmt, idx);
+		break;
+
+	case BE_BIND_TYPE_INT64:
+		tgt->i64 = sqlite3_column_int64(stmt, idx);
+		break;
+
+	case BE_BIND_TYPE_DOUBLE:
+		tgt->dbl = sqlite3_column_double(stmt, idx);
+		break;
+
+	case BE_BIND_TYPE_STAMP: {
+		struct tm tm = {0};
+
+		tgt->tm = sqlite3_column_int(stmt, idx);
+		break;
+	}
+	}
+	return;
+}
+
+static int
+be_sqlite_fetch(dbstmt_t stmt, __bind_t b, size_t nb)
+{
+	/* check if we need to do stuff */
+	if (UNLIKELY(sqlite3_data_count(stmt) == 0)) {
+		return -1;
+	}
+	/* sqlite data IS fetched already, so just frob and fetch again */
+	for (size_t i = 0; i < nb; i++) {
+		be_sqlite_fetch1(b + i, stmt, i);
+	}
+	switch (sqlite3_step(stmt)) {
+	case SQLITE_DONE:
+	case SQLITE_ROW:
+		return 0;
+	default:
+		return -1;
+	}
+}
+#endif	/* WITH_SQLITE */
+
 static int
 be_sql_fetch(dbconn_t conn, dbstmt_t stmt, __bind_t b, size_t nb)
 {
@@ -925,7 +972,7 @@ be_sql_fetch(dbconn_t conn, dbstmt_t stmt, __bind_t b, size_t nb)
 
 	case BE_SQL_SQLITE:
 #if defined WITH_SQLITE
-		//res = sqlite3_column_int64(stmt, idx);
+		res = be_sqlite_fetch(stmt, b, nb);
 #endif	/* WITH_SQLITE */
 		break;
 	}
