@@ -1294,7 +1294,7 @@ WHERE tag_id = ?";
 		b[1].type = BE_BIND_TYPE_DOUBLE;
 		b[2].type = BE_BIND_TYPE_DOUBLE;
 
-		while (be_sql_fetch(conn, stmt, b, countof(b)) &&
+		while (be_sql_fetch(conn, stmt, b, countof(b)) == 0 &&
 		       cb(b[0].txt, b[1].dbl, b[2].dbl, clo) == 0);
 	}
 	be_sql_fin(conn, stmt);
