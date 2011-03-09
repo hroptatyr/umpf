@@ -1025,8 +1025,16 @@ print_zulu(char *tgt, time_t stamp)
 
 
 /* actual actions */
+/* tag mumbo jumbo */
+struct __tag_s {
+	uint64_t pf_id;
+	uint64_t tag_id;
+	time_t tag_stamp;
+	time_t log_stamp;
+};
+
 static uint64_t
-be_sql_get_pf_id(dbconn_t conn, const char *mnemo)
+__get_pf_id(dbconn_t conn, const char *mnemo)
 {
 /* this is really a get-create */
 	static const char qry1[] = "\
@@ -1071,7 +1079,7 @@ INSERT INTO aou_umpf_portfolio (short) VALUES (?)";
 }
 
 static uint64_t
-be_sql_get_sec_id(dbconn_t conn, uint64_t pf_id, const char *mnemo)
+__get_sec_id(dbconn_t conn, uint64_t pf_id, const char *mnemo)
 {
 	static const char qry1[] = "\
 SELECT security_id FROM aou_umpf_security WHERE portfolio_id = ? AND short = ?";
@@ -1118,7 +1126,7 @@ INSERT INTO aou_umpf_security (portfolio_id, short) VALUES (?, ?)";
 }
 
 static uint64_t
-be_sql_new_tag_id(dbconn_t conn, uint64_t pf_id, time_t stamp)
+__new_tag_id(dbconn_t conn, uint64_t pf_id, time_t stamp)
 {
 	static const char qry[] = "\
 INSERT INTO aou_umpf_tag (portfolio_id, tag_stamp) VALUES (?, ?)";
@@ -1147,7 +1155,7 @@ INSERT INTO aou_umpf_tag (portfolio_id, tag_stamp) VALUES (?, ?)";
 }
 
 static uint64_t
-be_sql_get_tag_id(dbconn_t conn, uint64_t pf_id, time_t stamp)
+__get_tag_id(dbconn_t conn, uint64_t pf_id, time_t stamp)
 {
 /* finds the largest tag id whose tag_stamp is before STAMP */
 	static const char qry[] = "\
@@ -1179,6 +1187,53 @@ LIMIT 1";
 	return tag_id;
 }
 
+static int
+__get_tag(struct __tag_s *tag, dbconn_t conn, uint64_t pf_id, time_t stamp)
+{
+/* like __get_tag_id() but also find out about the time stamp */
+	static const char qry[] = "\
+SELECT tag_id, tag_stamp, log_stamp \
+FROM aou_umpf_tag \
+WHERE portfolio_id = ? AND tag_stamp <= ? \
+ORDER BY tag_stamp DESC, tag_id DESC \
+LIMIT 1";
+	dbstmt_t stmt;
+	struct __bind_s b[2] = {{
+			.type = BE_BIND_TYPE_INT64,
+			.i64 = pf_id,
+		}, {
+			.type = BE_BIND_TYPE_STAMP,
+			.tm = stamp,
+		}};
+	int res = -1;
+
+	if ((stmt = be_sql_prep(conn, qry, countof_m1(qry))) == NULL) {
+		return -1;
+	}
+
+	/* bind the params */
+	be_sql_bind(conn, stmt, b, countof(b));
+	/* execute */
+	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
+		struct __bind_s rb[3];
+
+		/* just assign the type wishes for the results */
+		rb[0].type = BE_BIND_TYPE_INT64;
+		rb[1].type = BE_BIND_TYPE_STAMP;
+		rb[2].type = BE_BIND_TYPE_STAMP;
+
+		if (LIKELY(be_sql_fetch(conn, stmt, rb, countof(rb)) == 0)) {
+			res = 0;
+			tag->tag_id = rb[0].i64;
+			tag->pf_id = pf_id;
+			tag->tag_stamp = rb[1].tm;
+			tag->log_stamp = rb[2].tm;
+		}
+	}
+	be_sql_fin(conn, stmt);
+	return res;
+}
+
 
 /* public functions */
 DEFUN dbobj_t
@@ -1196,7 +1251,7 @@ UPDATE aou_umpf_portfolio SET description = ? WHERE portfolio_id = ?";
 	if (UNLIKELY(mnemo == NULL)) {
 		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
 		return NULL;
-	} else if ((pf_id = be_sql_get_pf_id(conn, mnemo)) == 0) {
+	} else if ((pf_id = __get_pf_id(conn, mnemo)) == 0) {
 		/* portfolio getter is fucked */
 		UMPF_DEBUG(BE_SQL ": could not obtain portfolio id\n");
 		return NULL;
@@ -1233,21 +1288,15 @@ be_sql_free_pf(dbconn_t UNUSED(conn), dbobj_t UNUSED(pf))
 	return;
 }
 
-/* tag mumbo jumbo */
-struct __tag_s {
-	uint64_t pf_id;
-	uint64_t tag_id;
-};
-
 DEFUN dbobj_t
 be_sql_new_tag(dbconn_t conn, const char *mnemo, time_t stamp)
 {
 	struct __tag_s *tag = xnew(*tag);
 
 	/* get portfolio */
-	tag->pf_id = be_sql_get_pf_id(conn, mnemo);
+	tag->pf_id = __get_pf_id(conn, mnemo);
 	/* we create a new tag and return its id */
-	tag->tag_id = be_sql_new_tag_id(conn, tag->pf_id, stamp);
+	tag->tag_id = __new_tag_id(conn, tag->pf_id, stamp);
 	UMPF_DEBUG("tag_id <- %lu for pf_id %lu\n", tag->tag_id, tag->pf_id);
 	return (dbobj_t)tag;
 }
@@ -1260,29 +1309,28 @@ be_sql_new_tag_pf(dbconn_t conn, dbobj_t pf, time_t stamp)
 	/* get portfolio */
 	tag->pf_id = (uint64_t)pf;
 	/* we create a new tag and return its id */
-	tag->tag_id = be_sql_new_tag_id(conn, tag->pf_id, stamp);
+	tag->tag_id = __new_tag_id(conn, tag->pf_id, stamp);
 	return (dbobj_t)tag;
 }
 
 DEFUN dbobj_t
 be_sql_get_tag(dbconn_t conn, const char *mnemo, time_t stamp)
 {
-	struct __tag_s *tag;
-	uint64_t tag_id;
+	struct __tag_s *tag, tmp;
 	uint64_t pf_id;
 
 	/* get portfolio */
-	if ((pf_id = be_sql_get_pf_id(conn, mnemo)) == 0) {
+	if ((pf_id = __get_pf_id(conn, mnemo)) == 0) {
 		UMPF_DEBUG(BE_SQL ": uh oh, no portfolio id for %s\n", mnemo);
 		return NULL;
-	} else if ((tag_id = be_sql_get_tag_id(conn, pf_id, stamp)) == 0) {
+	} else if (__get_tag(&tmp, conn, pf_id, stamp) != 0) {
 		return NULL;
 	}
 	/* oh we seem to have hit the jackpot */
 	tag = xnew(*tag);
-	tag->pf_id = pf_id;
-	tag->tag_id = tag_id;
-	UMPF_DEBUG(BE_SQL ": tag_id <- %lu (%lu, %ld)\n", tag_id, pf_id, stamp);
+	*tag = tmp;
+	UMPF_DEBUG(BE_SQL ": tag_id <- %lu (%lu, %ld)\n",
+		   tmp.tag_id, tmp.pf_id, tmp.tag_stamp);
 	return (dbobj_t)tag;
 }
 
@@ -1305,7 +1353,7 @@ INSERT INTO aou_umpf_position (tag_id, security_id, long_qty, short_qty) \
 VALUES (?, ?, ?, ?)";
 
 	/* obtain a sec id first, get/creator */
-	if ((sec_id = be_sql_get_sec_id(c, t->pf_id, mnemo)) == 0UL) {
+	if ((sec_id = __get_sec_id(c, t->pf_id, mnemo)) == 0UL) {
 		UMPF_DEBUG(BE_SQL ": no security id for pf %lu %s\n",
 			   t->pf_id, mnemo);
 		return;
@@ -1333,6 +1381,13 @@ VALUES (?, ?, ?, ?)";
 		be_sql_fin(c, stmt);
 	}
 	return;
+}
+
+DEFUN time_t
+be_sql_get_stamp(dbconn_t UNUSED(conn), dbobj_t tag)
+{
+	struct __tag_s *t = tag;
+	return t->tag_stamp;
 }
 
 DEFUN size_t

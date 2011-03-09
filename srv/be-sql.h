@@ -97,6 +97,10 @@ be_sql_set_pos(dbconn_t, dbobj_t tag, const char *mnemo, double l, double s);
 DECLF size_t be_sql_get_npos(dbconn_t c, dbobj_t tag);
 
 /**
+ * Return the tag stamp of the tag TAG. */
+DECLF time_t be_sql_get_stamp(dbconn_t c, dbobj_t tag);
+
+/**
  * Retrieve positions in TAG calling a callback for each,
  * first argument of which is the security mnemonic, second and third are
  * long and short position respectively and fourth is a closure pointer.
