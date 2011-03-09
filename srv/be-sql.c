@@ -733,43 +733,6 @@ be_sql_bind(dbconn_t conn, dbstmt_t stmt, __bind_t b, size_t nb)
 	return;
 }
 
-static int64_t
-be_sql_column_int64(dbconn_t conn, dbstmt_t stmt, int idx)
-{
-	int64_t res = 0UL;
-
-	switch (be_sql_get_type(conn)) {
-	case BE_SQL_UNK:
-	default:
-		break;
-
-	case BE_SQL_MYSQL: {
-#if defined WITH_MYSQL
-		/* we only support the 0-th column */
-		size_t len;
-		MYSQL_BIND b = {
-			/* STRING PARAM */
-			.buffer = gbuf,
-			.buffer_length = sizeof(gbuf),
-			.length = &len,
-		};
-		mysql_stmt_bind_result(stmt, &b);
-		mysql_stmt_fetch(stmt);
-		gbuf[len] = '\0';
-		res = strtoul(gbuf, NULL, 10);
-#endif	/* WITH_MYSQL */
-		break;
-	}
-
-	case BE_SQL_SQLITE:
-#if defined WITH_SQLITE
-		res = sqlite3_column_int64(stmt, idx);
-#endif	/* WITH_SQLITE */
-		break;
-	}
-	return res;
-}
-
 #if defined WITH_MYSQL
 static enum enum_field_types
 bind_type_to_mysql_type(be_bind_type_t t)
@@ -1108,7 +1071,13 @@ INSERT INTO aou_umpf_portfolio (short) VALUES (?)";
 	be_sql_bind(conn, stmt, b, countof(b));
 	/* execute */
 	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
-		pf_id = be_sql_column_int64(conn, stmt, 0);
+		struct __bind_s rb[1] = {{
+				.type = BE_BIND_TYPE_INT64,
+				/* default value */
+				.i64 = 0UL,
+			}};
+		be_sql_fetch(conn, stmt, rb, countof(rb));
+		pf_id = rb[0].i64;
 	}
 	be_sql_fin(conn, stmt);
 
@@ -1156,7 +1125,13 @@ INSERT INTO aou_umpf_security (portfolio_id, short) VALUES (?, ?)";
 	be_sql_bind(conn, stmt, b, countof(b));
 	/* execute */
 	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
-		sec_id = be_sql_column_int64(conn, stmt, 0);
+		struct __bind_s rb[1] = {{
+				.type = BE_BIND_TYPE_INT64,
+				/* default value */
+				.i64 = 0UL,
+			}};
+		be_sql_fetch(conn, stmt, rb, countof(rb));
+		sec_id = rb[0].i64;
 	}
 	be_sql_fin(conn, stmt);
 
@@ -1231,7 +1206,13 @@ LIMIT 1";
 	be_sql_bind(conn, stmt, b, countof(b));
 	/* execute */
 	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
-		tag_id = be_sql_column_int64(conn, stmt, 0);
+		struct __bind_s rb[1] = {{
+				.type = BE_BIND_TYPE_INT64,
+				/* default value */
+				.i64 = 0UL,
+			}};
+		be_sql_fetch(conn, stmt, rb, countof(rb));
+		tag_id = rb[0].i64;
 	}
 	be_sql_fin(conn, stmt);
 	return tag_id;
@@ -1461,7 +1442,13 @@ WHERE tag_id = ?";
 	be_sql_bind(conn, stmt, b, countof(b));
 	/* execute */
 	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
-		npos = be_sql_column_int64(conn, stmt, 0);
+		struct __bind_s rb[1] = {{
+				.type = BE_BIND_TYPE_INT64,
+				/* default value */
+				.i64 = 0UL,
+			}};
+		be_sql_fetch(conn, stmt, rb, countof(rb));
+		npos = rb[0].i64;
 	}
 	be_sql_fin(conn, stmt);
 	return npos;
