@@ -200,7 +200,7 @@ handle_data(umpf_conn_t ctx, char *msg, size_t msglen)
 		/* definite success */
 		interpret_msg(get_fd(ctx), umsg);
 
-	} else if (/* umsg == NULL && */ctx == NULL) {
+	} else if (/* umsg == NULL && */p == NULL) {
 		/* error occurred */
 		UMPF_DEBUG(MOD_PRE ": ERROR\n");
 	} else {
