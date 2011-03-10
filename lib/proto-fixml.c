@@ -1261,7 +1261,7 @@ __umpf_parse_blob(__ctx_t ctx, const char *buf, size_t bsz)
 static void
 __umpf_parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
-	UMPF_DEBUG(PFIXML_PRE ": parsing blob of size %zu\n", bsz);
+	UMPF_DEBUG(PFIXML_PRE ": parsing more blob of size %zu\n", bsz);
 	parse_more_blob(ctx, buf, bsz);
 	return;
 }
