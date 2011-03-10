@@ -165,8 +165,11 @@ static void
 sputs_enc(__ctx_t ctx, const char *s)
 {
 	static const char stpset[] = "<>&";
+	size_t idx;
 
-	for (size_t idx; idx = strcspn(s, stpset); s += idx + sizeof(*s)) {
+	while (1) {
+		/* find next occurrence of stop set characters */
+		idx = strcspn(s, stpset);
 		/* write what we've got */
 		snputs(ctx, s, idx);
 		/* inspect the character */
@@ -184,6 +187,8 @@ sputs_enc(__ctx_t ctx, const char *s)
 			snputs(ctx, "&amp;", 5);
 			break;
 		}
+		/* advance our buffer */
+		s += idx + sizeof(*s);
 	}
 	return;
 }
@@ -193,8 +198,11 @@ sputs_encq(__ctx_t ctx, const char *s)
 {
 /* like fputs() but encode special chars */
 	static const char stpset[] = "<>&'\"";
+	size_t idx;
 
-	for (size_t idx; idx = strcspn(s, stpset); s += idx + sizeof(*s)) {
+	while (1) {
+		/* find next occurrence of stop set characters */
+		idx = strcspn(s, stpset);
 		/* write what we've got */
 		snputs(ctx, s, idx);
 		/* inspect the character */
@@ -218,6 +226,8 @@ sputs_encq(__ctx_t ctx, const char *s)
 			snputs(ctx, "&quot;", 6);
 			break;
 		}
+		/* advance our buffer */
+		s += idx + sizeof(*s);
 	}
 	return;
 }
