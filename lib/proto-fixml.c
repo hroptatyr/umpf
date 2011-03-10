@@ -850,11 +850,10 @@ static void
 sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int len)
 {
 /* should be called only in glue mode */
-	const char eoglue[] = "</aou:glue>";
 	const char *end;
 	size_t new_len;
 
-	if ((end = strstr(ch, eoglue)) != NULL) {
+	if ((end = strstr(ch, ctx->sbuf)) != NULL) {
 		UMPF_DEBUG(PFIXML_PRE " found end tag, eating contents\n");
 		new_len = end - ch;
 
@@ -888,6 +887,9 @@ sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int len)
 	return;
 }
 
+/* hackery */
+#define AOU_CONT_OFFS	(32)
+
 static void
 sax_bo_AOU_elt(
 	__ctx_t ctx, umpf_ns_t ns, const char *name, const char **UNUSED(attrs))
@@ -895,14 +897,58 @@ sax_bo_AOU_elt(
 	const umpf_tid_t tid = sax_tid_from_tag(name);
 
 	switch (tid) {
-	case UMPF_TAG_GLUE:
+	case UMPF_TAG_GLUE: {
+		umpf_msg_t msg = ctx->msg;
+
 		/* actually this is the only one we support */
 		UMPF_DEBUG(PFIXML_PRE " GLUE\n");
-		(void)push_state(ctx, UMPF_TAG_GLUE, NULL);
-		/* libxml specific */
-		ctx->pp->sax->characters =
-			(charactersSAXFunc)sax_stuff_buf_AOU_push;
-		/* help the stuff buf pusher, we construct the end tag here */
+
+		if (UNLIKELY(msg == NULL)) {
+			break;
+		}
+
+		switch (umpf_get_msg_type(msg)) {
+		case UMPF_MSG_NEW_PF: {
+			/* ah, finally, glue indeed is supported here */
+			void *ptr;
+
+			if (UNLIKELY(msg->new_pf.satellite != NULL)) {
+				/* someone else, prob us, was faster */
+				break;
+			}
+			/* the glue code wants a pointer to the satellite */
+			ptr = &msg->new_pf.satellite;
+			(void)push_state(ctx, UMPF_TAG_GLUE, ptr);
+
+			/* libxml specific */
+			ctx->pp->sax->characters =
+				(charactersSAXFunc)sax_stuff_buf_AOU_push;
+			/* help the stuff buf pusher and
+			 * construct the end tag for him */
+			{
+				char *tmp = ctx->sbuf;
+
+				*tmp++ = '<';
+				*tmp++ = '/';
+				tmp = stpcpy(tmp, ns->pref);
+				*tmp++ = ':';
+				*tmp++ = 'g';
+				*tmp++ = 'l';
+				*tmp++ = 'u';
+				*tmp++ = 'e';
+				*tmp++ = '>';
+				*tmp = '\0';
+				UMPF_DEBUG("end tag \"%s\"\n", ctx->sbuf);
+				/* reset our stuff buffer */
+				ctx->sbix = AOU_CONT_OFFS;
+			}
+			break;
+		}
+		default:
+			break;
+		}
+		break;
+	}
 	default:
 		break;
 	}
@@ -915,10 +961,28 @@ sax_eo_AOU_elt(__ctx_t ctx, const char *name)
 	const umpf_tid_t tid = sax_tid_from_tag(name);
 
 	switch (tid) {
-	case UMPF_TAG_GLUE:
+	case UMPF_TAG_GLUE: {
+		char **ptr;
+		size_t len = ctx->sbix - AOU_CONT_OFFS;
+
 		UMPF_DEBUG(PFIXML_PRE " /GLUE\n");
-		pop_state(ctx);
+
+		/* reset stuff buffer */
+		ctx->sbix = 0;
+		/* unsubscribe stuff buffer cb */
 		ctx->pp->sax->characters = NULL;
+
+		if (UNLIKELY(get_state_otype(ctx) != UMPF_TAG_GLUE ||
+			     (ptr = get_state_object(ctx)) == NULL)) {
+			break;
+		}
+
+		/* frob contents */
+		*ptr = strndup(ctx->sbuf + AOU_CONT_OFFS, len);
+		/* job done, back to normal */
+		pop_state(ctx);
+		break;
+	}
 	default:
 		break;
 	}
