@@ -864,8 +864,8 @@ sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int len)
 	}
 
 	/* maybe realloc first? */
-	if (UNLIKELY(ctx->sbix + new_len >= ctx->sbsz)) {
-		size_t new_sz = ctx->sbix + new_len;
+	if (UNLIKELY(ctx->sbix + new_len + 1 >= ctx->sbsz)) {
+		size_t new_sz = ctx->sbix + new_len + 1;
 
 		/* round to multiple of 4096 */
 		new_sz = (new_sz & ~0xfff) + 4096L;
