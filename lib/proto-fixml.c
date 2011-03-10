@@ -42,7 +42,7 @@
 #include <stdbool.h>
 #include <time.h>
 #include <ctype.h>
-#if defined HAVE_LIBXML2 || 1
+#if defined HAVE_LIBXML2
 # include <libxml/parser.h>
 #endif	/* HAVE_LIBXML2 */
 #include "nifty.h"
@@ -60,6 +60,8 @@
 #endif	/* __INTEL_COMPILER */
 #if defined DEBUG_FLAG
 # include <assert.h>
+#else
+# define assert(args...)
 #endif	/* DEBUG_FLAG */
 
 typedef struct __ctx_s *__ctx_t;
