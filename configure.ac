@@ -46,10 +46,17 @@ SXE_CHECK_SQLITE
 
 ## check for libxml to process fixml
 PKG_CHECK_MODULES([LIBXML2], [libxml-2.0 >= 2.7])
-AM_CONDITIONAL([USE_LIBXML2], [test -n "${LIBXML2_LIBS}"])
+pushdef([use_libxml2], [test -n "${LIBXML2_LIBS}"])
+AM_CONDITIONAL([USE_LIBXML2], []use_libxml2[])
+if []use_libxml2[]; then
+	AC_DEFINE([HAVE_LIBXML2], [1], [Define if libxml2 support is there])
+fi
+popdef([use_libxml2])
+
 ## check for lua
 PKG_CHECK_MODULES([LUA], [lua >= 5.1.0], [:], [:])
 AM_CONDITIONAL([HAVE_LUA], [test -n "${LUA_LIBS}"])
+
 ## check for unserding
 PKG_CHECK_MODULES([unserding], [unserding >= 0.1.1])
 

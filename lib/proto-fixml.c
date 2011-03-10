@@ -42,7 +42,7 @@
 #include <stdbool.h>
 #include <time.h>
 #include <ctype.h>
-#if defined HAVE_LIBXML2 || 1
+#if defined HAVE_LIBXML2
 # include <libxml/parser.h>
 #endif	/* HAVE_LIBXML2 */
 #include "nifty.h"
