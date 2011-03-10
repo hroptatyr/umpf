@@ -343,7 +343,8 @@ static const char*
 __pref_to_uri(__ctx_t ctx, const char *pref, size_t pref_len)
 {
 	if (LIKELY(pref_len == 0 && ctx->ns[0].pref == NULL)) {
-		return ctx->ns[0].href;
+		/* bit of a hack innit? */
+		return ctx->ns[0].href ?: fixml50_ns_uri;
 	}
 	/* special service for us because we're lazy:
 	 * you can pass pref = "foo:" and say pref_len is 4
@@ -404,9 +405,13 @@ sax_aid_from_attr(const char *attr)
 static umpf_nsid_t
 sax_nsid_from_uri(const char *uri)
 {
-	size_t ulen = strlen(uri);
-	const struct umpf_nsuri_s *n = __nsiddify(uri, ulen);
-	return n ? n->nsid : UMPF_NS_UNK;
+	if (UNLIKELY(uri == NULL)) {
+		    return UMPF_NS_UNK;
+	} else {
+		size_t ulen = strlen(uri);
+		const struct umpf_nsuri_s *n = __nsiddify(uri, ulen);
+		return n ? n->nsid : UMPF_NS_UNK;
+	}
 }
 
 static void
@@ -621,20 +626,9 @@ proc_QTY_attr(__ctx_t ctx, const char *attr, const char *value)
 
 
 static void
-sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
+sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 {
-	/* where the real element name starts, sans ns prefix */
-	const char *rname = tag_massage(name);
-	const umpf_tid_t tid = sax_tid_from_tag(rname);
-
-	if (!umpf_pref_p(ctx, name, rname - name) && ctx->msg != NULL) {
-		const char *ns_uri = __pref_to_uri(ctx, name, rname - name);
-		const umpf_nsid_t nsid = sax_nsid_from_uri(ns_uri);
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s (%s %u)\n",
-			   name, ns_uri, nsid);
-		return;
-	}
+	const umpf_tid_t tid = sax_tid_from_tag(name);
 
 	/* all the stuff that needs a new sax handler */
 	switch (tid) {
@@ -798,19 +792,10 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 	return;
 }
 
-
 static void
-sax_eo_elt(__ctx_t ctx, const char *name)
+sax_eo_FIXML_elt(__ctx_t ctx, const char *name)
 {
-	/* where the real element name starts, sans ns prefix */
-	const char *rname = tag_massage(name);
-	umpf_tid_t tid = sax_tid_from_tag(rname);
-
-	/* check if this is an umpf node */
-	if (!umpf_pref_p(ctx, name, rname - name)) {
-		/* dont know what to do */
-		return;
-	}
+	umpf_tid_t tid = sax_tid_from_tag(name);
 
 	/* stuff buf reset */
 	stuff_buf_reset(ctx);
@@ -847,6 +832,82 @@ sax_eo_elt(__ctx_t ctx, const char *name)
 	UMPF_DEBUG(PFIXML_PRE " STATE: %s -> %u\n", name, get_state_otype(ctx));
 	return;
 }
+
+
+/* forward */
+static void stuff_buf_push(__ctx_t ctx, const char *ch, int len);
+
+static void
+sax_bo_AOU_elt(__ctx_t ctx, const char *name, const char **attrs)
+{
+	if (LIKELY(strcmp(name, "glue") == 0)) {
+		UMPF_DEBUG(PFIXML_PRE " GLUE\n");
+	}
+	/* actually that's the only one we support */
+	return;
+}
+
+static void
+sax_eo_AOU_elt(__ctx_t ctx, const char *name)
+{
+	/* just fuck it */
+	return;
+}
+
+
+static void
+sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
+{
+	/* where the real element name starts, sans ns prefix */
+	const char *rname = tag_massage(name);
+	const char *ns_uri = __pref_to_uri(ctx, name, rname - name);
+	const umpf_nsid_t nsid = sax_nsid_from_uri(ns_uri);
+
+	switch (nsid) {
+	case UMPF_NS_UNK:
+		UMPF_DEBUG(PFIXML_PRE
+			   ": unknown namespace %s (%s)\n", name, ns_uri);
+		break;
+	case UMPF_NS_FIXML_5_0:
+	case UMPF_NS_FIXML_4_4:
+		sax_bo_FIXML_elt(ctx, rname, attrs);
+		break;
+	case UMPF_NS_AOU_0_1:
+		sax_bo_AOU_elt(ctx, rname, attrs);
+		break;
+	case UMPF_NS_MDDL_3_0:
+		UMPF_DEBUG(PFIXML_PRE ": can't parse mddl yet (%s)\n", rname);
+		break;
+	}
+	return;
+}
+
+static void
+sax_eo_elt(__ctx_t ctx, const char *name)
+{
+	/* where the real element name starts, sans ns prefix */
+	const char *rname = tag_massage(name);
+	const char *ns_uri = __pref_to_uri(ctx, name, rname - name);
+	const umpf_nsid_t nsid = sax_nsid_from_uri(ns_uri);
+
+	switch (nsid) {
+	case UMPF_NS_UNK:
+		UMPF_DEBUG(PFIXML_PRE
+			   ": unknown namespace %s (%s)\n", name, ns_uri);
+		break;
+	case UMPF_NS_FIXML_5_0:
+	case UMPF_NS_FIXML_4_4:
+		sax_eo_FIXML_elt(ctx, rname);
+		break;
+	case UMPF_NS_AOU_0_1:
+		sax_eo_AOU_elt(ctx, rname);
+		break;
+	case UMPF_NS_MDDL_3_0:
+		UMPF_DEBUG(PFIXML_PRE ": can't parse mddl yet (%s)\n", rname);
+		break;
+	}
+}
+
 
 static void
 stuff_buf_push(__ctx_t ctx, const char *ch, int len)
