@@ -561,10 +561,15 @@ print_pos_rpt(__ctx_t ctx, umpf_msg_t msg, size_t idx, size_t indent)
 static void
 print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 {
+	static const char hdr[] = "\
+<FIXML xmlns=\"http://www.fixprotocol.org/FIXML-5-0\"\n\
+  xmlns:aou=\"http://www.ga-group.nl/aou-0.1\"\n\
+  v=\"5.0\" aou:version=\"0.1\">\n";
+	static const char ftr[] = "\
+</FIXML>\n";
+
 	print_indent(ctx, indent);
-	sputs(ctx, "<FIXML xmlns=\"");
-	sputs(ctx, fixml50_ns_uri);
-	sputs(ctx, "\" v=\"5.0\">\n");
+	snputs(ctx, hdr, countof_m1(hdr));
 
 	switch (msg->hdr.mt) {
 	case UMPF_MSG_NEW_PF * 2:
@@ -600,7 +605,7 @@ print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 	}
 
 	print_indent(ctx, indent);
-	sputs(ctx, "</FIXML>\n");
+	snputs(ctx, ftr, countof_m1(ftr));
 	return;
 }
 
