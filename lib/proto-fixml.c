@@ -351,7 +351,7 @@ __pref_to_uri(__ctx_t ctx, const char *pref, size_t pref_len)
 	if (pref[pref_len - 1] == ':') {
 		pref_len--;
 	}
-	for (size_t i = 1; i < ctx->nns; i++) {
+	for (size_t i = (ctx->ns[0].pref == NULL); i < ctx->nns; i++) {
 		if (strncmp(ctx->ns[i].pref, pref, pref_len) == 0) {
 			return ctx->ns[i].href;
 		}
