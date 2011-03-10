@@ -70,10 +70,12 @@ typedef struct __ctx_s *__ctx_t;
 typedef xmlSAXHandler sax_hdl_s;
 typedef sax_hdl_s *sax_hdl_t;
 typedef struct umpf_ctxcb_s *umpf_ctxcb_t;
+typedef struct umpf_ns_s *umpf_ns_t;
 
 struct umpf_ns_s {
 	char *pref;
 	char *href;
+	umpf_nsid_t nsid;
 };
 
 /* contextual callbacks */
@@ -292,15 +294,42 @@ umpf_reg_ns(__ctx_t ctx, const char *pref, const char *href)
 	if (UNLIKELY(href == NULL)) {
 		/* bollocks, user MUST be a twat */
 		return;
-	} else if (strcmp(href, fixml50_ns_uri) == 0 ||
-		   strcmp(href, fixml44_ns_uri) == 0) {
-		/* oh, it's our fave, copy the  */
-		ctx->ns[0].pref = pref ? strdup(pref) : NULL;
-		ctx->ns[0].href = strdup(href);
-	} else {
-		size_t i = ctx->nns++;
-		ctx->ns[i].pref = pref ? strdup(pref) : NULL;
-		ctx->ns[i].href = strdup(href);
+	}
+
+	/* get us those lovely ns ids */
+	{
+		size_t ulen = strlen(href);
+		const struct umpf_nsuri_s *n = __nsiddify(href, ulen);
+		const umpf_nsid_t nsid = n ? n->nsid : UMPF_NS_UNK;
+
+		switch (nsid) {
+			size_t i;
+		case UMPF_NS_FIXML_5_0:
+			if (UNLIKELY(ctx->ns[0].href != NULL)) {
+				/* fixml 4.4 must occupy the throne
+				 * dispossess him */
+				i = ctx->nns++;
+				ctx->ns[i] = ctx->ns[0];
+			}
+		case UMPF_NS_FIXML_4_4:
+			/* oh, it's our fave, copy the  */
+			ctx->ns[0].pref = (pref ? strdup(pref) : NULL);
+			ctx->ns[0].href = strdup(href);
+			ctx->ns[0].nsid = nsid;
+			break;
+
+		case UMPF_NS_AOU_0_1:
+			/* no special place */
+		case UMPF_NS_MDDL_3_0:
+			/* no special place */
+		case UMPF_NS_UNK:
+		default:
+			i = ctx->nns++;
+			ctx->ns[i].pref = pref ? strdup(pref) : NULL;
+			ctx->ns[i].href = strdup(href);
+			ctx->ns[i].nsid = nsid;
+			break;
+		}
 	}
 	return;
 }
@@ -340,12 +369,17 @@ umpf_pref_p(__ctx_t ctx, const char *pref, size_t pref_len)
 	}
 }
 
-static const char*
-__pref_to_uri(__ctx_t ctx, const char *pref, size_t pref_len)
+static umpf_ns_t
+__pref_to_ns(__ctx_t ctx, const char *pref, size_t pref_len)
 {
-	if (LIKELY(pref_len == 0 && ctx->ns[0].pref == NULL)) {
+	if (UNLIKELY(ctx->ns[0].nsid == UMPF_NS_UNK)) {
 		/* bit of a hack innit? */
-		return ctx->ns[0].href ?: fixml50_ns_uri;
+		ctx->ns->nsid = UMPF_NS_FIXML_5_0;
+		return ctx->ns;
+
+	} else if (LIKELY(pref_len == 0 && ctx->ns[0].pref == NULL)) {
+		/* most common case when people use the default ns */
+		return ctx->ns;
 	}
 	/* special service for us because we're lazy:
 	 * you can pass pref = "foo:" and say pref_len is 4
@@ -355,18 +389,10 @@ __pref_to_uri(__ctx_t ctx, const char *pref, size_t pref_len)
 	}
 	for (size_t i = (ctx->ns[0].pref == NULL); i < ctx->nns; i++) {
 		if (strncmp(ctx->ns[i].pref, pref, pref_len) == 0) {
-			return ctx->ns[i].href;
+			return ctx->ns + i;
 		}
 	}
 	return NULL;
-}
-
-/* stuff buf handling */
-static void
-stuff_buf_reset(__ctx_t ctx)
-{
-	ctx->sbix = 0;
-	return;
 }
 
 
@@ -401,18 +427,6 @@ sax_aid_from_attr(const char *attr)
 	size_t alen = strlen(attr);
 	const struct umpf_attr_s *a = __aiddify(attr, alen);
 	return a ? a->aid : UMPF_ATTR_UNK;
-}
-
-static umpf_nsid_t
-sax_nsid_from_uri(const char *uri)
-{
-	if (UNLIKELY(uri == NULL)) {
-		    return UMPF_NS_UNK;
-	} else {
-		size_t ulen = strlen(uri);
-		const struct umpf_nsuri_s *n = __nsiddify(uri, ulen);
-		return n ? n->nsid : UMPF_NS_UNK;
-	}
 }
 
 static void
@@ -798,9 +812,6 @@ sax_eo_FIXML_elt(__ctx_t ctx, const char *name)
 {
 	umpf_tid_t tid = sax_tid_from_tag(name);
 
-	/* stuff buf reset */
-	stuff_buf_reset(ctx);
-
 	/* stuff that needed to be done, fix up state etc. */
 	switch (tid) {
 	case UMPF_TAG_REQ_FOR_POSS_ACK:
@@ -878,26 +889,38 @@ sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int len)
 }
 
 static void
-sax_bo_AOU_elt(__ctx_t ctx, const char *name, const char **attrs)
+sax_bo_AOU_elt(
+	__ctx_t ctx, umpf_ns_t ns, const char *name, const char **UNUSED(attrs))
 {
-	if (LIKELY(strcmp(name, "glue") == 0)) {
+	const umpf_tid_t tid = sax_tid_from_tag(name);
+
+	switch (tid) {
+	case UMPF_TAG_GLUE:
+		/* actually this is the only one we support */
 		UMPF_DEBUG(PFIXML_PRE " GLUE\n");
 		(void)push_state(ctx, UMPF_TAG_GLUE, NULL);
 		/* libxml specific */
 		ctx->pp->sax->characters =
 			(charactersSAXFunc)sax_stuff_buf_AOU_push;
+		/* help the stuff buf pusher, we construct the end tag here */
+	default:
+		break;
 	}
-	/* actually that's the only one we support */
 	return;
 }
 
 static void
 sax_eo_AOU_elt(__ctx_t ctx, const char *name)
 {
-	if (LIKELY(strcmp(name, "glue") == 0)) {
+	const umpf_tid_t tid = sax_tid_from_tag(name);
+
+	switch (tid) {
+	case UMPF_TAG_GLUE:
 		UMPF_DEBUG(PFIXML_PRE " /GLUE\n");
 		pop_state(ctx);
 		ctx->pp->sax->characters = NULL;
+	default:
+		break;
 	}
 	return;
 }
@@ -908,23 +931,31 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 {
 	/* where the real element name starts, sans ns prefix */
 	const char *rname = tag_massage(name);
-	const char *ns_uri = __pref_to_uri(ctx, name, rname - name);
-	const umpf_nsid_t nsid = sax_nsid_from_uri(ns_uri);
+	umpf_ns_t ns = __pref_to_ns(ctx, name, rname - name);
 
-	switch (nsid) {
-	case UMPF_NS_UNK:
-		UMPF_DEBUG(PFIXML_PRE
-			   ": unknown namespace %s (%s)\n", name, ns_uri);
-		break;
+	if (UNLIKELY(ns == NULL)) {
+		UMPF_DEBUG(PFIXML_PRE ": unknown prefix in tag %s\n", name);
+		return;
+	}
+
+	switch (ns->nsid) {
 	case UMPF_NS_FIXML_5_0:
 	case UMPF_NS_FIXML_4_4:
 		sax_bo_FIXML_elt(ctx, rname, attrs);
 		break;
+
 	case UMPF_NS_AOU_0_1:
-		sax_bo_AOU_elt(ctx, rname, attrs);
+		sax_bo_AOU_elt(ctx, ns, rname, attrs);
 		break;
+
 	case UMPF_NS_MDDL_3_0:
 		UMPF_DEBUG(PFIXML_PRE ": can't parse mddl yet (%s)\n", rname);
+		break;
+
+	case UMPF_NS_UNK:
+	default:
+		UMPF_DEBUG(PFIXML_PRE
+			   ": unknown namespace %s (%s)\n", name, ns->href);
 		break;
 	}
 	return;
@@ -935,25 +966,34 @@ sax_eo_elt(__ctx_t ctx, const char *name)
 {
 	/* where the real element name starts, sans ns prefix */
 	const char *rname = tag_massage(name);
-	const char *ns_uri = __pref_to_uri(ctx, name, rname - name);
-	const umpf_nsid_t nsid = sax_nsid_from_uri(ns_uri);
+	umpf_ns_t ns = __pref_to_ns(ctx, name, rname - name);
 
-	switch (nsid) {
-	case UMPF_NS_UNK:
-		UMPF_DEBUG(PFIXML_PRE
-			   ": unknown namespace %s (%s)\n", name, ns_uri);
-		break;
+	if (UNLIKELY(ns == NULL)) {
+		UMPF_DEBUG(PFIXML_PRE ": unknown prefix in tag %s\n", name);
+		return;
+	}
+
+	switch (ns->nsid) {
 	case UMPF_NS_FIXML_5_0:
 	case UMPF_NS_FIXML_4_4:
 		sax_eo_FIXML_elt(ctx, rname);
 		break;
+
 	case UMPF_NS_AOU_0_1:
 		sax_eo_AOU_elt(ctx, rname);
 		break;
+
 	case UMPF_NS_MDDL_3_0:
 		UMPF_DEBUG(PFIXML_PRE ": can't parse mddl yet (%s)\n", rname);
 		break;
+
+	case UMPF_NS_UNK:
+	default:
+		UMPF_DEBUG(PFIXML_PRE
+			   ": unknown namespace %s (%s)\n", name, ns->href);
+		break;
 	}
+	return;
 }
 
 static xmlEntityPtr
