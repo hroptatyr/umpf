@@ -1,5 +1,5 @@
 %{
-typedef struct umpf_ns_s *umpf_ns_t;
+typedef struct umpf_nsuri_s *umpf_nsuri_t;
 
 typedef enum {
 	/* must be first */
@@ -22,7 +22,7 @@ typedef enum {
 %null-strings
 %enum
 
-struct umpf_ns_s {
+struct umpf_nsuri_s {
 	const char *nsuri;
 	umpf_nsid_t nsid;
 };

@@ -54,6 +54,7 @@
 /* gperf goodness */
 #include "proto-fixml-tag.c"
 #include "proto-fixml-attr.c"
+#include "proto-fixml-ns.c"
 
 #if defined __INTEL_COMPILER
 # pragma warning (disable:424)
@@ -400,6 +401,14 @@ sax_aid_from_attr(const char *attr)
 	return a ? a->aid : UMPF_ATTR_UNK;
 }
 
+static umpf_nsid_t
+sax_nsid_from_uri(const char *uri)
+{
+	size_t ulen = strlen(uri);
+	const struct umpf_nsuri_s *n = __nsiddify(uri, ulen);
+	return n ? n->nsid : UMPF_NS_UNK;
+}
+
 static void
 proc_FIXML_xmlns(__ctx_t ctx, const char *pref, const char *value)
 {
@@ -620,9 +629,10 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 
 	if (!umpf_pref_p(ctx, name, rname - name) && ctx->msg != NULL) {
 		const char *ns_uri = __pref_to_uri(ctx, name, rname - name);
+		const umpf_nsid_t nsid = sax_nsid_from_uri(ns_uri);
 		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s (%s)\n",
-			   name, ns_uri);
+		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s (%s %u)\n",
+			   name, ns_uri, nsid);
 		return;
 	}
 
