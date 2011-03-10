@@ -60,6 +60,8 @@
 #endif	/* __INTEL_COMPILER */
 #if defined DEBUG_FLAG
 # include <assert.h>
+#else
+# define assert(args...)
 #endif	/* DEBUG_FLAG */
 
 typedef struct __ctx_s *__ctx_t;
