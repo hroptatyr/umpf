@@ -858,9 +858,12 @@ sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int len)
 		new_len = end - ch;
 
 	} else /*if (end == NULL)*/ {
+		/* libxml2 specific! */
+		size_t max_len = ctx->pp->input->end - ctx->pp->input->cur;
+
 		UMPF_DEBUG(PFIXML_PRE " end tag not found, "
-			   "eating everything as I'm hungry\n");
-		new_len = strlen(ch);
+			   "eating everything as I'm hungry %zu\n", max_len);
+		new_len = strnlen(ch, max_len);
 	}
 
 	/* maybe realloc first? */
@@ -881,8 +884,11 @@ sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int len)
 	{
 		/* cheat on our push parser */
 		xmlParserInputPtr inp = ctx->pp->input;
-		inp->cur += new_len - len;
-		inp->consumed += new_len - len;
+		size_t inc = new_len - len;
+
+		UMPF_DEBUG("eating %zu bytes away\n", inc);
+		inp->cur += inc;
+		inp->consumed += inc;
 	}
 	return;
 }
