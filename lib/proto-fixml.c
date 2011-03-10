@@ -345,13 +345,13 @@ __pref_to_uri(__ctx_t ctx, const char *pref, size_t pref_len)
 	if (LIKELY(pref_len == 0 && ctx->ns[0].pref == NULL)) {
 		return ctx->ns[0].href;
 	}
+	/* special service for us because we're lazy:
+	 * you can pass pref = "foo:" and say pref_len is 4
+	 * easier to deal with when strings are const etc. */
+	if (pref[pref_len - 1] == ':') {
+		pref_len--;
+	}
 	for (size_t i = 1; i < ctx->nns; i++) {
-		/* special service for us because we're lazy:
-		 * you can pass pref = "foo:" and say pref_len is 4
-		 * easier to deal with when strings are const etc. */
-		if (pref[pref_len - 1] == ':') {
-			pref_len--;
-		}
 		if (strncmp(ctx->ns[i].pref, pref, pref_len) == 0) {
 			return ctx->ns[i].href;
 		}
