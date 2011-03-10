@@ -904,6 +904,7 @@ sax_bo_AOU_elt(
 		UMPF_DEBUG(PFIXML_PRE " GLUE\n");
 
 		if (UNLIKELY(msg == NULL)) {
+			UMPF_DEBUG("msg NULL, glue is meaningless\n");
 			break;
 		}
 
