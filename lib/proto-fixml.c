@@ -44,6 +44,7 @@
 #include <ctype.h>
 #if defined HAVE_LIBXML2
 # include <libxml/parser.h>
+# include <libxml/parserInternals.h>
 #endif	/* HAVE_LIBXML2 */
 #include "nifty.h"
 #include "umpf.h"
@@ -834,14 +835,57 @@ sax_eo_FIXML_elt(__ctx_t ctx, const char *name)
 }
 
 
-/* forward */
-static void stuff_buf_push(__ctx_t ctx, const char *ch, int len);
+static void
+sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int len)
+{
+/* should be called only in glue mode */
+	const char eoglue[] = "</aou:glue>";
+	const char *end;
+	size_t new_len;
+
+	if ((end = strstr(ch, eoglue)) != NULL) {
+		UMPF_DEBUG(PFIXML_PRE " found end tag, eating contents\n");
+		new_len = end - ch;
+
+	} else /*if (end == NULL)*/ {
+		UMPF_DEBUG(PFIXML_PRE " end tag not found, "
+			   "eating everything as I'm hungry\n");
+		new_len = strlen(ch);
+	}
+
+	/* maybe realloc first? */
+	if (UNLIKELY(ctx->sbix + new_len >= ctx->sbsz)) {
+		size_t new_sz = ctx->sbix + new_len;
+
+		/* round to multiple of 4096 */
+		new_sz = (new_sz & ~0xfff) + 4096L;
+		/* realloc now */
+		ctx->sbuf = realloc(ctx->sbuf, ctx->sbsz = new_sz);
+	}
+
+	/* stuff chunk into our buffer */
+	memcpy(ctx->sbuf + ctx->sbix, ch, new_len);
+	ctx->sbuf[ctx->sbix += new_len] = '\0';
+
+	/* libxml2 specific stuff */
+	{
+		/* cheat on our push parser */
+		xmlParserInputPtr inp = ctx->pp->input;
+		inp->cur += new_len - len;
+		inp->consumed += new_len - len;
+	}
+	return;
+}
 
 static void
 sax_bo_AOU_elt(__ctx_t ctx, const char *name, const char **attrs)
 {
 	if (LIKELY(strcmp(name, "glue") == 0)) {
 		UMPF_DEBUG(PFIXML_PRE " GLUE\n");
+		(void)push_state(ctx, UMPF_TAG_GLUE, NULL);
+		/* libxml specific */
+		ctx->pp->sax->characters =
+			(charactersSAXFunc)sax_stuff_buf_AOU_push;
 	}
 	/* actually that's the only one we support */
 	return;
@@ -850,7 +894,11 @@ sax_bo_AOU_elt(__ctx_t ctx, const char *name, const char **attrs)
 static void
 sax_eo_AOU_elt(__ctx_t ctx, const char *name)
 {
-	/* just fuck it */
+	if (LIKELY(strcmp(name, "glue") == 0)) {
+		UMPF_DEBUG(PFIXML_PRE " /GLUE\n");
+		pop_state(ctx);
+		ctx->pp->sax->characters = NULL;
+	}
 	return;
 }
 
@@ -908,24 +956,6 @@ sax_eo_elt(__ctx_t ctx, const char *name)
 	}
 }
 
-
-static void
-stuff_buf_push(__ctx_t ctx, const char *ch, int len)
-{
-	if (UNLIKELY(ctx->sbix + len >= ctx->sbsz)) {
-		size_t new_sz = ctx->sbix + len;
-
-		/* round to multiple of 4096 */
-		new_sz = (new_sz & ~0xfff) + 4096L;
-		/* realloc now */
-		ctx->sbuf = realloc(ctx->sbuf, ctx->sbsz = new_sz);
-	}
-	/* now copy */
-	memcpy(ctx->sbuf + ctx->sbix, ch, len);
-	ctx->sbuf[ctx->sbix += len] = '\0';
-	return;
-}
-
 static xmlEntityPtr
 sax_get_ent(void *UNUSED(user_data), const xmlChar *name)
 {
@@ -940,7 +970,6 @@ parse_file(__ctx_t ctx, const char *file)
 	/* fill in the minimalistic sax handler to begin with */
 	ctx->hdl->startElement = (startElementSAXFunc)sax_bo_elt;
 	ctx->hdl->endElement = (endElementSAXFunc)sax_eo_elt;
-	ctx->hdl->characters = (charactersSAXFunc)stuff_buf_push;
 	ctx->hdl->getEntity = sax_get_ent;
 
 	res = xmlSAXUserParseFile(ctx->hdl, ctx, file);
@@ -1006,7 +1035,6 @@ init(__ctx_t ctx)
 	/* fill in the minimalistic sax handler to begin with */
 	ctx->hdl->startElement = (startElementSAXFunc)sax_bo_elt;
 	ctx->hdl->endElement = (endElementSAXFunc)sax_eo_elt;
-	ctx->hdl->characters = (charactersSAXFunc)stuff_buf_push;
 	ctx->hdl->getEntity = sax_get_ent;
 	return;
 }
