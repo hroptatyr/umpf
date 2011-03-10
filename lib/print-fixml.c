@@ -370,7 +370,13 @@ print_rg_dtl(__ctx_t ctx, const char *name, const char *satell, size_t indent)
 		/* finalise the tag */
 		sputs(ctx, ">\n");
 
+		print_indent(ctx, indent + 4);
+		sputs(ctx, "<aou:glue content-type=\"text/plain\">\n");
+
 		sputs_enc(ctx, satell);
+
+		print_indent(ctx, indent + 4);
+		sputs(ctx, "</aou:glue>\n");
 
 		print_indent(ctx, indent + 2);
 		sputs(ctx, "</Pty>\n");
