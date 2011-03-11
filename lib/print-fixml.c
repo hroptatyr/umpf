@@ -69,12 +69,22 @@ static void __attribute__((noinline))
 check_realloc(__ctx_t ctx, size_t len)
 {
 	if (UNLIKELY(ctx->idx + len > ctx->gbsz)) {
-			ctx->gbuf = realloc(
-				ctx->gbuf, ctx->gbsz + INITIAL_GBUF_SIZE);
+		size_t new_sz = ctx->idx + len + INITIAL_GBUF_SIZE;
+
+		/* round to multiple of 4096 */
+		new_sz = (new_sz & ~0xfff) + 4096L;
+		/* realloc now */
+		ctx->gbuf = realloc(ctx->gbuf, ctx->gbsz = new_sz);
+
 	} else if (UNLIKELY(ctx->idx + len > -ctx->gbsz)) {
 		/* now we need a malloc */
 		char *old = ctx->gbuf;
-		ctx->gbuf = malloc(ctx->gbsz += INITIAL_GBUF_SIZE);
+		size_t new_sz = ctx->idx + len + INITIAL_GBUF_SIZE;
+
+		/* round to multiple of 4096 */
+		new_sz = (new_sz & ~0xfff) + 4096L;
+
+		ctx->gbuf = malloc(ctx->gbsz = new_sz);
 		memcpy(ctx->gbuf, old, ctx->idx);
 	}
 	return;
