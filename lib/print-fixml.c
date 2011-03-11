@@ -171,7 +171,7 @@ print_date(__ctx_t ctx, time_t stamp)
 	return;
 }
 
-static void
+static void __attribute__((unused))
 sputs_enc(__ctx_t ctx, const char *s)
 {
 	static const char stpset[] = "<>&";
@@ -393,7 +393,7 @@ print_rg_dtl(__ctx_t ctx, const char *name, const char *satell, size_t indent)
 		print_indent(ctx, indent + 4);
 		sputs(ctx, "<aou:glue content-type=\"text/plain\">\n");
 
-		sputs_enc(ctx, satell);
+		sputs(ctx, satell);
 
 		print_indent(ctx, indent + 4);
 		sputs(ctx, "</aou:glue>\n");
