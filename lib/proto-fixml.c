@@ -853,7 +853,7 @@ sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int len)
 	const char *end;
 	size_t new_len;
 
-	if ((end = strstr(ch, ctx->sbuf)) != NULL) {
+	if ((end = memmem(ch, len, ctx->sbuf, strlen(ctx->sbuf))) != NULL) {
 		UMPF_DEBUG(PFIXML_PRE " found end tag, eating contents\n");
 		new_len = end - ch;
 
