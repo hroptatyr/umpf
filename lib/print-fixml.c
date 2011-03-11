@@ -69,12 +69,22 @@ static void __attribute__((noinline))
 check_realloc(__ctx_t ctx, size_t len)
 {
 	if (UNLIKELY(ctx->idx + len > ctx->gbsz)) {
-			ctx->gbuf = realloc(
-				ctx->gbuf, ctx->gbsz + INITIAL_GBUF_SIZE);
+		size_t new_sz = ctx->idx + len + INITIAL_GBUF_SIZE;
+
+		/* round to multiple of 4096 */
+		new_sz = (new_sz & ~0xfff) + 4096L;
+		/* realloc now */
+		ctx->gbuf = realloc(ctx->gbuf, ctx->gbsz = new_sz);
+
 	} else if (UNLIKELY(ctx->idx + len > -ctx->gbsz)) {
 		/* now we need a malloc */
 		char *old = ctx->gbuf;
-		ctx->gbuf = malloc(ctx->gbsz += INITIAL_GBUF_SIZE);
+		size_t new_sz = ctx->idx + len + INITIAL_GBUF_SIZE;
+
+		/* round to multiple of 4096 */
+		new_sz = (new_sz & ~0xfff) + 4096L;
+
+		ctx->gbuf = malloc(ctx->gbsz = new_sz);
 		memcpy(ctx->gbuf, old, ctx->idx);
 	}
 	return;
@@ -165,8 +175,11 @@ static void
 sputs_enc(__ctx_t ctx, const char *s)
 {
 	static const char stpset[] = "<>&";
+	size_t idx;
 
-	for (size_t idx; (idx = strcspn(s, stpset)); s += idx + sizeof(*s)) {
+	while (1) {
+		/* find next occurrence of stop set characters */
+		idx = strcspn(s, stpset);
 		/* write what we've got */
 		snputs(ctx, s, idx);
 		/* inspect the character */
@@ -184,6 +197,8 @@ sputs_enc(__ctx_t ctx, const char *s)
 			snputs(ctx, "&amp;", 5);
 			break;
 		}
+		/* advance our buffer */
+		s += idx + sizeof(*s);
 	}
 	/* not reached */
 }
@@ -193,8 +208,11 @@ sputs_encq(__ctx_t ctx, const char *s)
 {
 /* like fputs() but encode special chars */
 	static const char stpset[] = "<>&'\"";
+	size_t idx;
 
-	for (size_t idx; (idx = strcspn(s, stpset)); s += idx + sizeof(*s)) {
+	while (1) {
+		/* find next occurrence of stop set characters */
+		idx = strcspn(s, stpset);
 		/* write what we've got */
 		snputs(ctx, s, idx);
 		/* inspect the character */
@@ -218,6 +236,8 @@ sputs_encq(__ctx_t ctx, const char *s)
 			snputs(ctx, "&quot;", 6);
 			break;
 		}
+		/* advance our buffer */
+		s += idx + sizeof(*s);
 	}
 	/* not reached */
 }
@@ -370,7 +390,13 @@ print_rg_dtl(__ctx_t ctx, const char *name, const char *satell, size_t indent)
 		/* finalise the tag */
 		sputs(ctx, ">\n");
 
+		print_indent(ctx, indent + 4);
+		sputs(ctx, "<aou:glue content-type=\"text/plain\">\n");
+
 		sputs_enc(ctx, satell);
+
+		print_indent(ctx, indent + 4);
+		sputs(ctx, "</aou:glue>\n");
 
 		print_indent(ctx, indent + 2);
 		sputs(ctx, "</Pty>\n");
@@ -561,10 +587,15 @@ print_pos_rpt(__ctx_t ctx, umpf_msg_t msg, size_t idx, size_t indent)
 static void
 print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 {
+	static const char hdr[] = "\
+<FIXML xmlns=\"http://www.fixprotocol.org/FIXML-5-0\"\n\
+  xmlns:aou=\"http://www.ga-group.nl/aou-0.1\"\n\
+  v=\"5.0\" aou:version=\"0.1\">\n";
+	static const char ftr[] = "\
+</FIXML>\n";
+
 	print_indent(ctx, indent);
-	sputs(ctx, "<FIXML xmlns=\"");
-	sputs(ctx, fixml50_ns_uri);
-	sputs(ctx, "\" v=\"5.0\">\n");
+	snputs(ctx, hdr, countof_m1(hdr));
 
 	switch (msg->hdr.mt) {
 	case UMPF_MSG_NEW_PF * 2:
@@ -600,7 +631,7 @@ print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 	}
 
 	print_indent(ctx, indent);
-	sputs(ctx, "</FIXML>\n");
+	snputs(ctx, ftr, countof_m1(ftr));
 	return;
 }
 

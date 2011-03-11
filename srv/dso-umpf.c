@@ -193,14 +193,17 @@ handle_data(umpf_conn_t ctx, char *msg, size_t msglen)
 	umpf_ctx_t p = get_fd_data(ctx);
 	umpf_msg_t umsg;
 
-	msg[msglen] = '\0';
-	UMPF_DEBUG(MOD_PRE "/ctx: %p %zu\n%s\n", ctx, msglen, msg);
+	UMPF_DEBUG(MOD_PRE "/ctx: %p %zu\n", ctx, msglen);
+#if defined DEBUG_FLAG
+	/* safely write msg to logerr now */
+	fwrite(msg, msglen, 1, logout);
+#endif	/* DEBUG_FLAG */
 
 	if ((umsg = umpf_parse_blob_r(&p, msg, msglen)) != NULL) {
 		/* definite success */
 		interpret_msg(get_fd(ctx), umsg);
 
-	} else if (/* umsg == NULL && */ctx == NULL) {
+	} else if (/* umsg == NULL && */p == NULL) {
 		/* error occurred */
 		UMPF_DEBUG(MOD_PRE ": ERROR\n");
 	} else {

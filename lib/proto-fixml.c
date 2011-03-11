@@ -44,6 +44,7 @@
 #include <ctype.h>
 #if defined HAVE_LIBXML2
 # include <libxml/parser.h>
+# include <libxml/parserInternals.h>
 #endif	/* HAVE_LIBXML2 */
 #include "nifty.h"
 #include "umpf.h"
@@ -54,6 +55,7 @@
 /* gperf goodness */
 #include "proto-fixml-tag.c"
 #include "proto-fixml-attr.c"
+#include "proto-fixml-ns.c"
 
 #if defined __INTEL_COMPILER
 # pragma warning (disable:424)
@@ -68,10 +70,12 @@ typedef struct __ctx_s *__ctx_t;
 typedef xmlSAXHandler sax_hdl_s;
 typedef sax_hdl_s *sax_hdl_t;
 typedef struct umpf_ctxcb_s *umpf_ctxcb_t;
+typedef struct umpf_ns_s *umpf_ns_t;
 
 struct umpf_ns_s {
 	char *pref;
 	char *href;
+	umpf_nsid_t nsid;
 };
 
 /* contextual callbacks */
@@ -290,15 +294,42 @@ umpf_reg_ns(__ctx_t ctx, const char *pref, const char *href)
 	if (UNLIKELY(href == NULL)) {
 		/* bollocks, user MUST be a twat */
 		return;
-	} else if (strcmp(href, fixml50_ns_uri) == 0 ||
-		   strcmp(href, fixml44_ns_uri) == 0) {
-		/* oh, it's our fave, copy the  */
-		ctx->ns[0].pref = pref ? strdup(pref) : NULL;
-		ctx->ns[0].href = strdup(href);
-	} else {
-		size_t i = ctx->nns++;
-		ctx->ns[i].pref = pref ? strdup(pref) : NULL;
-		ctx->ns[i].href = strdup(href);
+	}
+
+	/* get us those lovely ns ids */
+	{
+		size_t ulen = strlen(href);
+		const struct umpf_nsuri_s *n = __nsiddify(href, ulen);
+		const umpf_nsid_t nsid = n ? n->nsid : UMPF_NS_UNK;
+
+		switch (nsid) {
+			size_t i;
+		case UMPF_NS_FIXML_5_0:
+			if (UNLIKELY(ctx->ns[0].href != NULL)) {
+				/* fixml 4.4 must occupy the throne
+				 * dispossess him */
+				i = ctx->nns++;
+				ctx->ns[i] = ctx->ns[0];
+			}
+		case UMPF_NS_FIXML_4_4:
+			/* oh, it's our fave, copy the  */
+			ctx->ns[0].pref = (pref ? strdup(pref) : NULL);
+			ctx->ns[0].href = strdup(href);
+			ctx->ns[0].nsid = nsid;
+			break;
+
+		case UMPF_NS_AOU_0_1:
+			/* no special place */
+		case UMPF_NS_MDDL_3_0:
+			/* no special place */
+		case UMPF_NS_UNK:
+		default:
+			i = ctx->nns++;
+			ctx->ns[i].pref = pref ? strdup(pref) : NULL;
+			ctx->ns[i].href = strdup(href);
+			ctx->ns[i].nsid = nsid;
+			break;
+		}
 	}
 	return;
 }
@@ -338,12 +369,30 @@ umpf_pref_p(__ctx_t ctx, const char *pref, size_t pref_len)
 	}
 }
 
-/* stuff buf handling */
-static void
-stuff_buf_reset(__ctx_t ctx)
+static umpf_ns_t
+__pref_to_ns(__ctx_t ctx, const char *pref, size_t pref_len)
 {
-	ctx->sbix = 0;
-	return;
+	if (UNLIKELY(ctx->ns[0].nsid == UMPF_NS_UNK)) {
+		/* bit of a hack innit? */
+		ctx->ns->nsid = UMPF_NS_FIXML_5_0;
+		return ctx->ns;
+
+	} else if (LIKELY(pref_len == 0 && ctx->ns[0].pref == NULL)) {
+		/* most common case when people use the default ns */
+		return ctx->ns;
+	}
+	/* special service for us because we're lazy:
+	 * you can pass pref = "foo:" and say pref_len is 4
+	 * easier to deal with when strings are const etc. */
+	if (pref[pref_len - 1] == ':') {
+		pref_len--;
+	}
+	for (size_t i = (ctx->ns[0].pref == NULL); i < ctx->nns; i++) {
+		if (strncmp(ctx->ns[i].pref, pref, pref_len) == 0) {
+			return ctx->ns + i;
+		}
+	}
+	return NULL;
 }
 
 
@@ -383,7 +432,7 @@ sax_aid_from_attr(const char *attr)
 static void
 proc_FIXML_xmlns(__ctx_t ctx, const char *pref, const char *value)
 {
-	UMPF_DEBUG(PFIXML_PRE ": reg'ging name space %s\n", pref);
+	UMPF_DEBUG(PFIXML_PRE ": reg'ging name space %s <- %s\n", pref, value);
 	umpf_reg_ns(ctx, pref, value);
 	return;
 }
@@ -392,24 +441,18 @@ static void
 proc_FIXML_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	umpf_aid_t aid;
 
-	if (UNLIKELY(rattr > attr && ctx->ns[0].href == NULL)) {
-		const struct umpf_attr_s *a = __aiddify(attr, rattr - attr);
-
-		if (a && a->aid == UMPF_ATTR_XMLNS) {
-			proc_FIXML_xmlns(ctx, rattr, value);
-			return;
-		}
-	} else if (rattr > attr && !umpf_pref_p(ctx, attr, rattr - attr)) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
+	if (UNLIKELY(rattr > attr && !umpf_pref_p(ctx, attr, rattr - attr))) {
+		const struct umpf_attr_s *a = __aiddify(attr, rattr - attr - 1);
+		aid = a ? a->aid : UMPF_ATTR_UNK;
+	} else {
+		aid = sax_aid_from_attr(rattr);
 	}
 
 	switch (aid) {
 	case UMPF_ATTR_XMLNS:
-		proc_FIXML_xmlns(ctx, NULL, value);
+		proc_FIXML_xmlns(ctx, rattr == attr ? NULL : rattr, value);
 		break;
 	case UMPF_ATTR_S:
 	case UMPF_ATTR_R:
@@ -427,7 +470,7 @@ static void
 proc_REQ_FOR_POSS_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	umpf_msg_t msg = ctx->msg;
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
@@ -463,7 +506,7 @@ static void
 proc_REQ_FOR_POSS_ACK_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	umpf_msg_t msg = ctx->msg;
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
@@ -508,7 +551,7 @@ static void
 proc_PTY_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	umpf_msg_t msg = get_state_object(ctx);
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
@@ -542,7 +585,7 @@ static void
 proc_INSTRMT_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
@@ -567,7 +610,7 @@ static void
 proc_QTY_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	struct __ins_qty_s *iq = get_state_object(ctx);
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
@@ -598,17 +641,9 @@ proc_QTY_attr(__ctx_t ctx, const char *attr, const char *value)
 
 
 static void
-sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
+sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 {
-	/* where the real element name starts, sans ns prefix */
-	const char *rname = tag_massage(name);
-	const umpf_tid_t tid = sax_tid_from_tag(rname);
-
-	if (!umpf_pref_p(ctx, name, rname - name) && ctx->msg != NULL) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", name);
-		return;
-	}
+	const umpf_tid_t tid = sax_tid_from_tag(name);
 
 	/* all the stuff that needs a new sax handler */
 	switch (tid) {
@@ -772,22 +807,10 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 	return;
 }
 
-
 static void
-sax_eo_elt(__ctx_t ctx, const char *name)
+sax_eo_FIXML_elt(__ctx_t ctx, const char *name)
 {
-	/* where the real element name starts, sans ns prefix */
-	const char *rname = tag_massage(name);
-	umpf_tid_t tid = sax_tid_from_tag(rname);
-
-	/* check if this is an umpf node */
-	if (!umpf_pref_p(ctx, name, rname - name)) {
-		/* dont know what to do */
-		return;
-	}
-
-	/* stuff buf reset */
-	stuff_buf_reset(ctx);
+	umpf_tid_t tid = sax_tid_from_tag(name);
 
 	/* stuff that needed to be done, fix up state etc. */
 	switch (tid) {
@@ -822,20 +845,239 @@ sax_eo_elt(__ctx_t ctx, const char *name)
 	return;
 }
 
-static void
-stuff_buf_push(__ctx_t ctx, const char *ch, int len)
+
+static size_t
+__eat_glue(const char *src, size_t len, const char *cookie, size_t cklen)
 {
-	if (UNLIKELY(ctx->sbix + len >= ctx->sbsz)) {
-		size_t new_sz = ctx->sbix + len;
+	const char *end;
+
+	if ((end = memmem(src, len, cookie, cklen)) != NULL) {
+		UMPF_DEBUG(PFIXML_PRE " found end tag, eating contents\n");
+		return end - src;
+	} else {
+		UMPF_DEBUG(PFIXML_PRE " end tag not found, eating all\n");
+		return len;
+	}
+}
+
+static size_t
+__push_glue(__ctx_t ctx, const char *src, size_t len)
+{
+	const char *cookie = ctx->sbuf + sizeof(size_t);
+	size_t cookie_len = ((size_t*)ctx->sbuf)[0];
+	size_t consum;
+
+	UMPF_DEBUG("looking for %s %zu\n", cookie, cookie_len);
+	consum = __eat_glue(src, len, cookie, cookie_len);
+
+	/* maybe realloc first? */
+	if (UNLIKELY(ctx->sbix + consum + 1 >= ctx->sbsz)) {
+		size_t new_sz = ctx->sbix + consum + 1;
 
 		/* round to multiple of 4096 */
 		new_sz = (new_sz & ~0xfff) + 4096L;
 		/* realloc now */
 		ctx->sbuf = realloc(ctx->sbuf, ctx->sbsz = new_sz);
 	}
-	/* now copy */
-	memcpy(ctx->sbuf + ctx->sbix, ch, len);
-	ctx->sbuf[ctx->sbix += len] = '\0';
+
+	/* stuff chunk into our buffer */
+	memcpy(ctx->sbuf + ctx->sbix, src, consum);
+	ctx->sbuf[ctx->sbix += consum] = '\0';
+	UMPF_DEBUG("pushed %zu\n", consum);
+	return consum;
+}
+
+static void
+sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int UNUSED(len))
+{
+/* should be called only in glue mode */
+	size_t consumed;
+	/* libxml2 specific! */
+	size_t max_len = ctx->pp->input->end - ctx->pp->input->cur;
+
+	/* push what we've got */
+	consumed = __push_glue(ctx, ch, max_len);
+
+	/* libxml2 specific stuff,
+	 * HACK, cheat on our push parser */
+	UMPF_DEBUG("eating %zu bytes from libxml's buffer\n", consumed);
+	ctx->pp->input->cur += consumed;
+	ctx->pp->input->consumed += consumed;
+	return;
+}
+
+/* hackery */
+#define AOU_CONT_OFFS	(32)
+
+static void
+sax_bo_AOU_elt(
+	__ctx_t ctx, umpf_ns_t ns, const char *name, const char **UNUSED(attrs))
+{
+	const umpf_tid_t tid = sax_tid_from_tag(name);
+
+	switch (tid) {
+	case UMPF_TAG_GLUE: {
+		umpf_msg_t msg = ctx->msg;
+
+		/* actually this is the only one we support */
+		UMPF_DEBUG(PFIXML_PRE " GLUE\n");
+
+		if (UNLIKELY(msg == NULL)) {
+			UMPF_DEBUG("msg NULL, glue is meaningless\n");
+			break;
+		}
+
+		switch (umpf_get_msg_type(msg)) {
+		case UMPF_MSG_NEW_PF: {
+			/* ah, finally, glue indeed is supported here */
+			void *ptr;
+
+			if (UNLIKELY(msg->new_pf.satellite != NULL)) {
+				/* someone else, prob us, was faster */
+				break;
+			}
+			/* the glue code wants a pointer to the satellite */
+			ptr = &msg->new_pf.satellite;
+			(void)push_state(ctx, UMPF_TAG_GLUE, ptr);
+
+			/* libxml specific */
+			ctx->pp->sax->characters =
+				(charactersSAXFunc)sax_stuff_buf_AOU_push;
+			/* help the stuff buf pusher and
+			 * construct the end tag for him */
+			{
+				char *tmp = ctx->sbuf + sizeof(size_t);
+
+				*tmp++ = '<';
+				*tmp++ = '/';
+				tmp = stpcpy(tmp, ns->pref);
+				*tmp++ = ':';
+				*tmp++ = 'g';
+				*tmp++ = 'l';
+				*tmp++ = 'u';
+				*tmp++ = 'e';
+				*tmp++ = '>';
+				*tmp = '\0';
+				((size_t*)ctx->sbuf)[0] =
+					tmp - ctx->sbuf - sizeof(size_t);
+				/* reset our stuff buffer */
+				ctx->sbix = AOU_CONT_OFFS;
+			}
+			break;
+		}
+		default:
+			break;
+		}
+		break;
+	}
+	default:
+		break;
+	}
+	return;
+}
+
+static void
+sax_eo_AOU_elt(__ctx_t ctx, const char *name)
+{
+	const umpf_tid_t tid = sax_tid_from_tag(name);
+
+	switch (tid) {
+	case UMPF_TAG_GLUE: {
+		char **ptr;
+		size_t len = ctx->sbix - AOU_CONT_OFFS;
+
+		UMPF_DEBUG(PFIXML_PRE " /GLUE\n");
+
+		/* reset stuff buffer */
+		ctx->sbix = 0;
+		/* unsubscribe stuff buffer cb */
+		ctx->pp->sax->characters = NULL;
+
+		if (UNLIKELY(get_state_otype(ctx) != UMPF_TAG_GLUE ||
+			     (ptr = get_state_object(ctx)) == NULL)) {
+			break;
+		}
+
+		/* frob contents */
+		*ptr = strndup(ctx->sbuf + AOU_CONT_OFFS, len);
+		/* job done, back to normal */
+		pop_state(ctx);
+		break;
+	}
+	default:
+		break;
+	}
+	return;
+}
+
+
+static void
+sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
+{
+	/* where the real element name starts, sans ns prefix */
+	const char *rname = tag_massage(name);
+	umpf_ns_t ns = __pref_to_ns(ctx, name, rname - name);
+
+	if (UNLIKELY(ns == NULL)) {
+		UMPF_DEBUG(PFIXML_PRE ": unknown prefix in tag %s\n", name);
+		return;
+	}
+
+	switch (ns->nsid) {
+	case UMPF_NS_FIXML_5_0:
+	case UMPF_NS_FIXML_4_4:
+		sax_bo_FIXML_elt(ctx, rname, attrs);
+		break;
+
+	case UMPF_NS_AOU_0_1:
+		sax_bo_AOU_elt(ctx, ns, rname, attrs);
+		break;
+
+	case UMPF_NS_MDDL_3_0:
+		UMPF_DEBUG(PFIXML_PRE ": can't parse mddl yet (%s)\n", rname);
+		break;
+
+	case UMPF_NS_UNK:
+	default:
+		UMPF_DEBUG(PFIXML_PRE
+			   ": unknown namespace %s (%s)\n", name, ns->href);
+		break;
+	}
+	return;
+}
+
+static void
+sax_eo_elt(__ctx_t ctx, const char *name)
+{
+	/* where the real element name starts, sans ns prefix */
+	const char *rname = tag_massage(name);
+	umpf_ns_t ns = __pref_to_ns(ctx, name, rname - name);
+
+	if (UNLIKELY(ns == NULL)) {
+		UMPF_DEBUG(PFIXML_PRE ": unknown prefix in tag %s\n", name);
+		return;
+	}
+
+	switch (ns->nsid) {
+	case UMPF_NS_FIXML_5_0:
+	case UMPF_NS_FIXML_4_4:
+		sax_eo_FIXML_elt(ctx, rname);
+		break;
+
+	case UMPF_NS_AOU_0_1:
+		sax_eo_AOU_elt(ctx, rname);
+		break;
+
+	case UMPF_NS_MDDL_3_0:
+		UMPF_DEBUG(PFIXML_PRE ": can't parse mddl yet (%s)\n", rname);
+		break;
+
+	case UMPF_NS_UNK:
+	default:
+		UMPF_DEBUG(PFIXML_PRE
+			   ": unknown namespace %s (%s)\n", name, ns->href);
+		break;
+	}
 	return;
 }
 
@@ -853,7 +1095,6 @@ parse_file(__ctx_t ctx, const char *file)
 	/* fill in the minimalistic sax handler to begin with */
 	ctx->hdl->startElement = (startElementSAXFunc)sax_bo_elt;
 	ctx->hdl->endElement = (endElementSAXFunc)sax_eo_elt;
-	ctx->hdl->characters = (charactersSAXFunc)stuff_buf_push;
 	ctx->hdl->getEntity = sax_get_ent;
 
 	res = xmlSAXUserParseFile(ctx->hdl, ctx, file);
@@ -883,7 +1124,24 @@ final_blob_p(__ctx_t ctx)
 static void
 parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
-	xmlParseChunk(ctx->pp, buf, bsz, bsz == 0);
+	switch (get_state_otype(ctx)) {
+		size_t cns;
+	case UMPF_TAG_GLUE:
+		/* better not to push parse this guy
+		 * call our stuff buf pusher instead */
+		UMPF_DEBUG(PFIXML_PRE ": GLUE direct\n");
+		if ((cns = __push_glue(ctx, buf, bsz)) < bsz) {
+			/* oh, we need to wind our buffers */
+			buf += cns;
+			bsz -= cns;
+		} else {
+			break;
+		}
+		UMPF_DEBUG(PFIXML_PRE ": GLUE consumed %zu\n", cns);
+	default:
+		xmlParseChunk(ctx->pp, buf, bsz, bsz == 0);
+		break;
+	}
 	return;
 }
 
@@ -919,7 +1177,6 @@ init(__ctx_t ctx)
 	/* fill in the minimalistic sax handler to begin with */
 	ctx->hdl->startElement = (startElementSAXFunc)sax_bo_elt;
 	ctx->hdl->endElement = (endElementSAXFunc)sax_eo_elt;
-	ctx->hdl->characters = (charactersSAXFunc)stuff_buf_push;
 	ctx->hdl->getEntity = sax_get_ent;
 	return;
 }
@@ -1042,7 +1299,7 @@ __umpf_parse_blob(__ctx_t ctx, const char *buf, size_t bsz)
 static void
 __umpf_parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
-	UMPF_DEBUG(PFIXML_PRE ": parsing blob of size %zu\n", bsz);
+	UMPF_DEBUG(PFIXML_PRE ": parsing more blob of size %zu\n", bsz);
 	parse_more_blob(ctx, buf, bsz);
 	return;
 }

@@ -1,0 +1,34 @@
+%{
+typedef struct umpf_nsuri_s *umpf_nsuri_t;
+
+typedef enum {
+	/* must be first */
+	UMPF_NS_UNK,
+	/* alphabetic list of name spaces */
+	UMPF_NS_AOU_0_1,
+	UMPF_NS_FIXML_4_4,
+	UMPF_NS_FIXML_5_0,
+	UMPF_NS_MDDL_3_0,
+
+} umpf_nsid_t;
+
+%}
+%7bit
+%readonly-tables
+%struct-type
+%define slot-name nsuri
+%define hash-function-name __nsid_hash
+%define lookup-function-name __nsiddify
+%null-strings
+%enum
+
+struct umpf_nsuri_s {
+	const char *nsuri;
+	umpf_nsid_t nsid;
+};
+
+%%
+http://www.fixprotocol.org/FIXML-5-0,	UMPF_NS_FIXML_5_0
+http://www.fixprotocol.org/FIXML-4-4,	UMPF_NS_FIXML_4_4
+http://www.ga-group.nl/aou-0.1,	UMPF_NS_AOU_0_1
+http://www.mddl.org/mddl/3.0-beta,	UMPF_NS_MDDL_3_0
