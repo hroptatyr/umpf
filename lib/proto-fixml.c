@@ -888,7 +888,7 @@ __push_glue(__ctx_t ctx, const char *src, size_t len)
 }
 
 static void
-sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int UNUSED(len))
+sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int len)
 {
 /* should be called only in glue mode */
 	size_t consumed;
@@ -901,8 +901,15 @@ sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int UNUSED(len))
 	/* libxml2 specific stuff,
 	 * HACK, cheat on our push parser */
 	UMPF_DEBUG("eating %zu bytes from libxml's buffer\n", consumed);
-	ctx->pp->input->cur += consumed;
-	ctx->pp->input->consumed += consumed;
+	if (consumed < max_len) {
+		/* we mustn't wind too far */
+		ctx->pp->input->cur += consumed - len;
+	} else {
+		/* everything's gone, just wind to the end */
+		ctx->pp->input->cur += consumed;
+	}
+	/* put into parser end tag mode, libxml2 must see </ now */
+	ctx->pp->instate = XML_PARSER_END_TAG;
 	return;
 }
 
