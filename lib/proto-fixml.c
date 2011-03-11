@@ -846,29 +846,33 @@ sax_eo_FIXML_elt(__ctx_t ctx, const char *name)
 }
 
 
-static void
-sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int len)
+static size_t
+__eat_glue(const char *src, size_t len, const char *cookie, size_t cklen)
 {
-/* should be called only in glue mode */
 	const char *end;
-	size_t new_len;
 
-	if ((end = memmem(ch, len, ctx->sbuf, strlen(ctx->sbuf))) != NULL) {
+	if ((end = memmem(src, len, cookie, cklen)) != NULL) {
 		UMPF_DEBUG(PFIXML_PRE " found end tag, eating contents\n");
-		new_len = end - ch;
-
-	} else /*if (end == NULL)*/ {
-		/* libxml2 specific! */
-		size_t max_len = ctx->pp->input->end - ctx->pp->input->cur;
-
-		UMPF_DEBUG(PFIXML_PRE " end tag not found, "
-			   "eating everything as I'm hungry %zu\n", max_len);
-		new_len = strnlen(ch, max_len);
+		return end - src;
+	} else {
+		UMPF_DEBUG(PFIXML_PRE " end tag not found, eating all\n");
+		return len;
 	}
+}
+
+static size_t
+__push_glue(__ctx_t ctx, const char *src, size_t len)
+{
+	const char *cookie = ctx->sbuf + sizeof(size_t);
+	size_t cookie_len = ((size_t*)ctx->sbuf)[0];
+	size_t consum;
+
+	UMPF_DEBUG("looking for %s %zu\n", cookie, cookie_len);
+	consum = __eat_glue(src, len, cookie, cookie_len);
 
 	/* maybe realloc first? */
-	if (UNLIKELY(ctx->sbix + new_len + 1 >= ctx->sbsz)) {
-		size_t new_sz = ctx->sbix + new_len + 1;
+	if (UNLIKELY(ctx->sbix + consum + 1 >= ctx->sbsz)) {
+		size_t new_sz = ctx->sbix + consum + 1;
 
 		/* round to multiple of 4096 */
 		new_sz = (new_sz & ~0xfff) + 4096L;
@@ -877,19 +881,28 @@ sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int len)
 	}
 
 	/* stuff chunk into our buffer */
-	memcpy(ctx->sbuf + ctx->sbix, ch, new_len);
-	ctx->sbuf[ctx->sbix += new_len] = '\0';
+	memcpy(ctx->sbuf + ctx->sbix, src, consum);
+	ctx->sbuf[ctx->sbix += consum] = '\0';
+	UMPF_DEBUG("pushed %zu\n", consum);
+	return consum;
+}
 
-	/* libxml2 specific stuff */
-	{
-		/* cheat on our push parser */
-		xmlParserInputPtr inp = ctx->pp->input;
-		size_t inc = new_len - len;
+static void
+sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int UNUSED(len))
+{
+/* should be called only in glue mode */
+	size_t consumed;
+	/* libxml2 specific! */
+	size_t max_len = ctx->pp->input->end - ctx->pp->input->cur;
 
-		UMPF_DEBUG("eating %zu bytes away\n", inc);
-		inp->cur += inc;
-		inp->consumed += inc;
-	}
+	/* push what we've got */
+	consumed = __push_glue(ctx, ch, max_len);
+
+	/* libxml2 specific stuff,
+	 * HACK, cheat on our push parser */
+	UMPF_DEBUG("eating %zu bytes from libxml's buffer\n", consumed);
+	ctx->pp->input->cur += consumed;
+	ctx->pp->input->consumed += consumed;
 	return;
 }
 
@@ -933,7 +946,7 @@ sax_bo_AOU_elt(
 			/* help the stuff buf pusher and
 			 * construct the end tag for him */
 			{
-				char *tmp = ctx->sbuf;
+				char *tmp = ctx->sbuf + sizeof(size_t);
 
 				*tmp++ = '<';
 				*tmp++ = '/';
@@ -945,7 +958,8 @@ sax_bo_AOU_elt(
 				*tmp++ = 'e';
 				*tmp++ = '>';
 				*tmp = '\0';
-				UMPF_DEBUG("end tag \"%s\"\n", ctx->sbuf);
+				((size_t*)ctx->sbuf)[0] =
+					tmp - ctx->sbuf - sizeof(size_t);
 				/* reset our stuff buffer */
 				ctx->sbix = AOU_CONT_OFFS;
 			}
@@ -1110,7 +1124,24 @@ final_blob_p(__ctx_t ctx)
 static void
 parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
-	xmlParseChunk(ctx->pp, buf, bsz, bsz == 0);
+	switch (get_state_otype(ctx)) {
+		size_t cns;
+	case UMPF_TAG_GLUE:
+		/* better not to push parse this guy
+		 * call our stuff buf pusher instead */
+		UMPF_DEBUG(PFIXML_PRE ": GLUE direct\n");
+		if ((cns = __push_glue(ctx, buf, bsz)) < bsz) {
+			/* oh, we need to wind our buffers */
+			buf += cns;
+			bsz -= cns;
+		} else {
+			break;
+		}
+		UMPF_DEBUG(PFIXML_PRE ": GLUE consumed %zu\n", cns);
+	default:
+		xmlParseChunk(ctx->pp, buf, bsz, bsz == 0);
+		break;
+	}
 	return;
 }
 
