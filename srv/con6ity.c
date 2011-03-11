@@ -301,7 +301,7 @@ deinit_conn_watchers(void *UNUSED(loop))
 	/* properly close all sockets */
 	ev_walk(EV_A_ EV_IO, clo_evsock);
 #else  /* !EV_WALK_ENABLE */
-	for (int i = 0; i < nwio; i++) {
+	for (size_t i = 0; i < nwio; i++) {
 		clo_evsock(EV_A_ EV_IO, __wio + i);
 	}
 #endif	/* EV_WALK_ENABLE */

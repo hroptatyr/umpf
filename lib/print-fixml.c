@@ -116,7 +116,7 @@ csnprintf(__ctx_t ctx, const char *fmt, ...)
 {
 	va_list ap;
 	size_t left;
-	int len = 0;
+	ssize_t len = 0;
 
 	do {
 		check_realloc(ctx, len + 1);
@@ -124,7 +124,7 @@ csnprintf(__ctx_t ctx, const char *fmt, ...)
 		va_start(ap, fmt);
 		len = vsnprintf(ctx->gbuf + ctx->idx, left, fmt, ap);
 		va_end(ap);
-	} while (UNLIKELY(len == -1 || len >= left));
+	} while (UNLIKELY(len == -1 || (size_t)len >= left));
 
 	ctx->idx += len;
 	return len;
@@ -166,7 +166,7 @@ sputs_enc(__ctx_t ctx, const char *s)
 {
 	static const char stpset[] = "<>&";
 
-	for (size_t idx; idx = strcspn(s, stpset); s += idx + sizeof(*s)) {
+	for (size_t idx; (idx = strcspn(s, stpset)); s += idx + sizeof(*s)) {
 		/* write what we've got */
 		snputs(ctx, s, idx);
 		/* inspect the character */
@@ -185,7 +185,7 @@ sputs_enc(__ctx_t ctx, const char *s)
 			break;
 		}
 	}
-	return;
+	/* not reached */
 }
 
 static void
@@ -194,13 +194,13 @@ sputs_encq(__ctx_t ctx, const char *s)
 /* like fputs() but encode special chars */
 	static const char stpset[] = "<>&'\"";
 
-	for (size_t idx; idx = strcspn(s, stpset); s += idx + sizeof(*s)) {
+	for (size_t idx; (idx = strcspn(s, stpset)); s += idx + sizeof(*s)) {
 		/* write what we've got */
 		snputs(ctx, s, idx);
 		/* inspect the character */
 		switch (s[idx]) {
 		default:
-		case '\0':
+		case '0':
 			return;
 		case '<':
 			snputs(ctx, "&lt;", 4);
@@ -219,7 +219,7 @@ sputs_encq(__ctx_t ctx, const char *s)
 			break;
 		}
 	}
-	return;
+	/* not reached */
 }
 
 
