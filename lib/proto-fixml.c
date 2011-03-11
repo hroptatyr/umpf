@@ -133,7 +133,7 @@ static void
 init_ctxcb(__ctx_t ctx)
 {
 	memset(ctx->ctxcb_pool, 0, sizeof(ctx->ctxcb_pool));
-	for (int i = 0; i < countof(ctx->ctxcb_pool) - 1; i++) {
+	for (size_t i = 0; i < countof(ctx->ctxcb_pool) - 1; i++) {
 		ctx->ctxcb_pool[i].next = ctx->ctxcb_pool + i + 1;
 	}
 	ctx->ctxcb_head = ctx->ctxcb_pool;
@@ -684,7 +684,7 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 			;
 		} else if (UNLIKELY(get_state_otype(ctx) != UMPF_TAG_FIXML)) {
 			;
-		} else if (get_state_objint(ctx) < msg->pf.nposs) {
+		} else if ((size_t)get_state_objint(ctx) < msg->pf.nposs) {
 			iq = msg->pf.poss + get_state_objint(ctx);
 		}
 		(void)push_state(ctx, tid, iq);

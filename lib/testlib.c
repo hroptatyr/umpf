@@ -243,7 +243,7 @@ test_libxml2(char *blob, size_t len)
 #endif	/* 0 */
 
 int
-main(int argc, const char *argv[])
+main(int argc, char *argv[])
 {
 	char altogether[4096] = {0};
 	size_t len;
