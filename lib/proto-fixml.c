@@ -40,6 +40,7 @@
 #endif	/* HAVE_CONFIG_H */
 #include <string.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <time.h>
 #include <ctype.h>
 #if defined HAVE_LIBXML2
@@ -395,6 +396,114 @@ __pref_to_ns(__ctx_t ctx, const char *pref, size_t pref_len)
 	return NULL;
 }
 
+static char*
+unquot(const char *src)
+{
+/* return a copy of SRC with all entities replaced */
+	size_t len = strlen(src);
+	char *res = malloc(len);
+	const char *sp = src;
+	char *rp = res;
+
+	while (1) {
+		size_t tmp;
+
+		/* find next occurrence of stop set characters */
+		sp = strchrnul(src, '&');
+		/* write what we've got so far */
+		tmp = sp - src;
+		memcpy(rp, src, tmp);
+		rp += tmp;
+
+		if (LIKELY(*sp == '\0')) {
+			*rp = '\0';
+			return res;
+		}
+
+		/* check if it's an entity */
+		tmp = (len - tmp < 8 ? len - tmp - 1 : 7);
+		if (UNLIKELY(memchr(sp + 1, ';', tmp) == NULL)) {
+			/* just copy the next TMP bytes */
+			memcpy(rp, sp, tmp + 1);
+			rp += tmp + 1;
+			continue;
+		}
+
+		/* inspect the entity */
+		switch (sp[1]) {
+		case '#': {
+			/* hex or dec representation */
+			uint16_t a = 0;
+
+			if (sp[2] == 'x') {
+				/* hex */
+				sp += 2;
+				while (*sp != ';') {
+					a *= 16;
+					if (*sp >= '0' && *sp <= '9') {
+						a += *sp++ - '0';
+					} else {
+						a += *sp++ - 'a' + 10;
+					}
+				}
+				src = sp + 1;
+				
+			} else {
+				/* dec */
+				sp += 2;
+				while (*sp != ';') {
+					a *= 10;
+					a += *sp++ - '0';
+				}
+				src = sp + 1;
+			}
+			/* prefer smaller chars */
+			if (LIKELY(a < 256)) {
+				*rp++ = (char)a;
+			} else {
+				*rp++ = (char)(a >> 8);
+				*rp++ = (char)(a & 0xff);
+			}
+			break;
+		}
+		case 'a':
+			/* could be &amp; or &apos; */
+			if (sp[2] == 'm' && sp[3] == 'p' && sp[4] == ';') {
+				*rp++ = '&';
+				src = sp + 5;
+			} else if (sp[2] == 'p' && sp[3] == 'o' &&
+				   sp[4] == 's' && sp[5] == ';') {
+				*rp++ = '\'';
+				src = sp + 6;
+			}
+			break;
+		case 'l':
+			if (sp[2] == 't' && sp[3] == ';') {
+				*rp++ = '<';
+				src = sp + 4;
+			}
+			break;
+		case 'g':
+			if (sp[2] == 't' && sp[3] == ';') {
+				*rp++ = '>';
+				src = sp + 4;
+			}
+		case 'q':
+			if (sp[2] == 'u' && sp[3] == 'o' &&
+			    sp[4] == 't' && sp[5] == ';') {
+				*rp++ = '"';
+				src = sp + 6;
+			}
+		default:
+			/* um */
+			*rp++ = *sp++;
+			src = sp;
+			break;
+		}
+	}
+	/* not reached */
+}
+
 
 /* structure aware helpers, move to lib? */
 #define ADDF(__sup, __str, __slot)			\
@@ -565,7 +674,7 @@ proc_PTY_attr(__ctx_t ctx, const char *attr, const char *value)
 		/* dont overwrite stuff without free()ing
 		 * actually this is a bit rich, too much knowledge in here */
 		if (msg->pf.name == NULL) {
-			msg->pf.name = strdup(value);
+			msg->pf.name = unquot(value);
 		}
 		break;
 	case UMPF_ATTR_S:
