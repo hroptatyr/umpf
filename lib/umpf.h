@@ -65,15 +65,20 @@ typedef enum {
 	UMPF_MSG_PATCH,
 } umpf_msg_type_t;
 
+/* stuff we need to identify an instrument */
+struct __ins_s {
+	char *sym;
+};
+
 /* naked portfolios */
-struct __Xqty_s {
+struct __qty_s {
 	double _long;
 	double _shrt;
 };
 
 struct __ins_qty_s {
-	char *instr;
-	struct __Xqty_s qty[1];
+	struct __ins_s ins[1];
+	struct __qty_s qty[1];
 };
 
 struct umpf_msg_hdr_s {

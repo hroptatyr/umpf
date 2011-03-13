@@ -704,8 +704,8 @@ proc_INSTRMT_attr(__ctx_t ctx, const char *attr, const char *value)
 
 	switch (aid) {
 	case UMPF_ATTR_SYM: {
-		struct __ins_qty_s *iq = get_state_object(ctx);
-		iq->instr = strdup(value);
+		struct __ins_s *ins = get_state_object(ctx);
+		ins->sym = unquot(value);
 		break;
 	}
 	default:

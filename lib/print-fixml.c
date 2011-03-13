@@ -250,9 +250,9 @@ print_instrmt(__ctx_t ctx, struct __ins_qty_s *i, size_t indent)
 	print_indent(ctx, indent);
 	sputs(ctx, "<Instrmt");
 
-	if (i->instr) {
+	if (i->ins->sym) {
 		sputs(ctx, " Sym=\"");
-		sputs_encq(ctx, i->instr);
+		sputs_encq(ctx, i->ins->sym);
 		sputc(ctx, '"');
 	}
 
