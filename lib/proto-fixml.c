@@ -1003,7 +1003,7 @@ __eat_glue(const char *src, size_t len, const char *cookie, size_t cklen)
 {
 	const char *end;
 
-	if ((end = memmem(src, len, cookie, cklen)) != NULL) {
+	if ((end = memmem(src, len + cklen, cookie, cklen)) != NULL) {
 		UMPF_DEBUG(PFIXML_PRE " found end tag, eating contents\n");
 		return end - src;
 	} else {
