@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!-- Request the description part of a security -->
+<FIXML xmlns="http://www.fixprotocol.org/FIXML-5-0" v="5.0"
+	xmlns:aou="http://www.ga-group.nl/aou-0.1">
+	<SecDefReq ReqID="give_me_my_money" ReqTyp="0">
+		<Instrmt Sym="EUR"/>
+	</SecDefReq>
+</FIXML>
+
+<!-- response -->
+<?xml version="1.0"?>
+<FIXML xmlns="http://www.fixprotocol.org/FIXML-5-0" v="5.0">
+	<SecDef>
+		<Instrmt Sym="GBPUSD"/>
+		<SecXML>
+			<aou:glue content-type="application/text">
+				just the good old cable
+			</aou:glue>
+		</SecXML>
+	</SecDef>
+</FIXML>

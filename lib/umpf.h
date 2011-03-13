@@ -58,6 +58,10 @@ typedef enum {
 	/* portoflio descriptions */
 	UMPF_MSG_GET_DESCR,
 	UMPF_MSG_SET_DESCR,
+	/* security definitions */
+	UMPF_MSG_NEW_SEC,
+	UMPF_MSG_GET_SEC,
+	UMPF_MSG_SET_SEC,
 	/* will be coalesced with od/uschi messages one day
 	 * diff takes 2 portfolios and returns a stream of od/uschi msgs
 	 * patch takes a portfolio and a stream of od/uschi msgs */
@@ -95,6 +99,14 @@ struct umpf_msg_new_pf_s {
 	char *satellite;
 };
 
+/* SecDefUpd -> new_sec */
+struct umpf_msg_new_sec_s {
+	struct umpf_msg_hdr_s hdr;
+
+	struct __ins_s ins[1];
+	char *satellite;
+};
+
 /* ReqForPoss[Ack] -> get_pf/set_pf */
 struct umpf_msg_pf_s {
 	struct umpf_msg_hdr_s hdr;
@@ -111,6 +123,7 @@ union umpf_msg_u {
 	struct umpf_msg_hdr_s hdr;
 	struct umpf_msg_pf_s pf;
 	struct umpf_msg_new_pf_s new_pf;
+	struct umpf_msg_new_sec_s new_sec;
 };
 
 
