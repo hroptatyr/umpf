@@ -1098,34 +1098,50 @@ sax_bo_AOU_elt(
 			/* the glue code wants a pointer to the satellite */
 			ptr = &msg->new_pf.satellite;
 			(void)push_state(ctx, UMPF_TAG_GLUE, ptr);
+			goto glue_setup;
+		}
+		case UMPF_MSG_NEW_SEC:
+		case UMPF_MSG_SET_SEC: {
+			/* ah, finally, glue indeed is supported here */
+			void *ptr;
 
-			/* libxml specific */
-			ctx->pp->sax->characters =
-				(charactersSAXFunc)sax_stuff_buf_AOU_push;
-			/* help the stuff buf pusher and
-			 * construct the end tag for him */
-			{
-				char *tmp = ctx->sbuf + sizeof(size_t);
-
-				*tmp++ = '<';
-				*tmp++ = '/';
-				tmp = stpcpy(tmp, ns->pref);
-				*tmp++ = ':';
-				*tmp++ = 'g';
-				*tmp++ = 'l';
-				*tmp++ = 'u';
-				*tmp++ = 'e';
-				*tmp++ = '>';
-				*tmp = '\0';
-				((size_t*)ctx->sbuf)[0] =
-					tmp - ctx->sbuf - sizeof(size_t);
-				/* reset our stuff buffer */
-				ctx->sbix = AOU_CONT_OFFS;
+			if (UNLIKELY(msg->new_sec.satellite != NULL)) {
+				/* someone else, prob us, was faster */
+				break;
 			}
-			break;
+			/* the glue code wants a pointer to the satellite */
+			ptr = &msg->new_sec.satellite;
+			(void)push_state(ctx, UMPF_TAG_GLUE, ptr);
+			goto glue_setup;
 		}
 		default:
 			break;
+		}
+		break;
+
+		glue_setup:
+		/* libxml specific */
+		ctx->pp->sax->characters =
+			(charactersSAXFunc)sax_stuff_buf_AOU_push;
+		/* help the stuff buf pusher and
+		 * construct the end tag for him */
+		{
+			char *tmp = ctx->sbuf + sizeof(size_t);
+
+			*tmp++ = '<';
+			*tmp++ = '/';
+			tmp = stpcpy(tmp, ns->pref);
+			*tmp++ = ':';
+			*tmp++ = 'g';
+			*tmp++ = 'l';
+			*tmp++ = 'u';
+			*tmp++ = 'e';
+			*tmp++ = '>';
+			*tmp = '\0';
+			((size_t*)ctx->sbuf)[0] =
+				tmp - ctx->sbuf - sizeof(size_t);
+			/* reset our stuff buffer */
+			ctx->sbix = AOU_CONT_OFFS;
 		}
 		break;
 	}
