@@ -314,6 +314,38 @@ print_version(void)
 	return;
 }
 
+static int
+check_new_pf_args(struct __clo_s *clo)
+{
+	if (clo->cmd != UMPF_CMD_NEW_PF) {
+		fputs("command must be NEW_PF\n", stderr);
+		return -1;
+	}
+	if (clo->new_pf->mnemo == NULL) {
+		fputs("portfolio mnemonic must not be NULL\n", stderr);
+		return -1;
+	}
+	return 0;
+}
+
+static int
+check_new_sec_args(struct __clo_s *clo)
+{
+	if (clo->cmd != UMPF_CMD_NEW_SEC) {
+		fputs("command must be NEW_SEC\n", stderr);
+		return -1;
+	}
+	if (clo->new_sec->pf == NULL) {
+		fputs("portfolio mnemonic must not be NULL\n", stderr);
+		return -1;
+	}
+	if (clo->new_sec->mnemo == NULL) {
+		fputs("security mnemonic must not be NULL\n", stderr);
+		return -1;
+	}
+	return 0;
+}
+
 
 int
 main(int argc, char *argv[])
@@ -341,10 +373,18 @@ main(int argc, char *argv[])
 		print_version();
 		break;
 	case UMPF_CMD_NEW_PF:
+		if (check_new_pf_args(&argi)) {
+			print_usage(argi.cmd);
+			return 1;
+		}
  		fprintf(stdout, "new-pf(%s, %s)\n",
 			argi.new_pf->mnemo, argi.new_pf->descr);
 		break;
 	case UMPF_CMD_NEW_SEC:
+		if (check_new_sec_args(&argi)) {
+			print_usage(argi.cmd);
+			return 1;
+		}
  		fprintf(stdout, "new-sec(%s, %s, %s)\n",
 			argi.new_sec->pf,
 			argi.new_sec->mnemo, argi.new_sec->descr);
