@@ -11,6 +11,7 @@ CLEANFILES = $(BUILT_SOURCES)
 
 if BUILD_CLIAPPS
 bin_PROGRAMS += umpf
+umpf_LDFLAGS = -static
 umpf_LDADD = $(top_builddir)/lib/libumpf.la
 umpf_CPPFLAGS = -I$(top_srcdir)/lib
 endif ## BUILD_CLIAPPS
