@@ -607,7 +607,16 @@ static void
 print_sec_def(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 {
 	print_indent(ctx, indent);
-	sputs(ctx, "<SecDef>\n");
+	sputs(ctx, "<SecDef");
+
+	if (msg->new_sec.pf_mnemo) {
+		sputs(ctx, " Txt=\"");
+		sputs_encq(ctx, msg->new_sec.pf_mnemo);
+		sputc(ctx, '"');
+	}
+
+	/* finalise the tag */
+	sputs(ctx, ">\n");
 
 	print_instrmt(ctx, msg->new_sec.ins, indent + 2);
 
@@ -624,7 +633,16 @@ static void
 print_sec_def_req(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 {
 	print_indent(ctx, indent);
-	sputs(ctx, "<SecDefReq>\n");
+	sputs(ctx, "<SecDefReq");
+
+	if (msg->new_sec.pf_mnemo) {
+		sputs(ctx, " Txt=\"");
+		sputs_encq(ctx, msg->new_sec.pf_mnemo);
+		sputc(ctx, '"');
+	}
+
+	/* finalise the tag */
+	sputs(ctx, ">\n");
 
 	print_instrmt(ctx, msg->new_sec.ins, indent + 2);
 
@@ -637,7 +655,16 @@ static void
 print_sec_def_upd(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 {
 	print_indent(ctx, indent);
-	sputs(ctx, "<SecDefUpd>\n");
+	sputs(ctx, "<SecDefUpd");
+
+	if (msg->new_sec.pf_mnemo) {
+		sputs(ctx, " Txt=\"");
+		sputs_encq(ctx, msg->new_sec.pf_mnemo);
+		sputc(ctx, '"');
+	}
+
+	/* finalise the tag */
+	sputs(ctx, ">\n");
 
 	print_instrmt(ctx, msg->new_sec.ins, indent + 2);
 

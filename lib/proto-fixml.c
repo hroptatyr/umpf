@@ -748,6 +748,31 @@ proc_QTY_attr(__ctx_t ctx, const char *attr, const char *value)
 	return;
 }
 
+proc_SEC_DEF_all_attr(__ctx_t ctx, const char *attr, const char *value)
+{
+	const char *rattr = tag_massage(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
+	umpf_msg_t msg = ctx->msg;
+
+	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
+		/* dont know what to do */
+		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
+		return;
+	}
+
+	switch (aid) {
+	case UMPF_ATTR_TXT:
+		msg->new_sec.pf_mnemo = unquot(value);
+		break;
+	case UMPF_ATTR_TXN_TM:
+		/* ignored */
+		break;
+	default:
+		break;
+	}
+	return;
+}
+
 
 static void
 sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
@@ -797,16 +822,25 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 
 	case UMPF_TAG_SEC_DEF_REQ:
 		umpf_set_msg_type(msg, UMPF_MSG_GET_SEC);
+		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+			proc_SEC_DEF_all_attr(ctx, attrs[j], attrs[j + 1]);
+		}
 		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
 		break;
 
 	case UMPF_TAG_SEC_DEF_UPD:
 		umpf_set_msg_type(msg, UMPF_MSG_SET_SEC);
+		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+			proc_SEC_DEF_all_attr(ctx, attrs[j], attrs[j + 1]);
+		}
 		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
 		break;
 
 	case UMPF_TAG_SEC_DEF:
 		umpf_set_msg_type(msg, UMPF_MSG_NEW_SEC);
+		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+			proc_SEC_DEF_all_attr(ctx, attrs[j], attrs[j + 1]);
+		}
 		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
 		break;
 
@@ -1526,6 +1560,18 @@ umpf_free_msg(umpf_msg_t msg)
 		/* satellite only occurs in new pf */
 		if (msg->new_pf.satellite) {
 			xfree(msg->new_pf.satellite);
+		}
+		goto common;
+
+	case UMPF_MSG_NEW_SEC:
+	case UMPF_MSG_GET_SEC:
+	case UMPF_MSG_SET_SEC:
+		/* satellite and portfolio mnemo must be freed */
+		if (msg->new_sec.satellite) {
+			xfree(msg->new_sec.satellite);
+		}
+		if (msg->new_sec.pf_mnemo) {
+			xfree(msg->new_sec.pf_mnemo);
 		}
 		goto common;
 

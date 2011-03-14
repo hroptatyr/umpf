@@ -105,6 +105,8 @@ struct umpf_msg_new_sec_s {
 
 	struct __ins_s ins[1];
 	char *satellite;
+
+	char *pf_mnemo;
 };
 
 /* ReqForPoss[Ack] -> get_pf/set_pf */
