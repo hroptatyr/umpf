@@ -160,7 +160,7 @@ __get_val(int *i, size_t len, char *argv[])
 }
 
 static void
-check_host_args(struct __clo_s *clo, char *argv[])
+parse_host_args(struct __clo_s *clo, char *argv[])
 {
 	int i = 0;
 	char *p;
@@ -180,7 +180,7 @@ check_host_args(struct __clo_s *clo, char *argv[])
 }
 
 static void
-check_new_pf_args(struct __clo_s *clo, int argc, char *argv[])
+parse_new_pf_args(struct __clo_s *clo, int argc, char *argv[])
 {
 	for (int i = 0; i < argc; i++) {
 		char *p = argv[i];
@@ -202,7 +202,7 @@ check_new_pf_args(struct __clo_s *clo, int argc, char *argv[])
 }
 
 static void
-check_new_sec_args(struct __clo_s *clo, int argc, char *argv[])
+parse_new_sec_args(struct __clo_s *clo, int argc, char *argv[])
 {
 	for (int i = 0; i < argc; i++) {
 		char *p = argv[i];
@@ -231,7 +231,7 @@ check_new_sec_args(struct __clo_s *clo, int argc, char *argv[])
 }
 
 static void
-check_args(struct __clo_s *clo, int argc, char *argv[])
+parse_args(struct __clo_s *clo, int argc, char *argv[])
 {
 	for (int i = 0; i < argc; i++) {
 		char *p = argv[i];
@@ -248,7 +248,7 @@ check_args(struct __clo_s *clo, int argc, char *argv[])
 			case '-':
 				/* long opt */
 				if (strncmp(p, "host", 4) == 0) {
-					check_host_args(clo, argv + i);
+					parse_host_args(clo, argv + i);
 					continue;
 				} else if (strcmp(p, "help") == 0) {
 					clo->helpp = 1;
@@ -280,12 +280,12 @@ check_args(struct __clo_s *clo, int argc, char *argv[])
 			char **new_argv = argv + i + 1;
 			if (strcmp(p, "ew-pf") == 0) {
 				clo->cmd = UMPF_CMD_NEW_PF;
-				check_new_pf_args(clo, new_argc, new_argv);
+				parse_new_pf_args(clo, new_argc, new_argv);
 				continue;
 
 			} else if (strcmp(p, "ew-sec") == 0) {
 				clo->cmd = UMPF_CMD_NEW_SEC;
-				check_new_sec_args(clo, new_argc, new_argv);
+				parse_new_sec_args(clo, new_argc, new_argv);
 				continue;
 			}
 			break;
@@ -324,7 +324,7 @@ main(int argc, char *argv[])
 	argi.host = "localhost";
 	argi.port = 8675;
 	/* parse them command line */
-	check_args(&argi, argc - 1, argv + 1);
+	parse_args(&argi, argc - 1, argv + 1);
 
 	if (argi.helpp) {
 		/* command specific help? la'ers */
