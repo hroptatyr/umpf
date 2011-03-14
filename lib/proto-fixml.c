@@ -59,7 +59,7 @@
 #include "proto-fixml-ns.c"
 
 #if defined __INTEL_COMPILER
-# pragma warning (disable:424)
+# pragma warning (disable:2259)
 #endif	/* __INTEL_COMPILER */
 #if defined DEBUG_FLAG
 # include <assert.h>
@@ -396,6 +396,32 @@ __pref_to_ns(__ctx_t ctx, const char *pref, size_t pref_len)
 	return NULL;
 }
 
+static uint16_t
+hex_digit_to_val(char c)
+{
+	if (c >= '0' && c <= '9') {
+		return (uint16_t)(c - '0');
+	} else if (c >= 'a' && c <= 'f') {
+		return (uint16_t)(c - 'a' + 10);
+	} else if (c >= 'A' && c <= 'F') {
+		return (uint16_t)(c - 'A' + 10);
+	} else {
+		/* big error actually */
+		return 0;
+	}
+}
+
+static uint16_t
+dec_digit_to_val(char c)
+{
+	if (c >= '0' && c <= '9') {
+		return (uint16_t)(c - '0');
+	} else {
+		/* big bang */
+		return 0;
+	}
+}
+
 static char*
 unquot(const char *src)
 {
@@ -440,11 +466,7 @@ unquot(const char *src)
 				sp += 2;
 				while (*sp != ';') {
 					a *= 16;
-					if (*sp >= '0' && *sp <= '9') {
-						a += *sp++ - '0';
-					} else {
-						a += *sp++ - 'a' + 10;
-					}
+					a += hex_digit_to_val(*sp++);
 				}
 				src = sp + 1;
 				
@@ -453,7 +475,7 @@ unquot(const char *src)
 				sp += 2;
 				while (*sp != ';') {
 					a *= 10;
-					a += *sp++ - '0';
+					a += dec_digit_to_val(*sp++);
 				}
 				src = sp + 1;
 			}
@@ -748,6 +770,7 @@ proc_QTY_attr(__ctx_t ctx, const char *attr, const char *value)
 	return;
 }
 
+static void
 proc_SEC_DEF_all_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
