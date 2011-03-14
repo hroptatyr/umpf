@@ -775,6 +775,49 @@ INSERT INTO aou_umpf_portfolio (short) VALUES (?)";
 }
 
 static uint64_t
+__get_sec_id_from_mnemos(
+	dbconn_t conn, const char *pf_mnemo, const char *sec_mnemo)
+{
+	static const char qry[] = "\
+SELECT security_id FROM aou_umpf_security\n\
+LEFT JOIN aou_umpf_portfolio USING (portfolio_id)\n\
+WHERE aou_umpf_portfolio.short = ? AND aou_umpf_security.short = ?";
+	size_t pf_mnlen = strlen(pf_mnemo);
+	size_t sec_mnlen = strlen(sec_mnemo);
+	uint64_t sec_id = 0UL;
+	dbstmt_t stmt;
+	/* for our parameter binding later on */
+	struct __bind_s b[2] = {{
+			.type = BE_BIND_TYPE_TEXT,
+			.txt = pf_mnemo,
+			.len = pf_mnlen,
+		}, {
+			.type = BE_BIND_TYPE_TEXT,
+			.txt = sec_mnemo,
+			.len = sec_mnlen,
+		}};
+
+	if ((stmt = be_sql_prep(conn, qry, countof_m1(qry))) == NULL) {
+		return 0UL;
+	}
+
+	/* bind the params */
+	be_sql_bind(conn, stmt, b, countof(b));
+	/* execute */
+	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
+		struct __bind_s rb[1] = {{
+				.type = BE_BIND_TYPE_INT64,
+				/* default value */
+				.i64 = 0UL,
+			}};
+		be_sql_fetch(conn, stmt, rb, countof(rb));
+		sec_id = rb[0].i64;
+	}
+	be_sql_fin(conn, stmt);
+	return sec_id;
+}
+
+static uint64_t
 __get_sec_id(dbconn_t conn, uint64_t pf_id, const char *mnemo)
 {
 	static const char qry1[] = "\
@@ -1164,6 +1207,148 @@ WHERE tag_id = ?";
 	}
 	be_sql_fin(conn, stmt);
 	return;
+}
+
+DEFUN dbobj_t
+be_sql_new_sec(
+	dbconn_t conn, const char *pf_mnemo,
+	const char *sec_mnemo, const char *descr)
+{
+/* this is a get_pf + get_sec/INSERT + update */
+	size_t dlen;
+	static const char pre[] = "\
+UPDATE aou_umpf_security SET description = ? WHERE security_id = ?";
+	dbstmt_t stmt;
+	uint64_t pf_id;
+	uint64_t sec_id;
+
+	if (UNLIKELY(pf_mnemo == NULL || sec_mnemo == NULL)) {
+		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
+		return NULL;
+	} else if ((pf_id = __get_pf_id(conn, pf_mnemo)) == 0) {
+		/* portfolio getter is fucked */
+		UMPF_DEBUG(BE_SQL ": could not obtain portfolio id\n");
+		return NULL;
+	} else if ((sec_id = __get_sec_id(conn, pf_id, sec_mnemo)) == 0) {
+		/* portfolio getter is fucked */
+		UMPF_DEBUG(BE_SQL ": could not obtain security id\n");
+		return NULL;
+	}
+
+	/* otherwise there's more work to be done */
+	if (UNLIKELY(descr == NULL)) {
+		/* journey ends here */
+		return (dbobj_t)sec_id;
+	}
+	dlen = strlen(descr);
+	stmt = be_sql_prep(conn, pre, countof_m1(pre));
+
+	/* bind the params */
+	{
+		struct __bind_s b[2] = {{
+				.type = BE_BIND_TYPE_TEXT,
+				.txt = descr,
+				.len = dlen,
+			}, {
+				.type = BE_BIND_TYPE_INT64,
+				.i64 = pf_id,
+			}};
+		be_sql_bind(conn, stmt, b, countof(b));
+		be_sql_exec_stmt(conn, stmt);
+		be_sql_fin(conn, stmt);
+	}
+	return (dbobj_t)sec_id;
+}
+
+DEFUN dbobj_t
+be_sql_set_sec(
+	dbconn_t conn, const char *pf_mnemo,
+	const char *sec_mnemo, const char *descr)
+{
+/* this is a get_sec + update */
+	size_t dlen;
+	static const char pre[] = "\
+UPDATE aou_umpf_security SET description = ? WHERE security_id = ?";
+	dbstmt_t stmt;
+	uint64_t sec_id;
+
+	if (UNLIKELY(pf_mnemo == NULL || sec_mnemo == NULL)) {
+		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
+		return NULL;
+	} else if ((sec_id = __get_sec_id_from_mnemos(
+			    conn, pf_mnemo, sec_mnemo)) == 0) {
+		/* portfolio getter is fucked */
+		UMPF_DEBUG(BE_SQL ": could not obtain security id\n");
+		return NULL;
+	}
+
+	if (UNLIKELY(descr == NULL)) {
+		return (dbobj_t)sec_id;
+	}
+	/* otherwise there's more work to be done */
+	dlen = strlen(descr);
+	stmt = be_sql_prep(conn, pre, countof_m1(pre));
+
+	/* bind the params */
+	{
+		struct __bind_s b[2] = {{
+				.type = BE_BIND_TYPE_TEXT,
+				.txt = descr,
+				.len = dlen,
+			}, {
+				.type = BE_BIND_TYPE_INT64,
+				.i64 = sec_id,
+			}};
+		be_sql_bind(conn, stmt, b, countof(b));
+		be_sql_exec_stmt(conn, stmt);
+		be_sql_fin(conn, stmt);
+	}
+	return (dbobj_t)sec_id;
+}
+
+DECLF char*
+be_sql_get_sec(dbconn_t conn, const char *pf_mnemo, const char *sec_mnemo)
+{
+/* this is a get_sec + update */
+	static const char pre[] = "\
+SELECT description FROM aou_umpf_security WHERE security_id = ?";
+	dbstmt_t stmt;
+	uint64_t sec_id;
+	char *descr;
+
+	if (UNLIKELY(pf_mnemo == NULL || sec_mnemo == NULL)) {
+		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
+		return NULL;
+	} else if ((sec_id = __get_sec_id_from_mnemos(
+			    conn, pf_mnemo, sec_mnemo)) == 0) {
+		/* portfolio getter is fucked */
+		UMPF_DEBUG(BE_SQL ": could not obtain security id\n");
+		return NULL;
+	}
+
+	/* get them statements prepared */
+	stmt = be_sql_prep(conn, pre, countof_m1(pre));
+
+	/* bind the params */
+	{
+		struct __bind_s b[1] = {{
+				.type = BE_BIND_TYPE_INT64,
+				.i64 = sec_id,
+			}};
+		/* bind + exec */
+		be_sql_bind(conn, stmt, b, countof(b));
+		if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
+			struct __bind_s rb[1] = {{
+					.type = BE_BIND_TYPE_TEXT,
+					/* default value */
+					.ptr = NULL,
+				}};
+			be_sql_fetch(conn, stmt, rb, countof(rb));
+			descr = rb[0].ptr;
+		}
+		be_sql_fin(conn, stmt);
+	}
+	return descr;
 }
 
 /* be-sql.c ends here */
