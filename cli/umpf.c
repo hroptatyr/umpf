@@ -44,6 +44,13 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
+/* network stuff */
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+/* epoll stuff */
+#include "epoll-helpers.h"
 
 #include "umpf.h"
 
@@ -87,9 +94,12 @@ struct __new_sec_clo_s {
 /* command line options */
 struct __clo_s {
 	int helpp;
+
 	conn_meth_t meth;
 	const char *host;
 	uint16_t port;
+	int pref_fam;
+
 	umpf_cmd_t cmd;
 	union {
 		struct __new_pf_clo_s new_pf[1];
@@ -129,6 +139,75 @@ Supported commands:\n\
 ";
 
 
+/* network bollocks */
+static void
+__set_v6only(int sock)
+{
+#if defined IPV6_V6ONLY
+	int opt = 1;
+	setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt));
+#endif	/* IPV6_V6ONLY */
+	return;
+}
+
+static int
+umpf_connect(struct __clo_s *clo)
+{
+#define AS_V4(x)	((struct sockaddr_in*)(x))
+#define AS_V6(x)	((struct sockaddr_in6*)(x))
+	struct hostent *hp;
+	struct sockaddr_storage sa[1];
+	volatile int sock;
+	const char *host = clo->host;
+	const uint16_t port = clo->port;
+
+	switch (clo->pref_fam) {
+	case PF_UNSPEC:
+	case PF_INET6:
+		/* try ip6 first ... */
+		memset(sa, 0, sizeof(*sa));
+		if ((hp = gethostbyname2(host, AF_INET6)) != NULL &&
+		    (sock = socket(PF_INET6, SOCK_STREAM, IPPROTO_IP)) >= 0) {
+			AS_V6(sa)->sin6_family = AF_INET6;
+			AS_V6(sa)->sin6_port = htons(port);
+			memcpy(&AS_V6(sa)->sin6_addr, hp->h_addr, hp->h_length);
+
+			__set_v6only(sock);
+
+			/* try connect */
+			if (connect(sock, (void*)sa, sizeof(*sa)) >= 0) {
+				break;
+			}
+			close(sock);
+		}
+		/* ... then fall back to ip4 */
+	case PF_INET:
+		memset(sa, 0, sizeof(*sa));
+		if ((hp = gethostbyname2(host, AF_INET)) != NULL &&
+		    (sock = socket(PF_INET, SOCK_STREAM, IPPROTO_IP)) >= 0) {
+			AS_V4(sa)->sin_family = AF_INET;
+			AS_V4(sa)->sin_port = htons(port);
+			AS_V4(sa)->sin_addr = *(struct in_addr*)hp->h_addr;
+
+			/* try connect */
+			if (connect(sock, (void*)sa, sizeof(*sa)) >= 0) {
+				break;
+			}
+			close(sock);
+		}
+	default:
+		/* no socket whatsoever */
+		fprintf(stderr, "cannot connect to host %s.\n", host);
+		return -1;
+	}
+
+	/* operate in non-blocking mode */
+	setsock_nonblock(sock);
+	return sock;
+}
+
+
+/* command line parsing */
 static void
 pr_unknown(const char *arg)
 {
@@ -351,6 +430,7 @@ int
 main(int argc, char *argv[])
 {
 	struct __clo_s argi = {0};
+	volatile int sock;
 
 	/* default values */
 	argi.host = "localhost";
@@ -371,27 +451,35 @@ main(int argc, char *argv[])
 		return 1;
 	case UMPF_CMD_VERSION:
 		print_version();
-		break;
+		return 0;
 	case UMPF_CMD_NEW_PF:
 		if (check_new_pf_args(&argi)) {
 			print_usage(argi.cmd);
 			return 1;
 		}
- 		fprintf(stdout, "new-pf(%s, %s)\n",
-			argi.new_pf->mnemo, argi.new_pf->descr);
 		break;
 	case UMPF_CMD_NEW_SEC:
 		if (check_new_sec_args(&argi)) {
 			print_usage(argi.cmd);
 			return 1;
 		}
- 		fprintf(stdout, "new-sec(%s, %s, %s)\n",
-			argi.new_sec->pf,
-			argi.new_sec->mnemo, argi.new_sec->descr);
 		break;
 	}
 
-	printf("specified host %s port %hu\n", argi.host, argi.port);
+	if ((sock = umpf_connect(&argi)) < 0) {
+		return 1;
+	};
+
+	switch (argi.cmd) {
+	case UMPF_CMD_NEW_PF:
+
+	case UMPF_CMD_NEW_SEC:
+
+	default:
+		break;
+	}
+
+	close(sock);
 	return 0;
 }
 
