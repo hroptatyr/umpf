@@ -175,6 +175,64 @@ interpret_msg(int fd, umpf_msg_t msg)
 		be_sql_free_tag(umpf_dbconn, tag);
 		break;
 	}
+	case UMPF_MSG_NEW_SEC: {
+		const char *pf_mnemo;
+		const char *sec_mnemo, *descr;
+		dbobj_t sec;
+
+		UMPF_DEBUG(MOD_PRE ": new_sec();\n");
+		pf_mnemo = msg->new_sec.pf_mnemo;
+		sec_mnemo = msg->new_sec.ins->sym;
+		descr = msg->new_sec.satellite;
+		sec = be_sql_new_sec(umpf_dbconn, pf_mnemo, sec_mnemo, descr);
+
+		/* reuse the message to send the answer */
+		msg->hdr.mt++;
+		umpf_print_msg(fd, msg);
+
+		/* free resources */
+		be_sql_free_sec(umpf_dbconn, sec);
+		break;
+	}
+	case UMPF_MSG_SET_SEC: {
+		const char *pf_mnemo;
+		const char *sec_mnemo, *descr;
+		dbobj_t sec;
+
+		UMPF_DEBUG(MOD_PRE ": new_sec();\n");
+		pf_mnemo = msg->new_sec.pf_mnemo;
+		sec_mnemo = msg->new_sec.ins->sym;
+		descr = msg->new_sec.satellite;
+		sec = be_sql_set_sec(umpf_dbconn, pf_mnemo, sec_mnemo, descr);
+
+		/* reuse the message to send the answer,
+		 * we should check if SEC is a valid sec-id actually and
+		 * send an error otherwise */
+		msg->hdr.mt++;
+		umpf_print_msg(fd, msg);
+
+		/* free resources */
+		be_sql_free_sec(umpf_dbconn, sec);
+		break;
+	}
+	case UMPF_MSG_GET_SEC: {
+		const char *pf_mnemo;
+		const char *sec_mnemo;
+
+		UMPF_DEBUG(MOD_PRE ": new_sec();\n");
+		pf_mnemo = msg->new_sec.pf_mnemo;
+		sec_mnemo = msg->new_sec.ins->sym;
+		if (msg->new_sec.satellite != NULL) {
+			free(msg->new_sec.satellite);
+		}
+		msg->new_sec.satellite =
+			be_sql_get_sec(umpf_dbconn, pf_mnemo, sec_mnemo);
+
+		/* reuse the message to send the answer */
+		msg->hdr.mt++;
+		umpf_print_msg(fd, msg);
+		break;
+	}
 	default:
 		UMPF_DEBUG(MOD_PRE ": unknown message %u\n", msg->hdr.mt);
 		break;
