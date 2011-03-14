@@ -1351,4 +1351,11 @@ SELECT description FROM aou_umpf_security WHERE security_id = ?";
 	return descr;
 }
 
+DEFUN void
+be_sql_free_sec(dbconn_t UNUSED(conn), dbobj_t UNUSED(pf))
+{
+	/* it's just a uint64 so do fuckall */
+	return;
+}
+
 /* be-sql.c ends here */
