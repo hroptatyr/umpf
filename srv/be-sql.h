@@ -112,4 +112,27 @@ be_sql_get_pos(
 	dbconn_t conn, dbobj_t tag,
 	int(*cb)(char*, double, double, void*), void *clo);
 
+/**
+ * Corresponds to UMPF_MSG_NEW_SEC */
+DECLF dbobj_t
+be_sql_new_sec(
+	dbconn_t, const char *pf_mnemo,
+	const char *sec_mnemo, const char *descr);
+
+/**
+ * Corresponds to UMPF_MSG_SET_SEC */
+DECLF dbobj_t
+be_sql_set_sec(
+	dbconn_t, const char *pf_mnemo,
+	const char *sec_mnemo, const char *descr);
+
+/**
+ * Corresponds to UMPF_MSG_GET_SEC */
+DECLF char*
+be_sql_get_sec(dbconn_t, const char *pf_mnemo, const char *sec_mnemo);
+
+/**
+ * Frees any resources used by get_sec/set_sec calls. */
+DEFUN void be_sql_free_sec(dbconn_t, dbobj_t sec);
+
 #endif	/* INCLUDED_be_sql_h_ */
