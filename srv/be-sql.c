@@ -1251,7 +1251,7 @@ UPDATE aou_umpf_security SET description = ? WHERE security_id = ?";
 				.len = dlen,
 			}, {
 				.type = BE_BIND_TYPE_INT64,
-				.i64 = pf_id,
+				.i64 = sec_id,
 			}};
 		be_sql_bind(conn, stmt, b, countof(b));
 		be_sql_exec_stmt(conn, stmt);
