@@ -245,14 +245,14 @@ sputs_encq(__ctx_t ctx, const char *s)
 
 /* printer */
 static void
-print_instrmt(__ctx_t ctx, struct __ins_qty_s *i, size_t indent)
+print_instrmt(__ctx_t ctx, struct __ins_s *i, size_t indent)
 {
 	print_indent(ctx, indent);
 	sputs(ctx, "<Instrmt");
 
-	if (i->instr) {
+	if (i->sym) {
 		sputs(ctx, " Sym=\"");
-		sputs_encq(ctx, i->instr);
+		sputs_encq(ctx, i->sym);
 		sputc(ctx, '"');
 	}
 
@@ -569,7 +569,7 @@ print_pos_rpt(__ctx_t ctx, umpf_msg_t msg, size_t idx, size_t indent)
 
 	print_pty(ctx, msg->pf.name, 0, '\0', indent + 2);
 
-	print_instrmt(ctx, msg->pf.poss + idx, indent + 2);
+	print_instrmt(ctx, msg->pf.poss[idx].ins, indent + 2);
 	print_qty(ctx, msg->pf.poss + idx, indent + 2);
 
 #if 0
@@ -583,6 +583,100 @@ print_pos_rpt(__ctx_t ctx, umpf_msg_t msg, size_t idx, size_t indent)
 	sputs(ctx, "<PosRpt>\n");
 	return;
 }
+
+static void
+print_sec_xml(__ctx_t ctx, const char *satell, size_t indent)
+{
+	print_indent(ctx, indent);
+	sputs(ctx, "<SecXML>\n");
+
+	print_indent(ctx, indent + 2);
+	sputs(ctx, "<aou:glue content-type=\"text/plain\">\n");
+
+	sputs(ctx, satell);
+
+	print_indent(ctx, indent + 2);
+	sputs(ctx, "</aou:glue>\n");
+
+	print_indent(ctx, indent);
+	sputs(ctx, "</SecXML>\n");
+	return;
+}
+
+static void
+print_sec_def(__ctx_t ctx, umpf_msg_t msg, size_t indent)
+{
+	print_indent(ctx, indent);
+	sputs(ctx, "<SecDef");
+
+	if (msg->new_sec.pf_mnemo) {
+		sputs(ctx, " Txt=\"");
+		sputs_encq(ctx, msg->new_sec.pf_mnemo);
+		sputc(ctx, '"');
+	}
+
+	/* finalise the tag */
+	sputs(ctx, ">\n");
+
+	print_instrmt(ctx, msg->new_sec.ins, indent + 2);
+
+	if (LIKELY(msg->new_sec.satellite != NULL)) {
+		print_sec_xml(ctx, msg->new_sec.satellite, indent + 2);
+	}
+
+	print_indent(ctx, indent);
+	sputs(ctx, "</SecDef>\n");
+	return;
+}
+
+static void
+print_sec_def_req(__ctx_t ctx, umpf_msg_t msg, size_t indent)
+{
+	print_indent(ctx, indent);
+	sputs(ctx, "<SecDefReq");
+
+	if (msg->new_sec.pf_mnemo) {
+		sputs(ctx, " Txt=\"");
+		sputs_encq(ctx, msg->new_sec.pf_mnemo);
+		sputc(ctx, '"');
+	}
+
+	/* finalise the tag */
+	sputs(ctx, ">\n");
+
+	print_instrmt(ctx, msg->new_sec.ins, indent + 2);
+
+	print_indent(ctx, indent);
+	sputs(ctx, "</SecDefReq>\n");
+	return;
+}
+
+static void
+print_sec_def_upd(__ctx_t ctx, umpf_msg_t msg, size_t indent)
+{
+	print_indent(ctx, indent);
+	sputs(ctx, "<SecDefUpd");
+
+	if (msg->new_sec.pf_mnemo) {
+		sputs(ctx, " Txt=\"");
+		sputs_encq(ctx, msg->new_sec.pf_mnemo);
+		sputc(ctx, '"');
+	}
+
+	/* finalise the tag */
+	sputs(ctx, ">\n");
+
+	print_instrmt(ctx, msg->new_sec.ins, indent + 2);
+
+	if (LIKELY(msg->new_sec.satellite != NULL)) {
+		print_sec_xml(ctx, msg->new_sec.satellite, indent + 2);
+	}
+
+	print_indent(ctx, indent);
+	sputs(ctx, "</SecDefUpd>\n");
+	return;
+}
+
 
 static void
 print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
@@ -626,6 +720,22 @@ print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 		print_indent(ctx, indent + 2);
 		sputs(ctx, "</Batch>\n");
 		break;
+
+	case UMPF_MSG_NEW_SEC * 2:
+	case UMPF_MSG_NEW_SEC * 2 + 1:
+	case UMPF_MSG_GET_SEC * 2 + 1:
+	case UMPF_MSG_SET_SEC * 2 + 1:
+		print_sec_def(ctx, msg, indent + 2);
+		break;
+
+	case UMPF_MSG_GET_SEC * 2:
+		print_sec_def_req(ctx, msg, indent + 2);
+		break;
+
+	case UMPF_MSG_SET_SEC * 2:
+		print_sec_def_upd(ctx, msg, indent + 2);
+		break;
+
 	default:
 		break;
 	}

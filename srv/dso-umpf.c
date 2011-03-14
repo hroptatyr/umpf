@@ -86,7 +86,7 @@ get_cb(char *mnemo, double l, double s, void *clo)
 	size_t idx = msg->pf.nposs;
 
 	UMPF_DEBUG(MOD_PRE ": %s %2.4f %2.4f\n", mnemo, l, s);
-	msg->pf.poss[idx].instr = mnemo;
+	msg->pf.poss[idx].ins->sym = mnemo;
 	msg->pf.poss[idx].qty->_long = l;
 	msg->pf.poss[idx].qty->_shrt = s;
 	msg->pf.nposs++;
@@ -161,7 +161,7 @@ interpret_msg(int fd, umpf_msg_t msg)
 		tag = be_sql_new_tag(umpf_dbconn, mnemo, stamp);
 
 		for (size_t i = 0; i < msg->pf.nposs; i++) {
-			const char *sec = msg->pf.poss[i].instr;
+			const char *sec = msg->pf.poss[i].ins->sym;
 			double l = msg->pf.poss[i].qty->_long;
 			double s = msg->pf.poss[i].qty->_shrt;
 			be_sql_set_pos(umpf_dbconn, tag, sec, l, s);

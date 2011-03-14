@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!-- Request the description part of a security
+     since umpf stores securities on a per-portfolio basis
+     the portfolio mnemonic has to be given in the Txt attribute -->
+<FIXML xmlns="http://www.fixprotocol.org/FIXML-5-0" v="5.0"
+	xmlns:aou="http://www.ga-group.nl/aou-0.1">
+	<SecDefReq ReqID="give_me_my_money" ReqTyp="0" Txt="me_currencies">
+		<Instrmt Sym="EUR"/>
+	</SecDefReq>
+</FIXML>
+
+<!-- response -->
+<?xml version="1.0"?>
+<FIXML xmlns="http://www.fixprotocol.org/FIXML-5-0" v="5.0">
+	<SecDef Txt="me_currencies" Txn="2011-03-13T23:45:00+0000">
+		<Instrmt Sym="GBPUSD"/>
+		<SecXML>
+			<aou:glue content-type="application/text">
+				just the good old cable
+			</aou:glue>
+		</SecXML>
+	</SecDef>
+</FIXML>

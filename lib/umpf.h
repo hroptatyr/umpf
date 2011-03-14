@@ -58,6 +58,10 @@ typedef enum {
 	/* portoflio descriptions */
 	UMPF_MSG_GET_DESCR,
 	UMPF_MSG_SET_DESCR,
+	/* security definitions */
+	UMPF_MSG_NEW_SEC,
+	UMPF_MSG_GET_SEC,
+	UMPF_MSG_SET_SEC,
 	/* will be coalesced with od/uschi messages one day
 	 * diff takes 2 portfolios and returns a stream of od/uschi msgs
 	 * patch takes a portfolio and a stream of od/uschi msgs */
@@ -65,15 +69,20 @@ typedef enum {
 	UMPF_MSG_PATCH,
 } umpf_msg_type_t;
 
+/* stuff we need to identify an instrument */
+struct __ins_s {
+	char *sym;
+};
+
 /* naked portfolios */
-struct __Xqty_s {
+struct __qty_s {
 	double _long;
 	double _shrt;
 };
 
 struct __ins_qty_s {
-	char *instr;
-	struct __Xqty_s qty[1];
+	struct __ins_s ins[1];
+	struct __qty_s qty[1];
 };
 
 struct umpf_msg_hdr_s {
@@ -88,6 +97,16 @@ struct umpf_msg_new_pf_s {
 
 	char *name;
 	char *satellite;
+};
+
+/* SecDefUpd -> new_sec */
+struct umpf_msg_new_sec_s {
+	struct umpf_msg_hdr_s hdr;
+
+	struct __ins_s ins[1];
+	char *satellite;
+
+	char *pf_mnemo;
 };
 
 /* ReqForPoss[Ack] -> get_pf/set_pf */
@@ -106,6 +125,7 @@ union umpf_msg_u {
 	struct umpf_msg_hdr_s hdr;
 	struct umpf_msg_pf_s pf;
 	struct umpf_msg_new_pf_s new_pf;
+	struct umpf_msg_new_sec_s new_sec;
 };
 
 
