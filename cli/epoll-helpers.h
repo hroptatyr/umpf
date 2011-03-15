@@ -87,10 +87,10 @@ init_ep_ctx(ep_ctx_t epg, int nev)
 	}
 
 	/* obtain an epoll handle and make it non-blocking*/
-#if 0
-/* too new, needs >= 2.6.30 */
+#if 1
 	epg->sock = epoll_create1(0);
 #else
+/* too old, we need >= 2.6.30 */
 	epg->sock = epoll_create(1);
 #endif
 	setsock_nonblock(epg->sock);
@@ -114,7 +114,7 @@ free_ep_ctx(ep_ctx_t epg)
 static inline int
 ep_prep(ep_ctx_t epg, int s, int flags)
 {
-	struct epoll_event ev = {.events = flags};
+	struct epoll_event ev = {.events = flags, .data.fd = s};
 	/* add S to the epoll descriptor EPFD */
 	return epoll_ctl(epg->sock, EPOLL_CTL_ADD, s, &ev);
 }
@@ -157,6 +157,18 @@ static inline int
 ep_prep_et_writer(ep_ctx_t epg, int s)
 {
 	return ep_prep(epg, s, STD_FLAGS | EPOLLET | EPOLLOUT);
+}
+
+static inline int
+ep_prep_rdwr(ep_ctx_t epg, int s)
+{
+	return ep_prep(epg, s, STD_FLAGS | EPOLLIN | EPOLLOUT);
+}
+
+static inline int
+ep_prep_et_rdwr(ep_ctx_t epg, int s)
+{
+	return ep_prep(epg, s, STD_FLAGS | EPOLLET | EPOLLIN | EPOLLOUT);
 }
 
 #endif	/* INCLUDED_epoll_helpers_h_ */
