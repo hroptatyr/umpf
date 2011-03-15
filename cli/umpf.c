@@ -82,19 +82,48 @@ typedef enum {
 	UMPF_CMD_UNK,
 	UMPF_CMD_VERSION,
 	UMPF_CMD_NEW_PF,
+	UMPF_CMD_GET_PF,
+	UMPF_CMD_SET_PF,
 	UMPF_CMD_NEW_SEC,
+	UMPF_CMD_GET_SEC,
+	UMPF_CMD_SET_SEC,
+	UMPF_CMD_GET_POSS,
+	UMPF_CMD_SET_POSS,
 } umpf_cmd_t;
 
 /* new_pf specific options */
 struct __new_pf_clo_s {
-	char *mnemo;
-	char *descr;
+	const char *mnemo;
+	const char *file;
+	const char *descr;
+};
+
+struct __get_pf_clo_s {
+	const char *mnemo;
 };
 
 struct __new_sec_clo_s {
-	char *mnemo;
-	char *descr;
-	char *pf;
+	const char *mnemo;
+	const char *pf;
+	const char *file;
+	const char *descr;
+};
+
+struct __get_sec_clo_s {
+	const char *mnemo;
+	const char *pf;
+};
+
+struct __set_poss_clo_s {
+	const char *pf;
+	time_t stamp;
+	const char *file;
+	const char *poss;
+};
+
+struct __get_poss_clo_s {
+	const char *pf;
+	time_t stamp;
 };
 
 /* command line options */
@@ -109,7 +138,11 @@ struct __clo_s {
 	umpf_cmd_t cmd;
 	union {
 		struct __new_pf_clo_s new_pf[1];
+		struct __get_pf_clo_s get_pf[1];
 		struct __new_sec_clo_s new_sec[1];
+		struct __get_sec_clo_s get_sec[1];
+		struct __get_poss_clo_s get_poss[1];
+		struct __set_poss_clo_s set_poss[1];
 	};
 };
 
@@ -134,14 +167,37 @@ Options common to all commands:\n\
 Supported commands:\n\
 \n\
   new-pf [OPTIONS] NAME      Register a new portfolio NAME\n\
-    -d, --descr=FILE         File with description to pass on.\n\
+    -d, --descr=STRING       Use description from STRING\n\
+    -f, --file=FILE          File with description, - for stdin\n\
+\n\
+  get-pf NAME                Get the description of portfolio NAME\n\
+\n\
+  set-pf [OPTIONS] NAME      Set the description of portfolio NAME\n\
+    -d, --descr=STRING       Set description from STRING\n\
+    -f, --file=FILE          File with description to pass on\n\
                              Use - for stdin\n\
 \n\
   new-sec [OPTIONS] NAME     Register a new security NAME\n\
     -p, --pf=STRING          Name of the portfolio to register the\n\
                              security with.\n\
-    -d, --descr=FILE         File with description to pass on.\n\
-                             Use - for stdin\n\
+    -d, --descr=STRING       Use description from STRING\n\
+    -f, --file=FILE          File with description, - for stdin\n\
+\n\
+  get-sec [OPTIONS] NAME     Retrieve the security definition of NAME\n\
+    -p, --pf=STRING          Name of the portfolio to register the\n\
+                             security with.\n\
+\n\
+  set-sec [OPTIONS] NAME     Update the security definition of NAME\n\
+    -p, --pf=STRING          Name of the portfolio that holds the security\n\
+    -d, --descr=STRING       Set description from STRING\n\
+    -f, --file=FILE          File with description, - for stdin\n\
+\n\
+  get-poss [OPTIONS] NAME    Retrieve the positions of portfolio NAME\n\
+    -d, --date=DATE          Request the portfolio as of DATE\n\
+\n\
+  set-poss [OPTIONS] [NAME]  Set the portfolio NAME\n\
+    -d, --date=DATE          Set the portfolio as of DATE\n\
+    -f, --file=FILE          Use positions in FILE, - for stdin\n\
 ";
 
 
