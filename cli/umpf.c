@@ -221,6 +221,9 @@ __connect(unsigned int pref_fam, const char *host, const uint16_t port)
 	struct sockaddr_storage sa[1];
 	volatile int sock;
 
+#if defined __INTEL_COMPILER
+# pragma warning (disable:2259)
+#endif	/* __INTEL_COMPILER */
 	switch (pref_fam) {
 	case PF_UNSPEC:
 	case PF_INET6:
@@ -260,6 +263,9 @@ __connect(unsigned int pref_fam, const char *host, const uint16_t port)
 		fprintf(stderr, "cannot connect to host %s.\n", host);
 		return -1;
 	}
+#if defined __INTEL_COMPILER
+# pragma warning (default:2259)
+#endif	/* __INTEL_COMPILER */
 
 	/* operate in non-blocking mode */
 	setsock_nonblock(sock);
