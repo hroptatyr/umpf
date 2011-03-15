@@ -1030,6 +1030,50 @@ UPDATE aou_umpf_portfolio SET description = ? WHERE portfolio_id = ?";
 	return (dbobj_t)pf_id;
 }
 
+DECLF char*
+be_sql_get_descr(dbconn_t conn, const char *pf_mnemo)
+{
+/* this is a get_pf + update */
+	static const char pre[] = "\
+SELECT description FROM aou_umpf_portfolio WHERE portfolio_id = ?";
+	dbstmt_t stmt;
+	uint64_t pf_id;
+	char *descr;
+
+	if (UNLIKELY(pf_mnemo == NULL)) {
+		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
+		return NULL;
+	} else if ((pf_id = __get_pf_id(conn, pf_mnemo)) == 0) {
+		/* portfolio getter is fucked */
+		UMPF_DEBUG(BE_SQL ": could not obtain portfolio id\n");
+		return NULL;
+	}
+
+	/* get them statements prepared */
+	stmt = be_sql_prep(conn, pre, countof_m1(pre));
+
+	/* bind the params */
+	{
+		struct __bind_s b[1] = {{
+				.type = BE_BIND_TYPE_INT64,
+				.i64 = pf_id,
+			}};
+		/* bind + exec */
+		be_sql_bind(conn, stmt, b, countof(b));
+		if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
+			struct __bind_s rb[1] = {{
+					.type = BE_BIND_TYPE_TEXT,
+					/* default value */
+					.ptr = NULL,
+				}};
+			be_sql_fetch(conn, stmt, rb, countof(rb));
+			descr = rb[0].ptr;
+		}
+		be_sql_fin(conn, stmt);
+	}
+	return descr;
+}
+
 DEFUN void
 be_sql_free_pf(dbconn_t UNUSED(conn), dbobj_t UNUSED(pf))
 {
