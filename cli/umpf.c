@@ -151,17 +151,15 @@ __set_v6only(int sock)
 }
 
 static int
-umpf_connect(struct __clo_s *clo)
+__connect(unsigned int pref_fam, const char *host, const uint16_t port)
 {
 #define AS_V4(x)	((struct sockaddr_in*)(x))
 #define AS_V6(x)	((struct sockaddr_in6*)(x))
 	struct hostent *hp;
 	struct sockaddr_storage sa[1];
 	volatile int sock;
-	const char *host = clo->host;
-	const uint16_t port = clo->port;
 
-	switch (clo->pref_fam) {
+	switch (pref_fam) {
 	case PF_UNSPEC:
 	case PF_INET6:
 		/* try ip6 first ... */
@@ -204,6 +202,12 @@ umpf_connect(struct __clo_s *clo)
 	/* operate in non-blocking mode */
 	setsock_nonblock(sock);
 	return sock;
+}
+
+static int
+umpf_connect(struct __clo_s *clo)
+{
+	return __connect(clo->pref_fam, clo->host, clo->port);
 }
 
 
