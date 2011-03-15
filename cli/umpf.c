@@ -92,7 +92,7 @@ typedef enum {
 } umpf_cmd_t;
 
 /* new_pf specific options */
-struct __new_pf_clo_s {
+struct __set_pf_clo_s {
 	const char *mnemo;
 	const char *file;
 	const char *descr;
@@ -102,7 +102,7 @@ struct __get_pf_clo_s {
 	const char *mnemo;
 };
 
-struct __new_sec_clo_s {
+struct __set_sec_clo_s {
 	const char *mnemo;
 	const char *pf;
 	const char *file;
@@ -116,13 +116,15 @@ struct __get_sec_clo_s {
 
 struct __set_poss_clo_s {
 	const char *pf;
-	time_t stamp;
+	const char *date;
 	const char *file;
 	const char *poss;
+	time_t stamp;
 };
 
 struct __get_poss_clo_s {
 	const char *pf;
+	const char *date;
 	time_t stamp;
 };
 
@@ -137,9 +139,9 @@ struct __clo_s {
 
 	umpf_cmd_t cmd;
 	union {
-		struct __new_pf_clo_s new_pf[1];
+		struct __set_pf_clo_s set_pf[1];
 		struct __get_pf_clo_s get_pf[1];
-		struct __new_sec_clo_s new_sec[1];
+		struct __set_sec_clo_s set_sec[1];
 		struct __get_sec_clo_s get_sec[1];
 		struct __get_poss_clo_s get_poss[1];
 		struct __set_poss_clo_s set_poss[1];
@@ -198,6 +200,7 @@ Supported commands:\n\
   set-poss [OPTIONS] [NAME]  Set the portfolio NAME\n\
     -d, --date=DATE          Set the portfolio as of DATE\n\
     -f, --file=FILE          Use positions in FILE, - for stdin\n\
+\n\
 ";
 
 
@@ -367,6 +370,9 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 			}
 
 		} else if (epg->ev[0].events & EPOLLOUT && msg) {
+#if defined DEBUG_FLAG
+			umpf_print_msg(STDERR_FILENO, msg);
+#endif	/* DEBUG_FLAG */
 			umpf_print_msg(epg->ev[0].data.fd, msg);
 			msg = NULL;
 		}
@@ -407,6 +413,25 @@ make_umpf_new_sec_msg(const char *pf, const char *sym, const char *satell)
 	return res;
 }
 
+static umpf_msg_t
+make_umpf_get_pf_msg(const char *mnemo)
+{
+	umpf_msg_t res = make_umpf_msg();
+	umpf_set_msg_type(res, UMPF_MSG_GET_DESCR);
+	res->new_pf.name = strdup(mnemo);
+	return res;
+}
+
+static umpf_msg_t
+make_umpf_get_sec_msg(const char *pf_mnemo, const char *mnemo)
+{
+	umpf_msg_t res = make_umpf_msg();
+	umpf_set_msg_type(res, UMPF_MSG_GET_SEC);
+	res->new_sec.ins->sym = strdup(mnemo);
+	res->new_sec.pf_mnemo = strdup(pf_mnemo);
+	return res;
+}
+
 static int
 umpf_process(struct __clo_s *clo)
 {
@@ -416,16 +441,27 @@ umpf_process(struct __clo_s *clo)
 
 	switch (clo->cmd) {
 	case UMPF_CMD_NEW_PF: {
-		const char *mnemo = clo->new_pf->mnemo;
-		const char *descr = clo->new_pf->descr;
+		const char *mnemo = clo->set_pf->mnemo;
+		const char *descr = clo->set_pf->descr;
 		msg = make_umpf_new_pf_msg(mnemo, descr);
 		break;
 	}
 	case UMPF_CMD_NEW_SEC: {
-		const char *mnemo = clo->new_sec->mnemo;
-		const char *descr = clo->new_sec->descr;
-		const char *pf_mnemo = clo->new_sec->pf;
+		const char *mnemo = clo->set_sec->mnemo;
+		const char *descr = clo->set_sec->descr;
+		const char *pf_mnemo = clo->set_sec->pf;
 		msg = make_umpf_new_sec_msg(pf_mnemo, mnemo, descr);
+		break;
+	}
+	case UMPF_CMD_GET_PF: {
+		const char *mnemo = clo->set_pf->mnemo;
+		msg = make_umpf_get_pf_msg(mnemo);
+		break;
+	}
+	case UMPF_CMD_GET_SEC: {
+		const char *mnemo = clo->set_sec->mnemo;
+		const char *pf_mnemo = clo->set_sec->pf;
+		msg = make_umpf_get_sec_msg(pf_mnemo, mnemo);
 		break;
 	}
 	default:
@@ -498,21 +534,22 @@ parse_host_args(struct __clo_s *clo, char *argv[])
 }
 
 static void
-parse_new_pf_args(struct __clo_s *clo, int argc, char *argv[])
+parse_set_pf_args(struct __clo_s *clo, int argc, char *argv[])
 {
+/* also used for new-pf */
 	for (int i = 0; i < argc; i++) {
 		char *p = argv[i];
 
 		if (*p++ == '-') {
 			/* could be -d or --descr */
 			if (*p == 'd') {
-				clo->new_pf->descr = __get_val(&i, 2, argv);
+				clo->set_pf->descr = __get_val(&i, 2, argv);
 			} else if (strncmp(p, "-descr", 6) == 0) {
-				clo->new_pf->descr = __get_val(&i, 7, argv);
+				clo->set_pf->descr = __get_val(&i, 7, argv);
 			}
-		} else if (clo->new_pf->mnemo == NULL) {
+		} else if (clo->set_pf->mnemo == NULL) {
 			/* must be the name then */
-			clo->new_pf->mnemo = argv[i];
+			clo->set_pf->mnemo = argv[i];
 			argv[i] = NULL;
 		}
 	}
@@ -520,28 +557,52 @@ parse_new_pf_args(struct __clo_s *clo, int argc, char *argv[])
 }
 
 static void
-parse_new_sec_args(struct __clo_s *clo, int argc, char *argv[])
+parse_set_sec_args(struct __clo_s *clo, int argc, char *argv[])
 {
+/* also used for new-sec */
 	for (int i = 0; i < argc; i++) {
 		char *p = argv[i];
 
 		if (*p++ == '-') {
 			/* could be -d or --descr or -p or --pf */
 			if (*p == 'd') {
-				clo->new_sec->descr =
-					__get_val(&i, 2, argv);
+				clo->set_sec->descr = __get_val(&i, 2, argv);
 			} else if (strncmp(p, "-descr", 6) == 0) {
-				clo->new_sec->descr =
-					__get_val(&i, 7, argv);
+				clo->set_sec->descr = __get_val(&i, 7, argv);
 			} else if (*p == 'p') {
-				clo->new_sec->pf =
-					__get_val(&i, 2, argv);
+				clo->set_sec->pf = __get_val(&i, 2, argv);
 			} else if (strncmp(p, "-pf", 3) == 0) {
-				clo->new_sec->pf = __get_val(&i, 4, argv);
+				clo->set_sec->pf = __get_val(&i, 4, argv);
 			}
-		} else if (clo->new_sec->mnemo == NULL) {
+		} else if (clo->set_sec->mnemo == NULL) {
 			/* must be the name then */
-			clo->new_sec->mnemo = argv[i];
+			clo->set_sec->mnemo = argv[i];
+			argv[i] = NULL;
+		}
+	}
+	return;
+}
+
+static void
+parse_set_poss_args(struct __clo_s *clo, int argc, char *argv[])
+{
+	for (int i = 0; i < argc; i++) {
+		char *p = argv[i];
+
+		if (*p++ == '-') {
+			/* could be -d or --date or -f or --file */
+			if (*p == 'd') {
+				clo->set_poss->date = __get_val(&i, 2, argv);
+			} else if (strncmp(p, "-descr", 6) == 0) {
+				clo->set_poss->date = __get_val(&i, 7, argv);
+			} else if (*p == 'f') {
+				clo->set_poss->file = __get_val(&i, 2, argv);
+			} else if (strncmp(p, "-file", 3) == 0) {
+				clo->set_poss->file = __get_val(&i, 4, argv);
+			}
+		} else if (clo->set_poss->pf == NULL) {
+			/* must be the name then */
+			clo->set_poss->pf = argv[i];
 			argv[i] = NULL;
 		}
 	}
@@ -598,12 +659,42 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 			char **new_argv = argv + i + 1;
 			if (strcmp(p, "ew-pf") == 0) {
 				clo->cmd = UMPF_CMD_NEW_PF;
-				parse_new_pf_args(clo, new_argc, new_argv);
+				parse_set_pf_args(clo, new_argc, new_argv);
 				continue;
 
 			} else if (strcmp(p, "ew-sec") == 0) {
 				clo->cmd = UMPF_CMD_NEW_SEC;
-				parse_new_sec_args(clo, new_argc, new_argv);
+				parse_set_sec_args(clo, new_argc, new_argv);
+				continue;
+			}
+			break;
+		}
+		case 's':
+		case 'g': {
+			/* set-pf or set-sec or set-poss */
+			/* get-pf or get-sec or get-poss */
+			int new_argc = argc - i - 1;
+			char **new_argv = argv + i + 1;
+			if (strcmp(p, "et-pf") == 0) {
+				if (p[-1] == 'g') {
+					clo->cmd = UMPF_CMD_GET_PF;
+				} else {
+					clo->cmd = UMPF_CMD_SET_PF;
+				}
+				parse_set_pf_args(clo, new_argc, new_argv);
+				continue;
+
+			} else if (strcmp(p, "et-sec") == 0) {
+				if (p[-1] == 'g') {
+					clo->cmd = UMPF_CMD_GET_SEC;
+				} else {
+					clo->cmd = UMPF_CMD_SET_SEC;
+				}
+				parse_set_sec_args(clo, new_argc, new_argv);
+				continue;
+			} else if (strcmp(p, "et-poss") == 0) {
+				clo->cmd = UMPF_CMD_SET_POSS;
+				parse_set_poss_args(clo, new_argc, new_argv);
 				continue;
 			}
 			break;
@@ -633,36 +724,44 @@ print_version(void)
 }
 
 static int
-check_new_pf_args(struct __clo_s *clo)
+check__pf_args(struct __clo_s *clo)
 {
-	if (clo->cmd != UMPF_CMD_NEW_PF) {
-		fputs("command must be NEW_PF\n", stderr);
-		return -1;
-	}
-	if (clo->new_pf->mnemo == NULL) {
+	if (clo->set_pf->mnemo == NULL) {
 		fputs("portfolio mnemonic must not be NULL\n", stderr);
 		return -1;
 	}
-	if (clo->new_pf->descr) {
+	if (clo->set_pf->file) {
 		/* check if file exists */
 	}
 	return 0;
 }
 
 static int
-check_new_sec_args(struct __clo_s *clo)
+check__sec_args(struct __clo_s *clo)
 {
-	if (clo->cmd != UMPF_CMD_NEW_SEC) {
-		fputs("command must be NEW_SEC\n", stderr);
-		return -1;
-	}
-	if (clo->new_sec->pf == NULL) {
+	if (clo->set_sec->pf == NULL) {
 		fputs("portfolio mnemonic must not be NULL\n", stderr);
 		return -1;
 	}
-	if (clo->new_sec->mnemo == NULL) {
+	if (clo->set_sec->mnemo == NULL) {
 		fputs("security mnemonic must not be NULL\n", stderr);
 		return -1;
+	}
+	if (clo->set_sec->file) {
+		/* check if file exists */
+	}
+	return 0;
+}
+
+static int
+check__poss_args(struct __clo_s *clo)
+{
+	if (clo->set_poss->pf == NULL) {
+		fputs("portfolio mnemonic must not be NULL\n", stderr);
+		return -1;
+	}
+	if (clo->set_poss->file) {
+		/* check if file exists */
 	}
 	return 0;
 }
@@ -694,13 +793,24 @@ main(int argc, char *argv[])
 		print_version();
 		return 0;
 	case UMPF_CMD_NEW_PF:
-		if (check_new_pf_args(&argi)) {
+	case UMPF_CMD_GET_PF:
+	case UMPF_CMD_SET_PF:
+		if (check__pf_args(&argi)) {
 			print_usage(argi.cmd);
 			return 1;
 		}
 		break;
 	case UMPF_CMD_NEW_SEC:
-		if (check_new_sec_args(&argi)) {
+	case UMPF_CMD_GET_SEC:
+	case UMPF_CMD_SET_SEC:
+		if (check__sec_args(&argi)) {
+			print_usage(argi.cmd);
+			return 1;
+		}
+		break;
+	case UMPF_CMD_GET_POSS:
+	case UMPF_CMD_SET_POSS:
+		if (check__poss_args(&argi)) {
 			print_usage(argi.cmd);
 			return 1;
 		}
