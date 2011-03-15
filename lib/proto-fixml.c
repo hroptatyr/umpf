@@ -678,6 +678,40 @@ proc_REQ_FOR_POSS_ACK_attr(__ctx_t ctx, const char *attr, const char *value)
 	return;
 }
 
+static void __attribute__((noinline))
+proc_RGST_INSTRCTNS_RSP_attr(__ctx_t ctx, const char *attr, const char *value)
+{
+	const char *rattr = tag_massage(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
+	umpf_msg_t msg = ctx->msg;
+
+	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
+		/* dont know what to do */
+		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
+		return;
+	}
+
+	switch (aid) {
+	case UMPF_ATTR_ID:
+		/* dont overwrite stuff without free()ing
+		 * actually this is a bit rich, too much knowledge in here */
+		if (msg->new_pf.name == NULL) {
+			msg->new_pf.name = unquot(value);
+		}
+		break;
+	case UMPF_ATTR_TRANS_TYP:
+		/* ignored */
+		break;
+	case UMPF_ATTR_REG_STAT:
+		/* ignored */
+		break;
+	default:
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		break;
+	}
+	return;
+}
+
 static void
 proc_PTY_attr(__ctx_t ctx, const char *attr, const char *value)
 {
@@ -843,6 +877,15 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 		(void)push_state(ctx, tid, msg);
 		break;
 
+	case UMPF_TAG_RGST_INSTRCTNS_RSP:
+		umpf_set_msg_type(msg, UMPF_MSG_GET_DESCR);
+		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+			proc_RGST_INSTRCTNS_RSP_attr(
+				ctx, attrs[j], attrs[j + 1]);
+		}
+		(void)push_state(ctx, tid, msg);
+		break;
+
 	case UMPF_TAG_SEC_DEF_REQ:
 		umpf_set_msg_type(msg, UMPF_MSG_GET_SEC);
 		for (size_t j = 0; attrs[j] != NULL; j += 2) {
@@ -900,6 +943,8 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 		/* translate to set_pf */
 	case UMPF_TAG_RGST_INSTRCTNS:
 		/* translate to new_pf/set_descr */
+	case UMPF_TAG_RGST_INSTRCTNS_RSP:
+		/* translate to get_descr */
 	case UMPF_TAG_SEC_DEF_REQ:
 		/* translate to get_sec */
 	case UMPF_TAG_SEC_DEF:
@@ -1032,6 +1077,7 @@ sax_eo_FIXML_elt(__ctx_t ctx, const char *name)
 		break;
 	case UMPF_TAG_REQ_FOR_POSS:
 	case UMPF_TAG_RGST_INSTRCTNS:
+	case UMPF_TAG_RGST_INSTRCTNS_RSP:
 	case UMPF_TAG_RG_DTL:
 	case UMPF_TAG_PTY:
 	case UMPF_TAG_SEC_DEF:

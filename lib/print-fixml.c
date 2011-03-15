@@ -693,9 +693,13 @@ print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 
 	switch (msg->hdr.mt) {
 	case UMPF_MSG_NEW_PF * 2:
+	case UMPF_MSG_SET_DESCR * 2:
+	case UMPF_MSG_GET_DESCR * 2 + 1:
 		print_rgst_instrctns(ctx, msg, indent + 2);
 		break;
 	case UMPF_MSG_NEW_PF * 2 + 1:
+	case UMPF_MSG_SET_DESCR * 2 + 1:
+	case UMPF_MSG_GET_DESCR * 2:
 		print_rgst_instrctns_rsp(ctx, msg, indent + 2);
 		break;
 
