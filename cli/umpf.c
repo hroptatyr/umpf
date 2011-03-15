@@ -54,6 +54,12 @@
 
 #include "umpf.h"
 
+#if defined DEBUG_FLAG
+# include <assert.h>
+#else  /* !DEBUG_FLAG */
+# define assert(args...)
+#endif	/* DEBUG_FLAG */
+
 #if !defined UNUSED
 # define UNUSED(_x)	__attribute__((unused)) _x##_unused
 #endif	/* !UNUSED */
@@ -208,6 +214,173 @@ static int
 umpf_connect(struct __clo_s *clo)
 {
 	return __connect(clo->pref_fam, clo->host, clo->port);
+}
+
+typedef enum {
+	GUTS_GET,
+	GUTS_FREE,
+} epoll_guts_action_t;
+
+static ep_ctx_t
+epoll_guts(epoll_guts_action_t action)
+{
+	static struct ep_ctx_s gepg = FLEX_EP_CTX_INITIALISER(4);
+
+	switch (action) {
+	case GUTS_GET:
+		if (UNLIKELY(gepg.sock == -1)) {
+			init_ep_ctx(&gepg, gepg.nev);
+		}
+		break;
+	case GUTS_FREE:
+		if (LIKELY(gepg.sock != -1)) {
+			free_ep_ctx(&gepg);
+		}
+		break;
+	}
+	return &gepg;
+}
+
+
+static umpf_msg_t
+read_reply(volatile int fd)
+{
+	static char buf[4096];
+	static umpf_ctx_t p = NULL;
+	ssize_t nrd;
+	umpf_msg_t rpl;
+
+	while ((nrd = recv(fd, buf, sizeof(buf), 0)) > 0) {
+		fprintf(stderr, "read %zd\n", nrd);
+		if ((rpl = umpf_parse_blob(&p, buf, nrd)) != NULL) {
+			/* bingo */
+			return rpl;
+
+		} else if (/* rpl == NULL && */p == NULL) {
+			/* error */
+			return (umpf_msg_t)(-1L);
+		}
+		/* not enough data yet, request more */
+	}
+	return (void*)nrd;
+}
+
+/* main loop */
+static int
+umpf_repl(umpf_msg_t msg, volatile int sock)
+{
+#define SRV_TIMEOUT	(4000/*millis*/)
+	ep_ctx_t epg;
+	int nfds;
+
+	/* also set up our epoll magic */
+	epg = epoll_guts(GUTS_GET);
+	/* setup event waiter */
+	ep_prep_et_rdwr(epg, sock);
+
+	while ((nfds = ep_wait(epg, SRV_TIMEOUT)) > 0) {
+		assert(nfds == 1);
+
+		if (epg->ev[0].events & (EPOLLERR | EPOLLRDHUP | EPOLLHUP)) {
+			nfds = -1;
+			break;
+
+		} else if (epg->ev[0].events & EPOLLIN) {
+			/* read what's on the wire */
+			umpf_msg_t rpl = read_reply(epg->ev[0].data.fd);
+
+			if (rpl == (void*)(-1L)) {
+				/* somethings gone pear-shaped */
+				nfds = -1;
+				break;
+			} else if (rpl == NULL) {
+				/* we need more input */
+				;
+			} else {
+				/* everything's brill */
+				umpf_print_msg(STDOUT_FILENO, rpl);
+				umpf_free_msg(rpl);
+				nfds = 0;
+				break;
+			}
+
+		} else if (epg->ev[0].events & EPOLLOUT && msg) {
+			umpf_print_msg(epg->ev[0].data.fd, msg);
+			msg = NULL;
+		}
+	}
+	/* stop waiting for events */
+	ep_fini(epg, sock);
+	(void)epoll_guts(GUTS_FREE);
+	return nfds;
+}
+
+
+/* message bollocks */
+static umpf_msg_t
+make_umpf_msg(void)
+{
+	umpf_msg_t res = calloc(sizeof(*res), 1);
+	return res;
+}
+
+static umpf_msg_t
+make_umpf_new_pf_msg(const char *mnemo, const char *satell)
+{
+	umpf_msg_t res = make_umpf_msg();
+	umpf_set_msg_type(res, UMPF_MSG_NEW_PF);
+	res->new_pf.name = strdup(mnemo);
+	res->new_pf.satellite = strdup(satell);
+	return res;
+}
+
+static umpf_msg_t
+make_umpf_new_sec_msg(const char *pf, const char *sym, const char *satell)
+{
+	umpf_msg_t res = make_umpf_msg();
+	umpf_set_msg_type(res, UMPF_MSG_NEW_SEC);
+	res->new_sec.ins->sym = strdup(sym);
+	res->new_sec.pf_mnemo = strdup(pf);
+	res->new_sec.satellite = strdup(satell);
+	return res;
+}
+
+static int
+umpf_process(struct __clo_s *clo)
+{
+	int res = -1;
+	umpf_msg_t msg = make_umpf_msg();
+	volatile int sock;
+
+	switch (clo->cmd) {
+	case UMPF_CMD_NEW_PF: {
+		const char *mnemo = clo->new_pf->mnemo;
+		const char *descr = clo->new_pf->descr;
+		msg = make_umpf_new_pf_msg(mnemo, descr);
+		break;
+	}
+	case UMPF_CMD_NEW_SEC: {
+		const char *mnemo = clo->new_sec->mnemo;
+		const char *descr = clo->new_sec->descr;
+		const char *pf_mnemo = clo->new_sec->pf;
+		msg = make_umpf_new_sec_msg(pf_mnemo, mnemo, descr);
+		break;
+	}
+	default:
+		/* don't even try the connect */
+		return -1;
+	}
+
+	/* get ourselves a connection */
+	if (LIKELY((sock = umpf_connect(clo)) >= 0)) {
+		/* main loop */
+		res = umpf_repl(msg, sock);
+		/* close socket */
+		close(sock);
+	}
+	/* we don't need this message object anymore */
+	umpf_free_msg(msg);
+	return res;
 }
 
 
@@ -408,6 +581,9 @@ check_new_pf_args(struct __clo_s *clo)
 		fputs("portfolio mnemonic must not be NULL\n", stderr);
 		return -1;
 	}
+	if (clo->new_pf->descr) {
+		/* check if file exists */
+	}
 	return 0;
 }
 
@@ -434,7 +610,6 @@ int
 main(int argc, char *argv[])
 {
 	struct __clo_s argi = {0};
-	volatile int sock;
 
 	/* default values */
 	argi.host = "localhost";
@@ -470,20 +645,10 @@ main(int argc, char *argv[])
 		break;
 	}
 
-	if ((sock = umpf_connect(&argi)) < 0) {
+	/* now go go go */
+	if (UNLIKELY((umpf_process(&argi)) < 0)) {
 		return 1;
-	};
-
-	switch (argi.cmd) {
-	case UMPF_CMD_NEW_PF:
-
-	case UMPF_CMD_NEW_SEC:
-
-	default:
-		break;
 	}
-
-	close(sock);
 	return 0;
 }
 
