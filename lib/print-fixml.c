@@ -507,7 +507,7 @@ static void
 print_rgst_instrctns(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 {
 	print_indent(ctx, indent);
-	sputs(ctx, "<RgstInstrctns TrsnTyp=\"0\">\n");
+	sputs(ctx, "<RgstInstrctns TransTyp=\"0\">\n");
 
 	print_rg_dtl(ctx, msg->new_pf.name, msg->new_pf.satellite, indent + 2);
 
@@ -520,7 +520,7 @@ static void
 print_rgst_instrctns_rsp(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 {
 	print_indent(ctx, indent);
-	sputs(ctx, "<RgstInstrctnsRsp TrsnTyp=\"0\"");
+	sputs(ctx, "<RgstInstrctnsRsp TransTyp=\"0\"");
 
 	if (msg->new_pf.name) {
 		sputs(ctx, " RegStat=\"A\" ID=\"");
