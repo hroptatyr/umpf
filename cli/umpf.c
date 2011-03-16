@@ -333,6 +333,38 @@ read_reply(volatile int fd)
 }
 
 static void
+fput_zulu(time_t stamp, FILE *where)
+{
+	struct tm tm[1] = {{0}};
+	char buf[32];
+
+	if (LIKELY(stamp > 0)) {
+		gmtime_r(&stamp, tm);
+		(void)strftime(buf, sizeof(buf), "%FT%T%z", tm);
+		fputs(buf, where);
+	} else {
+		fputc('0', where);
+	}
+	return;
+}
+
+static void
+fput_date(time_t stamp, FILE *where)
+{
+	struct tm tm[1] = {{0}};
+	char buf[32];
+
+	if (LIKELY(stamp > 0)) {
+		gmtime_r(&stamp, tm);
+		(void)strftime(buf, sizeof(buf), "%F", tm);
+		fputs(buf, where);
+	} else {
+		fputc('0', where);
+	}
+	return;
+}
+
+static void
 pretty_print(umpf_msg_t msg)
 {
 	switch (umpf_get_msg_type(msg)) {
@@ -377,6 +409,32 @@ pretty_print(umpf_msg_t msg)
 		fputs("\" :security \"", stdout);
 		fputs(msg->new_sec.ins->sym, stdout);
 		fputs("\"\n", stdout);
+		break;
+
+	case UMPF_MSG_SET_PF:
+		fputs(":portfolio \"", stdout);
+		fputs(msg->pf.name, stdout);
+		fputs("\" :stamp ", stdout);
+		fput_zulu(msg->pf.stamp, stdout);
+		fputs(" :clear ", stdout);
+		fput_date(msg->pf.clr_dt, stdout);
+		fputc('\n', stdout);
+
+		for (size_t i = 0; i < msg->pf.nposs; i++) {
+			struct __ins_qty_s *pos = msg->pf.poss + i;
+			fputs(pos->ins->sym, stdout);
+			fprintf(stdout, "\t%.6f\t%.6f\n",
+				pos->qty->_long, pos->qty->_shrt);
+		}
+		break;
+	case UMPF_MSG_GET_PF:
+		fputs(":portfolio \"", stdout);
+		fputs(msg->pf.name, stdout);
+		fputs("\" :stamp ", stdout);
+		fput_zulu(msg->pf.stamp, stdout);
+		fputs(" :clear ", stdout);
+		fput_date(msg->pf.clr_dt, stdout);
+		fputc('\n', stdout);
 		break;
 	default:
 		fputs("cannot interpret response\n", stderr);
