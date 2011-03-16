@@ -452,6 +452,9 @@ umpf_process(struct __clo_s *clo)
 	volatile int sock;
 
 	switch (clo->cmd) {
+	case UMPF_CMD_SET_PF:
+		/* FIXML can't distinguish between new_pf and set_pf,
+		 * so we just use NEW_PF for this */
 	case UMPF_CMD_NEW_PF: {
 		const char *mnemo = clo->set_pf->mnemo;
 		const char *descr = clo->set_pf->descr;
