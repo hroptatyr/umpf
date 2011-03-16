@@ -44,6 +44,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <time.h>
+#include <ctype.h>
 /* network stuff */
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -117,9 +119,9 @@ struct __get_sec_clo_s {
 struct __set_poss_clo_s {
 	const char *pf;
 	const char *date;
+	time_t stamp;
 	const char *file;
 	const char *poss;
-	time_t stamp;
 };
 
 struct __get_poss_clo_s {
@@ -364,6 +366,26 @@ fput_date(time_t stamp, FILE *where)
 	return;
 }
 
+static time_t
+from_zulu(const char *buf)
+{
+	struct tm tm[1] = {{0}};
+
+	/* skip over whitespace */
+	for (; *buf && isspace(*buf); buf++);
+
+	if (strptime(buf, "%Y-%m-%dT%H:%M:%S%Z", tm)) {
+		;
+	} else if (strptime(buf, "%Y-%m-%dT%H:%M:%S", tm)) {
+		;
+	} else if (strptime(buf, "%Y-%m-%d", tm)) {
+		;
+	} else {
+		return strtoul(buf, NULL, 10);
+	}
+	return timegm(tm);
+}
+
 static void
 pretty_print(umpf_msg_t msg)
 {
@@ -566,6 +588,145 @@ make_umpf_get_sec_msg(const char *pf_mnemo, const char *mnemo)
 	return res;
 }
 
+static umpf_msg_t
+__massage_first(const char *line, size_t llen)
+{
+/* massage the first line of a positions file */
+	umpf_msg_t res;
+	const char pf_cookie[] = ":portfolio ";
+	const char tm_cookie[] = ":stamp ";
+
+	/* first line long enough and begins with :portfolio? */
+	if (UNLIKELY(llen < 12 || strncmp(line, pf_cookie, 11))) {
+		return NULL;
+	}
+
+	/* otherwise set up our message here */
+	res = make_umpf_msg();
+	umpf_set_msg_type(res, UMPF_MSG_SET_PF);
+
+	{
+		const char *pf = line + countof(pf_cookie) - 1;
+		const char *pf_end;
+		const char *stmp;
+		size_t pf_len;
+
+#if defined __INTEL_COMPILER
+# pragma warning (disable:981)
+#endif	/* __INTEL_COMPILER */
+		if (pf[0] == '"') {
+			/* search for matching quote */
+			pf_end = pf++ + 1;
+			while ((pf_end = strchrnul(pf_end, '"')) &&
+			       pf_end[-1] == '\\');
+		} else {
+			while (isspace(*pf++));
+			pf_end = strchrnul(pf--, ' ');
+		}
+		/* alloc space */
+		pf_len = pf_end - pf;
+		res->pf.name = malloc(pf_len + 1);
+		memcpy(res->pf.name, pf, pf_len);
+		res->pf.name[pf_len] = '\0';
+
+		/* now care bout the stamp */
+		stmp = memmem(line, llen, tm_cookie, countof(tm_cookie) - 1);
+		if (LIKELY(stmp != NULL)) {
+			stmp += countof(tm_cookie) - 1;
+			while (isspace(*stmp++));
+			res->pf.stamp = from_zulu(--stmp);
+		} else {
+			/* use current time by default */
+			res->pf.stamp = time(NULL);
+		}
+#if defined __INTEL_COMPILER
+# pragma warning (default:981)
+#endif	/* __INTEL_COMPILER */
+	}
+	return res;
+}
+
+static int
+__frob_poss_line(struct __ins_qty_s *iq, const char *line, const size_t llen)
+{
+	const char *sym = line;
+	const char *lo;
+	const char *sh;
+
+	if (UNLIKELY(llen < 3)) {
+		return -1;
+	} else if ((lo = strchr(sym + 1, '\t')) == NULL) {
+		return -1;
+	} else if ((sh = strchr(lo + 1, '\t')) == NULL) {
+		return -1;
+	}
+
+	iq->ins->sym = strndup(sym, lo - sym);
+	iq->qty->_long = strtod(lo + 1, NULL);
+	iq->qty->_shrt = strtod(sh + 1, NULL);
+	return 0;
+}
+
+static umpf_msg_t
+make_umpf_set_poss_msg(const char *mnemo, const time_t stamp, const char *file)
+{
+	umpf_msg_t res;
+	size_t llen;
+	char *line;
+	FILE *f;
+
+	/* sigh, now the hard part, open file and parse positions */
+	if (file[0] == '-' && file[1] == '\0') {
+		f = stdin; 
+	} else if ((f = fopen(file, "r")) == NULL) {
+		return NULL;
+	}
+
+	/* get resources together for our getline */
+	llen = 256;
+	line = malloc(llen);
+
+	for (ssize_t nrd, ln = 0; (nrd = getline(&line, &llen, f)) >= 0; ln++) {
+		struct __ins_qty_s iq = {0};
+
+		/* bit complicated would be the case that the command line
+		 * option (--date) should take precedence, it _could_ be
+		 * useful if your portfolio hasn't changed since yesterday
+		 * and now you just want to stamp it off under a different
+		 * name or different time stamp */
+		if (ln == 0 && (res = __massage_first(line, nrd)) != NULL) {
+			/* first line is full of cookies */
+			continue;
+
+		} else if (UNLIKELY(ln == 0 && mnemo == NULL)) {
+			goto out;
+
+		} else if (UNLIKELY(ln == 0)) {
+			res = make_umpf_msg();
+			umpf_set_msg_type(res, UMPF_MSG_SET_PF);
+			res->pf.name = strdup(mnemo);
+			res->pf.stamp = stamp ?: time(NULL);
+
+		} else if (UNLIKELY(nrd == 0)) {
+			continue;
+
+		} else if (__frob_poss_line(&iq, line, nrd) < 0) {
+			/* parsing the line failed */
+			continue;
+		}
+		{
+			/* we've got to do a realloc() for every line, fuck */
+			size_t np = res->pf.nposs++;
+			size_t iqsz = sizeof(*res->pf.poss) * (np + 1);
+			res = realloc(res, sizeof(*res) + iqsz);
+			res->pf.poss[np] = iq;
+		}
+	}
+out:
+	free(line);
+	return res;
+}
+
 static int
 umpf_process(struct __clo_s *clo)
 {
@@ -618,6 +779,15 @@ umpf_process(struct __clo_s *clo)
 		const time_t stamp = clo->get_poss->stamp ?: time(NULL);
 		msg = make_umpf_get_poss_msg(mnemo, stamp);
 		break;
+	}
+	case UMPF_CMD_SET_POSS: {
+		const char *mnemo = clo->set_poss->pf;
+		const time_t stamp = clo->set_poss->stamp;
+		const char *file = clo->set_poss->file;
+		if ((msg = make_umpf_set_poss_msg(mnemo, stamp, file))) {
+			break;
+		}
+		/* otherwise fall through to default case */
 	}
 	default:
 		/* don't even try the connect */
@@ -915,9 +1085,14 @@ check__sec_args(struct __clo_s *clo)
 static int
 check__poss_args(struct __clo_s *clo)
 {
-	if (clo->set_poss->pf == NULL) {
+	if (clo->set_poss->pf == NULL && clo->cmd == UMPF_CMD_GET_POSS) {
+		/* allow empty mnemonic in SET_POSS mode but not in GET_POSS */
 		fputs("portfolio mnemonic must not be NULL\n", stderr);
 		return -1;
+	}
+	if (clo->set_poss->date) {
+		/* convert */
+		clo->set_poss->stamp = from_zulu(clo->set_poss->date);
 	}
 	if (clo->set_poss->file) {
 		/* check if file exists */
