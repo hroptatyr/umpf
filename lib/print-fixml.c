@@ -744,6 +744,7 @@ print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 		break;
 
 	default:
+		UMPF_DEBUG("Can't print message %u\n", msg->hdr.mt);
 		break;
 	}
 
