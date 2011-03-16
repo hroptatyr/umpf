@@ -396,23 +396,30 @@ make_umpf_msg(void)
 }
 
 static umpf_msg_t
-make_umpf_new_pf_msg(const char *mnemo, const char *satell)
+make_umpf_new_pf_msg(const char *mnemo, const char *satell, size_t ssize)
 {
 	umpf_msg_t res = make_umpf_msg();
 	umpf_set_msg_type(res, UMPF_MSG_NEW_PF);
 	res->new_pf.name = strdup(mnemo);
-	res->new_pf.satellite = strdup(satell);
+	res->new_pf.satellite->data =
+		malloc((res->new_pf.satellite->size = ssize) + 1);
+	memcpy(res->new_pf.satellite->data, satell, ssize);
+	res->new_pf.satellite->data[ssize] = '\0';
 	return res;
 }
 
 static umpf_msg_t
-make_umpf_new_sec_msg(const char *pf, const char *sym, const char *satell)
+make_umpf_new_sec_msg(
+	const char *pf, const char *sym, const char *sat, size_t satlen)
 {
 	umpf_msg_t res = make_umpf_msg();
 	umpf_set_msg_type(res, UMPF_MSG_NEW_SEC);
 	res->new_sec.ins->sym = strdup(sym);
 	res->new_sec.pf_mnemo = strdup(pf);
-	res->new_sec.satellite = strdup(satell);
+	res->new_sec.satellite->data =
+		malloc((res->new_sec.satellite->size = satlen) + 1);
+	memcpy(res->new_sec.satellite->data, sat, satlen);
+	res->new_pf.satellite->data[satlen] = '\0';
 	return res;
 }
 
@@ -446,14 +453,16 @@ umpf_process(struct __clo_s *clo)
 	case UMPF_CMD_NEW_PF: {
 		const char *mnemo = clo->set_pf->mnemo;
 		const char *descr = clo->set_pf->descr;
-		msg = make_umpf_new_pf_msg(mnemo, descr);
+		const size_t dsize = strlen(descr);
+		msg = make_umpf_new_pf_msg(mnemo, descr, dsize);
 		break;
 	}
 	case UMPF_CMD_NEW_SEC: {
 		const char *mnemo = clo->set_sec->mnemo;
 		const char *descr = clo->set_sec->descr;
+		const size_t dsize = strlen(descr);
 		const char *pf_mnemo = clo->set_sec->pf;
-		msg = make_umpf_new_sec_msg(pf_mnemo, mnemo, descr);
+		msg = make_umpf_new_sec_msg(pf_mnemo, mnemo, descr, dsize);
 		break;
 	}
 	case UMPF_CMD_GET_PF: {
