@@ -1035,17 +1035,13 @@ be_sql_get_descr(dbconn_t conn, const char *pf_mnemo)
 {
 /* this is a get_pf + update */
 	static const char pre[] = "\
-SELECT description FROM aou_umpf_portfolio WHERE portfolio_id = ?";
+SELECT description FROM aou_umpf_portfolio WHERE short = ?";
 	dbstmt_t stmt;
 	uint64_t pf_id;
 	char *descr;
 
 	if (UNLIKELY(pf_mnemo == NULL)) {
 		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
-		return NULL;
-	} else if ((pf_id = __get_pf_id(conn, pf_mnemo)) == 0) {
-		/* portfolio getter is fucked */
-		UMPF_DEBUG(BE_SQL ": could not obtain portfolio id\n");
 		return NULL;
 	}
 
@@ -1055,8 +1051,9 @@ SELECT description FROM aou_umpf_portfolio WHERE portfolio_id = ?";
 	/* bind the params */
 	{
 		struct __bind_s b[1] = {{
-				.type = BE_BIND_TYPE_INT64,
-				.i64 = pf_id,
+				.type = BE_BIND_TYPE_TEXT,
+				.txt = pf_mnemo,
+				.len = strlen(pf_mnemo)
 			}};
 		/* bind + exec */
 		be_sql_bind(conn, stmt, b, countof(b));
