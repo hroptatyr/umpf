@@ -40,10 +40,12 @@
 #endif	/* HAVE_CONFIG_H */
 #include <string.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <time.h>
 #include <ctype.h>
 #if defined HAVE_LIBXML2
 # include <libxml/parser.h>
+# include <libxml/parserInternals.h>
 #endif	/* HAVE_LIBXML2 */
 #include "nifty.h"
 #include "umpf.h"
@@ -54,9 +56,10 @@
 /* gperf goodness */
 #include "proto-fixml-tag.c"
 #include "proto-fixml-attr.c"
+#include "proto-fixml-ns.c"
 
 #if defined __INTEL_COMPILER
-# pragma warning (disable:424)
+# pragma warning (disable:2259)
 #endif	/* __INTEL_COMPILER */
 #if defined DEBUG_FLAG
 # include <assert.h>
@@ -68,10 +71,12 @@ typedef struct __ctx_s *__ctx_t;
 typedef xmlSAXHandler sax_hdl_s;
 typedef sax_hdl_s *sax_hdl_t;
 typedef struct umpf_ctxcb_s *umpf_ctxcb_t;
+typedef struct umpf_ns_s *umpf_ns_t;
 
 struct umpf_ns_s {
 	char *pref;
 	char *href;
+	umpf_nsid_t nsid;
 };
 
 /* contextual callbacks */
@@ -133,7 +138,7 @@ static void
 init_ctxcb(__ctx_t ctx)
 {
 	memset(ctx->ctxcb_pool, 0, sizeof(ctx->ctxcb_pool));
-	for (int i = 0; i < countof(ctx->ctxcb_pool) - 1; i++) {
+	for (size_t i = 0; i < countof(ctx->ctxcb_pool) - 1; i++) {
 		ctx->ctxcb_pool[i].next = ctx->ctxcb_pool + i + 1;
 	}
 	ctx->ctxcb_head = ctx->ctxcb_pool;
@@ -290,15 +295,42 @@ umpf_reg_ns(__ctx_t ctx, const char *pref, const char *href)
 	if (UNLIKELY(href == NULL)) {
 		/* bollocks, user MUST be a twat */
 		return;
-	} else if (strcmp(href, fixml50_ns_uri) == 0 ||
-		   strcmp(href, fixml44_ns_uri) == 0) {
-		/* oh, it's our fave, copy the  */
-		ctx->ns[0].pref = pref ? strdup(pref) : NULL;
-		ctx->ns[0].href = strdup(href);
-	} else {
-		size_t i = ctx->nns++;
-		ctx->ns[i].pref = pref ? strdup(pref) : NULL;
-		ctx->ns[i].href = strdup(href);
+	}
+
+	/* get us those lovely ns ids */
+	{
+		size_t ulen = strlen(href);
+		const struct umpf_nsuri_s *n = __nsiddify(href, ulen);
+		const umpf_nsid_t nsid = n ? n->nsid : UMPF_NS_UNK;
+
+		switch (nsid) {
+			size_t i;
+		case UMPF_NS_FIXML_5_0:
+			if (UNLIKELY(ctx->ns[0].href != NULL)) {
+				/* fixml 4.4 must occupy the throne
+				 * dispossess him */
+				i = ctx->nns++;
+				ctx->ns[i] = ctx->ns[0];
+			}
+		case UMPF_NS_FIXML_4_4:
+			/* oh, it's our fave, copy the  */
+			ctx->ns[0].pref = (pref ? strdup(pref) : NULL);
+			ctx->ns[0].href = strdup(href);
+			ctx->ns[0].nsid = nsid;
+			break;
+
+		case UMPF_NS_AOU_0_1:
+			/* no special place */
+		case UMPF_NS_MDDL_3_0:
+			/* no special place */
+		case UMPF_NS_UNK:
+		default:
+			i = ctx->nns++;
+			ctx->ns[i].pref = pref ? strdup(pref) : NULL;
+			ctx->ns[i].href = strdup(href);
+			ctx->ns[i].nsid = nsid;
+			break;
+		}
 	}
 	return;
 }
@@ -338,12 +370,160 @@ umpf_pref_p(__ctx_t ctx, const char *pref, size_t pref_len)
 	}
 }
 
-/* stuff buf handling */
-static void
-stuff_buf_reset(__ctx_t ctx)
+static umpf_ns_t
+__pref_to_ns(__ctx_t ctx, const char *pref, size_t pref_len)
 {
-	ctx->sbix = 0;
-	return;
+	if (UNLIKELY(ctx->ns[0].nsid == UMPF_NS_UNK)) {
+		/* bit of a hack innit? */
+		ctx->ns->nsid = UMPF_NS_FIXML_5_0;
+		return ctx->ns;
+
+	} else if (LIKELY(pref_len == 0 && ctx->ns[0].pref == NULL)) {
+		/* most common case when people use the default ns */
+		return ctx->ns;
+	}
+	/* special service for us because we're lazy:
+	 * you can pass pref = "foo:" and say pref_len is 4
+	 * easier to deal with when strings are const etc. */
+	if (pref[pref_len - 1] == ':') {
+		pref_len--;
+	}
+	for (size_t i = (ctx->ns[0].pref == NULL); i < ctx->nns; i++) {
+		if (strncmp(ctx->ns[i].pref, pref, pref_len) == 0) {
+			return ctx->ns + i;
+		}
+	}
+	return NULL;
+}
+
+static uint16_t
+hex_digit_to_val(char c)
+{
+	if (c >= '0' && c <= '9') {
+		return (uint16_t)(c - '0');
+	} else if (c >= 'a' && c <= 'f') {
+		return (uint16_t)(c - 'a' + 10);
+	} else if (c >= 'A' && c <= 'F') {
+		return (uint16_t)(c - 'A' + 10);
+	} else {
+		/* big error actually */
+		return 0;
+	}
+}
+
+static uint16_t
+dec_digit_to_val(char c)
+{
+	if (c >= '0' && c <= '9') {
+		return (uint16_t)(c - '0');
+	} else {
+		/* big bang */
+		return 0;
+	}
+}
+
+static char*
+unquot(const char *src)
+{
+/* return a copy of SRC with all entities replaced */
+	size_t len = strlen(src);
+	char *res = malloc(len);
+	const char *sp = src;
+	char *rp = res;
+
+	while (1) {
+		size_t tmp;
+
+		/* find next occurrence of stop set characters */
+		sp = strchrnul(src, '&');
+		/* write what we've got so far */
+		tmp = sp - src;
+		memcpy(rp, src, tmp);
+		rp += tmp;
+
+		if (LIKELY(*sp == '\0')) {
+			*rp = '\0';
+			return res;
+		}
+
+		/* check if it's an entity */
+		tmp = (len - tmp < 8 ? len - tmp - 1 : 7);
+		if (UNLIKELY(memchr(sp + 1, ';', tmp) == NULL)) {
+			/* just copy the next TMP bytes */
+			memcpy(rp, sp, tmp + 1);
+			rp += tmp + 1;
+			continue;
+		}
+
+		/* inspect the entity */
+		switch (sp[1]) {
+		case '#': {
+			/* hex or dec representation */
+			uint16_t a = 0;
+
+			if (sp[2] == 'x') {
+				/* hex */
+				sp += 2;
+				while (*sp != ';') {
+					a *= 16;
+					a += hex_digit_to_val(*sp++);
+				}
+				src = sp + 1;
+				
+			} else {
+				/* dec */
+				sp += 2;
+				while (*sp != ';') {
+					a *= 10;
+					a += dec_digit_to_val(*sp++);
+				}
+				src = sp + 1;
+			}
+			/* prefer smaller chars */
+			if (LIKELY(a < 256)) {
+				*rp++ = (char)a;
+			} else {
+				*rp++ = (char)(a >> 8);
+				*rp++ = (char)(a & 0xff);
+			}
+			break;
+		}
+		case 'a':
+			/* could be &amp; or &apos; */
+			if (sp[2] == 'm' && sp[3] == 'p' && sp[4] == ';') {
+				*rp++ = '&';
+				src = sp + 5;
+			} else if (sp[2] == 'p' && sp[3] == 'o' &&
+				   sp[4] == 's' && sp[5] == ';') {
+				*rp++ = '\'';
+				src = sp + 6;
+			}
+			break;
+		case 'l':
+			if (sp[2] == 't' && sp[3] == ';') {
+				*rp++ = '<';
+				src = sp + 4;
+			}
+			break;
+		case 'g':
+			if (sp[2] == 't' && sp[3] == ';') {
+				*rp++ = '>';
+				src = sp + 4;
+			}
+		case 'q':
+			if (sp[2] == 'u' && sp[3] == 'o' &&
+			    sp[4] == 't' && sp[5] == ';') {
+				*rp++ = '"';
+				src = sp + 6;
+			}
+		default:
+			/* um */
+			*rp++ = *sp++;
+			src = sp;
+			break;
+		}
+	}
+	/* not reached */
 }
 
 
@@ -383,7 +563,7 @@ sax_aid_from_attr(const char *attr)
 static void
 proc_FIXML_xmlns(__ctx_t ctx, const char *pref, const char *value)
 {
-	UMPF_DEBUG(PFIXML_PRE ": reg'ging name space %s\n", pref);
+	UMPF_DEBUG(PFIXML_PRE ": reg'ging name space %s <- %s\n", pref, value);
 	umpf_reg_ns(ctx, pref, value);
 	return;
 }
@@ -392,24 +572,18 @@ static void
 proc_FIXML_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	umpf_aid_t aid;
 
-	if (UNLIKELY(rattr > attr && ctx->ns[0].href == NULL)) {
-		const struct umpf_attr_s *a = __aiddify(attr, rattr - attr);
-
-		if (a && a->aid == UMPF_ATTR_XMLNS) {
-			proc_FIXML_xmlns(ctx, rattr, value);
-			return;
-		}
-	} else if (rattr > attr && !umpf_pref_p(ctx, attr, rattr - attr)) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
+	if (UNLIKELY(rattr > attr && !umpf_pref_p(ctx, attr, rattr - attr))) {
+		const struct umpf_attr_s *a = __aiddify(attr, rattr - attr - 1);
+		aid = a ? a->aid : UMPF_ATTR_UNK;
+	} else {
+		aid = sax_aid_from_attr(rattr);
 	}
 
 	switch (aid) {
 	case UMPF_ATTR_XMLNS:
-		proc_FIXML_xmlns(ctx, NULL, value);
+		proc_FIXML_xmlns(ctx, rattr == attr ? NULL : rattr, value);
 		break;
 	case UMPF_ATTR_S:
 	case UMPF_ATTR_R:
@@ -427,7 +601,7 @@ static void
 proc_REQ_FOR_POSS_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	umpf_msg_t msg = ctx->msg;
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
@@ -463,7 +637,7 @@ static void
 proc_REQ_FOR_POSS_ACK_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	umpf_msg_t msg = ctx->msg;
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
@@ -504,11 +678,45 @@ proc_REQ_FOR_POSS_ACK_attr(__ctx_t ctx, const char *attr, const char *value)
 	return;
 }
 
+static void __attribute__((noinline))
+proc_RGST_INSTRCTNS_RSP_attr(__ctx_t ctx, const char *attr, const char *value)
+{
+	const char *rattr = tag_massage(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
+	umpf_msg_t msg = ctx->msg;
+
+	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
+		/* dont know what to do */
+		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
+		return;
+	}
+
+	switch (aid) {
+	case UMPF_ATTR_ID:
+		/* dont overwrite stuff without free()ing
+		 * actually this is a bit rich, too much knowledge in here */
+		if (msg->new_pf.name == NULL) {
+			msg->new_pf.name = unquot(value);
+		}
+		break;
+	case UMPF_ATTR_TRANS_TYP:
+		/* ignored */
+		break;
+	case UMPF_ATTR_REG_STAT:
+		/* ignored */
+		break;
+	default:
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		break;
+	}
+	return;
+}
+
 static void
 proc_PTY_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	umpf_msg_t msg = get_state_object(ctx);
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
@@ -522,7 +730,7 @@ proc_PTY_attr(__ctx_t ctx, const char *attr, const char *value)
 		/* dont overwrite stuff without free()ing
 		 * actually this is a bit rich, too much knowledge in here */
 		if (msg->pf.name == NULL) {
-			msg->pf.name = strdup(value);
+			msg->pf.name = unquot(value);
 		}
 		break;
 	case UMPF_ATTR_S:
@@ -542,7 +750,7 @@ static void
 proc_INSTRMT_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
@@ -552,8 +760,8 @@ proc_INSTRMT_attr(__ctx_t ctx, const char *attr, const char *value)
 
 	switch (aid) {
 	case UMPF_ATTR_SYM: {
-		struct __ins_qty_s *iq = get_state_object(ctx);
-		iq->instr = strdup(value);
+		struct __ins_s *ins = get_state_object(ctx);
+		ins->sym = unquot(value);
 		break;
 	}
 	default:
@@ -567,7 +775,7 @@ static void
 proc_QTY_attr(__ctx_t ctx, const char *attr, const char *value)
 {
 	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	struct __ins_qty_s *iq = get_state_object(ctx);
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
@@ -596,19 +804,122 @@ proc_QTY_attr(__ctx_t ctx, const char *attr, const char *value)
 	return;
 }
 
-
 static void
-sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
+proc_SEC_DEF_all_attr(__ctx_t ctx, const char *attr, const char *value)
 {
-	/* where the real element name starts, sans ns prefix */
-	const char *rname = tag_massage(name);
-	const umpf_tid_t tid = sax_tid_from_tag(rname);
+	const char *rattr = tag_massage(attr);
+	const umpf_aid_t aid = sax_aid_from_attr(rattr);
+	umpf_msg_t msg = ctx->msg;
 
-	if (!umpf_pref_p(ctx, name, rname - name) && ctx->msg != NULL) {
+	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", name);
+		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
 		return;
 	}
+
+	switch (aid) {
+	case UMPF_ATTR_TXT:
+		msg->new_sec.pf_mnemo = unquot(value);
+		break;
+	case UMPF_ATTR_TXN_TM:
+		/* ignored */
+		break;
+	default:
+		break;
+	}
+	return;
+}
+
+
+static void
+sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
+{
+
+	umpf_msg_t msg;
+
+	if (UNLIKELY(ctx->msg != NULL)) {
+		return;
+	} else if (UNLIKELY(get_state_otype(ctx) != UMPF_TAG_FIXML)) {
+		return;
+	}
+
+	/* generate a massage */
+	ctx->msg = msg = calloc(1, sizeof(*msg));
+	/* sigh, subtle differences */
+	switch (tid) {
+	case UMPF_TAG_REQ_FOR_POSS:
+		umpf_set_msg_type(msg, UMPF_MSG_GET_PF);
+		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+			proc_REQ_FOR_POSS_attr(
+				ctx, attrs[j], attrs[j + 1]);
+		}
+		(void)push_state(ctx, tid, msg);
+		break;
+
+	case UMPF_TAG_REQ_FOR_POSS_ACK:
+		umpf_set_msg_type(msg, UMPF_MSG_SET_PF);
+		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+			proc_REQ_FOR_POSS_ACK_attr(
+				ctx, attrs[j], attrs[j + 1]);
+		}
+		if (msg->pf.nposs > 0) {
+			size_t iqsz =
+				sizeof(*msg->pf.poss) * msg->pf.nposs;
+			ctx->msg = msg = realloc(
+				msg, sizeof(*msg) + iqsz);
+			memset(msg->pf.poss, 0, iqsz);
+		}
+		(void)push_state(ctx, tid, msg);
+		break;
+
+	case UMPF_TAG_RGST_INSTRCTNS:
+		umpf_set_msg_type(msg, UMPF_MSG_NEW_PF);
+		(void)push_state(ctx, tid, msg);
+		break;
+
+	case UMPF_TAG_RGST_INSTRCTNS_RSP:
+		umpf_set_msg_type(msg, UMPF_MSG_GET_DESCR);
+		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+			proc_RGST_INSTRCTNS_RSP_attr(
+				ctx, attrs[j], attrs[j + 1]);
+		}
+		(void)push_state(ctx, tid, msg);
+		break;
+
+	case UMPF_TAG_SEC_DEF_REQ:
+		umpf_set_msg_type(msg, UMPF_MSG_GET_SEC);
+		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+			proc_SEC_DEF_all_attr(ctx, attrs[j], attrs[j + 1]);
+		}
+		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
+		break;
+
+	case UMPF_TAG_SEC_DEF_UPD:
+		umpf_set_msg_type(msg, UMPF_MSG_SET_SEC);
+		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+			proc_SEC_DEF_all_attr(ctx, attrs[j], attrs[j + 1]);
+		}
+		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
+		break;
+
+	case UMPF_TAG_SEC_DEF:
+		umpf_set_msg_type(msg, UMPF_MSG_NEW_SEC);
+		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+			proc_SEC_DEF_all_attr(ctx, attrs[j], attrs[j + 1]);
+		}
+		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
+		break;
+
+	default:
+		break;
+	}
+	return;
+}
+
+static void
+sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
+{
+	const umpf_tid_t tid = sax_tid_from_tag(name);
 
 	/* all the stuff that needs a new sax handler */
 	switch (tid) {
@@ -630,50 +941,18 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		/* translate to get_pf/get_descr */
 	case UMPF_TAG_REQ_FOR_POSS_ACK:
 		/* translate to set_pf */
-	case UMPF_TAG_RGST_INSTRCTNS: {
+	case UMPF_TAG_RGST_INSTRCTNS:
 		/* translate to new_pf/set_descr */
-		umpf_msg_t msg;
-
-		if (UNLIKELY(ctx->msg != NULL)) {
-			break;
-		} else if (UNLIKELY(get_state_otype(ctx) != UMPF_TAG_FIXML)) {
-			break;
-		}
-
-		/* generate a massage */
-		ctx->msg = msg = calloc(1, sizeof(*msg));
-		/* sigh, subtle differences */
-		switch (tid) {
-		case UMPF_TAG_REQ_FOR_POSS:
-			umpf_set_msg_type(msg, UMPF_MSG_GET_PF);
-			for (size_t j = 0; attrs[j] != NULL; j += 2) {
-				proc_REQ_FOR_POSS_attr(
-					ctx, attrs[j], attrs[j + 1]);
-			}
-			break;
-		case UMPF_TAG_REQ_FOR_POSS_ACK:
-			umpf_set_msg_type(msg, UMPF_MSG_SET_PF);
-			for (size_t j = 0; attrs[j] != NULL; j += 2) {
-				proc_REQ_FOR_POSS_ACK_attr(
-					ctx, attrs[j], attrs[j + 1]);
-			}
-			if (msg->pf.nposs > 0) {
-				size_t iqsz =
-					sizeof(*msg->pf.poss) * msg->pf.nposs;
-				ctx->msg = msg = realloc(
-					msg, sizeof(*msg) + iqsz);
-				memset(msg->pf.poss, 0, iqsz);
-			}
-			break;
-		case UMPF_TAG_RGST_INSTRCTNS:
-			umpf_set_msg_type(msg, UMPF_MSG_NEW_PF);
-			break;
-		default:
-			break;
-		}
-		(void)push_state(ctx, tid, msg);
+	case UMPF_TAG_RGST_INSTRCTNS_RSP:
+		/* translate to get_descr */
+	case UMPF_TAG_SEC_DEF_REQ:
+		/* translate to get_sec */
+	case UMPF_TAG_SEC_DEF:
+		/* translate to new_sec */
+	case UMPF_TAG_SEC_DEF_UPD:
+		/* translate to set_sec */
+		sax_bo_top_level_elt(ctx, tid, attrs);
 		break;
-	}
 
 	case UMPF_TAG_POS_RPT: {
 		/* part of get/set pf */
@@ -684,7 +963,7 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 			;
 		} else if (UNLIKELY(get_state_otype(ctx) != UMPF_TAG_FIXML)) {
 			;
-		} else if (get_state_objint(ctx) < msg->pf.nposs) {
+		} else if ((size_t)get_state_objint(ctx) < msg->pf.nposs) {
 			iq = msg->pf.poss + get_state_objint(ctx);
 		}
 		(void)push_state(ctx, tid, iq);
@@ -723,23 +1002,26 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		break;
 	}
 
-	case UMPF_TAG_INSTRMT: {
-		/* check that we're inside a PosRpt context */
-		struct __ins_qty_s *iq =
-			get_state_object_if(ctx, UMPF_TAG_POS_RPT);
+	case UMPF_TAG_INSTRMT: 
 
-		if (UNLIKELY(iq == NULL)) {
-			UMPF_DEBUG(
-				PFIXML_PRE
-				" WARN: Instrmt outside of PosRpt\n");
+		switch (get_state_otype(ctx)) {
+		case UMPF_TAG_POS_RPT:
+		case UMPF_TAG_SEC_DEF:
+		case UMPF_TAG_SEC_DEF_REQ:
+		case UMPF_TAG_SEC_DEF_UPD:
+			/* we use the fact that __ins_qty_s == __ins_s
+			 * in posrpt mode and in sec-def mode we rely
+			 * on the right push there */
+			for (int j = 0; attrs[j] != NULL; j += 2) {
+				proc_INSTRMT_attr(ctx, attrs[j], attrs[j + 1]);
+			}
+			break;
+		default:
+			UMPF_DEBUG(PFIXML_PRE " Warn: "
+				   "Instrmt in unknown context\n");
 			break;
 		}
-
-		for (int j = 0; attrs[j] != NULL; j += 2) {
-			proc_INSTRMT_attr(ctx, attrs[j], attrs[j + 1]);
-		}
 		break;
-	}
 
 	case UMPF_TAG_QTY: {
 		/* check that we're inside a PosRpt context */
@@ -763,6 +1045,10 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		/* unsupported */
 		break;
 
+	case UMPF_TAG_SEC_XML:
+		/* it's just a no-op */
+		break;
+
 	default:
 		UMPF_DEBUG(PFIXML_PRE " WARN: unknown tag %s\n", name);
 		break;
@@ -772,22 +1058,10 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 	return;
 }
 
-
 static void
-sax_eo_elt(__ctx_t ctx, const char *name)
+sax_eo_FIXML_elt(__ctx_t ctx, const char *name)
 {
-	/* where the real element name starts, sans ns prefix */
-	const char *rname = tag_massage(name);
-	umpf_tid_t tid = sax_tid_from_tag(rname);
-
-	/* check if this is an umpf node */
-	if (!umpf_pref_p(ctx, name, rname - name)) {
-		/* dont know what to do */
-		return;
-	}
-
-	/* stuff buf reset */
-	stuff_buf_reset(ctx);
+	umpf_tid_t tid = sax_tid_from_tag(name);
 
 	/* stuff that needed to be done, fix up state etc. */
 	switch (tid) {
@@ -803,8 +1077,12 @@ sax_eo_elt(__ctx_t ctx, const char *name)
 		break;
 	case UMPF_TAG_REQ_FOR_POSS:
 	case UMPF_TAG_RGST_INSTRCTNS:
+	case UMPF_TAG_RGST_INSTRCTNS_RSP:
 	case UMPF_TAG_RG_DTL:
 	case UMPF_TAG_PTY:
+	case UMPF_TAG_SEC_DEF:
+	case UMPF_TAG_SEC_DEF_REQ:
+	case UMPF_TAG_SEC_DEF_UPD:
 		pop_state(ctx);
 		break;
 	case UMPF_TAG_FIXML:
@@ -822,20 +1100,262 @@ sax_eo_elt(__ctx_t ctx, const char *name)
 	return;
 }
 
-static void
-stuff_buf_push(__ctx_t ctx, const char *ch, int len)
+
+static size_t
+__eat_glue(const char *src, size_t len, const char *cookie, size_t cklen)
 {
-	if (UNLIKELY(ctx->sbix + len >= ctx->sbsz)) {
-		size_t new_sz = ctx->sbix + len;
+	const char *end;
+
+	if ((end = memmem(src, len + cklen, cookie, cklen)) != NULL) {
+		UMPF_DEBUG(PFIXML_PRE " found end tag, eating contents\n");
+		return end - src;
+	} else {
+		UMPF_DEBUG(PFIXML_PRE " end tag not found, eating all\n");
+		return len;
+	}
+}
+
+static size_t
+__push_glue(__ctx_t ctx, const char *src, size_t len)
+{
+	const char *cookie = ctx->sbuf + sizeof(size_t);
+	size_t cookie_len = ((size_t*)ctx->sbuf)[0];
+	size_t consum;
+
+	UMPF_DEBUG("looking for %s %zu\n", cookie, cookie_len);
+	consum = __eat_glue(src, len, cookie, cookie_len);
+
+	/* maybe realloc first? */
+	if (UNLIKELY(ctx->sbix + consum + 1 >= ctx->sbsz)) {
+		size_t new_sz = ctx->sbix + consum + 1;
 
 		/* round to multiple of 4096 */
 		new_sz = (new_sz & ~0xfff) + 4096L;
 		/* realloc now */
 		ctx->sbuf = realloc(ctx->sbuf, ctx->sbsz = new_sz);
 	}
-	/* now copy */
-	memcpy(ctx->sbuf + ctx->sbix, ch, len);
-	ctx->sbuf[ctx->sbix += len] = '\0';
+
+	/* stuff chunk into our buffer */
+	memcpy(ctx->sbuf + ctx->sbix, src, consum);
+	ctx->sbuf[ctx->sbix += consum] = '\0';
+	UMPF_DEBUG("pushed %zu\n", consum);
+	return consum;
+}
+
+static void
+sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int len)
+{
+/* should be called only in glue mode */
+	size_t consumed;
+	/* libxml2 specific! */
+	size_t max_len = ctx->pp->input->end - ctx->pp->input->cur;
+
+	/* push what we've got */
+	consumed = __push_glue(ctx, ch, max_len);
+
+	/* libxml2 specific stuff,
+	 * HACK, cheat on our push parser */
+	UMPF_DEBUG("eating %zu bytes from libxml's buffer\n", consumed);
+	if (consumed < max_len) {
+		/* we mustn't wind too far */
+		ctx->pp->input->cur += consumed - len;
+	} else {
+		/* everything's gone, just wind to the end */
+		ctx->pp->input->cur += consumed;
+	}
+	/* put into parser end tag mode, libxml2 must see </ now */
+	ctx->pp->instate = XML_PARSER_END_TAG;
+	return;
+}
+
+/* hackery */
+#define AOU_CONT_OFFS	(32)
+
+static void
+sax_bo_AOU_elt(
+	__ctx_t ctx, umpf_ns_t ns, const char *name, const char **UNUSED(attrs))
+{
+	const umpf_tid_t tid = sax_tid_from_tag(name);
+
+	switch (tid) {
+	case UMPF_TAG_GLUE: {
+		umpf_msg_t msg = ctx->msg;
+
+		/* actually this is the only one we support */
+		UMPF_DEBUG(PFIXML_PRE " GLUE\n");
+
+		if (UNLIKELY(msg == NULL)) {
+			UMPF_DEBUG("msg NULL, glue is meaningless\n");
+			break;
+		}
+
+		switch (umpf_get_msg_type(msg)) {
+		case UMPF_MSG_NEW_PF: {
+			/* ah, finally, glue indeed is supported here */
+			void *ptr;
+
+			if (UNLIKELY(msg->new_pf.satellite != NULL)) {
+				/* someone else, prob us, was faster */
+				break;
+			}
+			/* the glue code wants a pointer to the satellite */
+			ptr = &msg->new_pf.satellite;
+			(void)push_state(ctx, UMPF_TAG_GLUE, ptr);
+			goto glue_setup;
+		}
+		case UMPF_MSG_NEW_SEC:
+		case UMPF_MSG_SET_SEC: {
+			/* ah, finally, glue indeed is supported here */
+			void *ptr;
+
+			if (UNLIKELY(msg->new_sec.satellite != NULL)) {
+				/* someone else, prob us, was faster */
+				break;
+			}
+			/* the glue code wants a pointer to the satellite */
+			ptr = &msg->new_sec.satellite;
+			(void)push_state(ctx, UMPF_TAG_GLUE, ptr);
+			goto glue_setup;
+		}
+		default:
+			break;
+		}
+		break;
+
+		glue_setup:
+		/* libxml specific */
+		ctx->pp->sax->characters =
+			(charactersSAXFunc)sax_stuff_buf_AOU_push;
+		/* help the stuff buf pusher and
+		 * construct the end tag for him */
+		{
+			char *tmp = ctx->sbuf + sizeof(size_t);
+
+			*tmp++ = '<';
+			*tmp++ = '/';
+			tmp = stpcpy(tmp, ns->pref);
+			*tmp++ = ':';
+			*tmp++ = 'g';
+			*tmp++ = 'l';
+			*tmp++ = 'u';
+			*tmp++ = 'e';
+			*tmp++ = '>';
+			*tmp = '\0';
+			((size_t*)ctx->sbuf)[0] =
+				tmp - ctx->sbuf - sizeof(size_t);
+			/* reset our stuff buffer */
+			ctx->sbix = AOU_CONT_OFFS;
+		}
+		break;
+	}
+	default:
+		break;
+	}
+	return;
+}
+
+static void
+sax_eo_AOU_elt(__ctx_t ctx, const char *name)
+{
+	const umpf_tid_t tid = sax_tid_from_tag(name);
+
+	switch (tid) {
+	case UMPF_TAG_GLUE: {
+		char **ptr;
+		size_t len = ctx->sbix - AOU_CONT_OFFS;
+
+		UMPF_DEBUG(PFIXML_PRE " /GLUE\n");
+
+		/* reset stuff buffer */
+		ctx->sbix = 0;
+		/* unsubscribe stuff buffer cb */
+		ctx->pp->sax->characters = NULL;
+
+		if (UNLIKELY(get_state_otype(ctx) != UMPF_TAG_GLUE ||
+			     (ptr = get_state_object(ctx)) == NULL)) {
+			break;
+		}
+
+		/* frob contents */
+		*ptr = strndup(ctx->sbuf + AOU_CONT_OFFS, len);
+		/* job done, back to normal */
+		pop_state(ctx);
+		break;
+	}
+	default:
+		break;
+	}
+	return;
+}
+
+
+static void
+sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
+{
+	/* where the real element name starts, sans ns prefix */
+	const char *rname = tag_massage(name);
+	umpf_ns_t ns = __pref_to_ns(ctx, name, rname - name);
+
+	if (UNLIKELY(ns == NULL)) {
+		UMPF_DEBUG(PFIXML_PRE ": unknown prefix in tag %s\n", name);
+		return;
+	}
+
+	switch (ns->nsid) {
+	case UMPF_NS_FIXML_5_0:
+	case UMPF_NS_FIXML_4_4:
+		sax_bo_FIXML_elt(ctx, rname, attrs);
+		break;
+
+	case UMPF_NS_AOU_0_1:
+		sax_bo_AOU_elt(ctx, ns, rname, attrs);
+		break;
+
+	case UMPF_NS_MDDL_3_0:
+		UMPF_DEBUG(PFIXML_PRE ": can't parse mddl yet (%s)\n", rname);
+		break;
+
+	case UMPF_NS_UNK:
+	default:
+		UMPF_DEBUG(PFIXML_PRE
+			   ": unknown namespace %s (%s)\n", name, ns->href);
+		break;
+	}
+	return;
+}
+
+static void
+sax_eo_elt(__ctx_t ctx, const char *name)
+{
+	/* where the real element name starts, sans ns prefix */
+	const char *rname = tag_massage(name);
+	umpf_ns_t ns = __pref_to_ns(ctx, name, rname - name);
+
+	if (UNLIKELY(ns == NULL)) {
+		UMPF_DEBUG(PFIXML_PRE ": unknown prefix in tag %s\n", name);
+		return;
+	}
+
+	switch (ns->nsid) {
+	case UMPF_NS_FIXML_5_0:
+	case UMPF_NS_FIXML_4_4:
+		sax_eo_FIXML_elt(ctx, rname);
+		break;
+
+	case UMPF_NS_AOU_0_1:
+		sax_eo_AOU_elt(ctx, rname);
+		break;
+
+	case UMPF_NS_MDDL_3_0:
+		UMPF_DEBUG(PFIXML_PRE ": can't parse mddl yet (%s)\n", rname);
+		break;
+
+	case UMPF_NS_UNK:
+	default:
+		UMPF_DEBUG(PFIXML_PRE
+			   ": unknown namespace %s (%s)\n", name, ns->href);
+		break;
+	}
 	return;
 }
 
@@ -853,7 +1373,6 @@ parse_file(__ctx_t ctx, const char *file)
 	/* fill in the minimalistic sax handler to begin with */
 	ctx->hdl->startElement = (startElementSAXFunc)sax_bo_elt;
 	ctx->hdl->endElement = (endElementSAXFunc)sax_eo_elt;
-	ctx->hdl->characters = (charactersSAXFunc)stuff_buf_push;
 	ctx->hdl->getEntity = sax_get_ent;
 
 	res = xmlSAXUserParseFile(ctx->hdl, ctx, file);
@@ -883,7 +1402,24 @@ final_blob_p(__ctx_t ctx)
 static void
 parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
-	xmlParseChunk(ctx->pp, buf, bsz, bsz == 0);
+	switch (get_state_otype(ctx)) {
+		size_t cns;
+	case UMPF_TAG_GLUE:
+		/* better not to push parse this guy
+		 * call our stuff buf pusher instead */
+		UMPF_DEBUG(PFIXML_PRE ": GLUE direct\n");
+		if ((cns = __push_glue(ctx, buf, bsz)) < bsz) {
+			/* oh, we need to wind our buffers */
+			buf += cns;
+			bsz -= cns;
+		} else {
+			break;
+		}
+		UMPF_DEBUG(PFIXML_PRE ": GLUE consumed %zu\n", cns);
+	default:
+		xmlParseChunk(ctx->pp, buf, bsz, bsz == 0);
+		break;
+	}
 	return;
 }
 
@@ -919,7 +1455,6 @@ init(__ctx_t ctx)
 	/* fill in the minimalistic sax handler to begin with */
 	ctx->hdl->startElement = (startElementSAXFunc)sax_bo_elt;
 	ctx->hdl->endElement = (endElementSAXFunc)sax_eo_elt;
-	ctx->hdl->characters = (charactersSAXFunc)stuff_buf_push;
 	ctx->hdl->getEntity = sax_get_ent;
 	return;
 }
@@ -1042,7 +1577,7 @@ __umpf_parse_blob(__ctx_t ctx, const char *buf, size_t bsz)
 static void
 __umpf_parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
-	UMPF_DEBUG(PFIXML_PRE ": parsing blob of size %zu\n", bsz);
+	UMPF_DEBUG(PFIXML_PRE ": parsing more blob of size %zu\n", bsz);
 	parse_more_blob(ctx, buf, bsz);
 	return;
 }
@@ -1094,6 +1629,18 @@ umpf_free_msg(umpf_msg_t msg)
 		/* satellite only occurs in new pf */
 		if (msg->new_pf.satellite) {
 			xfree(msg->new_pf.satellite);
+		}
+		goto common;
+
+	case UMPF_MSG_NEW_SEC:
+	case UMPF_MSG_GET_SEC:
+	case UMPF_MSG_SET_SEC:
+		/* satellite and portfolio mnemo must be freed */
+		if (msg->new_sec.satellite) {
+			xfree(msg->new_sec.satellite);
+		}
+		if (msg->new_sec.pf_mnemo) {
+			xfree(msg->new_sec.pf_mnemo);
 		}
 		goto common;
 
