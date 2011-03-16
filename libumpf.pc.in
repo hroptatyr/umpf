@@ -6,7 +6,7 @@ datadir=@datarootdir@
 
 Name: libumpf
 Description: Portfolio Daemon Library
-Version: 0.1
+Version: @VERSION@
 Libs: @LDFLAGS@ -L${libdir} -lumpf
 Cflags: @CPPFLAGS@ -I${includedir}
 

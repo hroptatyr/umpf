@@ -86,7 +86,7 @@ get_cb(char *mnemo, double l, double s, void *clo)
 	size_t idx = msg->pf.nposs;
 
 	UMPF_DEBUG(MOD_PRE ": %s %2.4f %2.4f\n", mnemo, l, s);
-	msg->pf.poss[idx].instr = mnemo;
+	msg->pf.poss[idx].ins->sym = mnemo;
 	msg->pf.poss[idx].qty->_long = l;
 	msg->pf.poss[idx].qty->_shrt = s;
 	msg->pf.nposs++;
@@ -102,14 +102,14 @@ interpret_msg(int fd, umpf_msg_t msg)
 #endif	/* DEBUG_FLAG */
 
 	switch (umpf_get_msg_type(msg)) {
-	case UMPF_MSG_NEW_PF: {
-		const char *mnemo, *descr;
+	case UMPF_MSG_NEW_PF:
+	case UMPF_MSG_SET_DESCR: {
+		const char *mnemo = msg->new_pf.name;
+		const struct __satell_s *descr = msg->new_pf.satellite;
 		dbobj_t pf;
 
-		UMPF_DEBUG(MOD_PRE ": new_pf();\n");
-		mnemo = msg->new_pf.name;
-		descr = msg->new_pf.satellite;
-		pf = be_sql_new_pf(umpf_dbconn, mnemo, descr);
+		UMPF_DEBUG(MOD_PRE ": new_pf()/set_descr();\n");
+		pf = be_sql_new_pf(umpf_dbconn, mnemo, descr[0]);
 
 		/* reuse the message to send the answer */
 		msg->hdr.mt++;
@@ -117,6 +117,21 @@ interpret_msg(int fd, umpf_msg_t msg)
 
 		/* free resources */
 		be_sql_free_pf(umpf_dbconn, pf);
+		break;
+	}
+	case UMPF_MSG_GET_DESCR: {
+		const char *mnemo;
+
+		UMPF_DEBUG(MOD_PRE ": get_descr();\n");
+		mnemo = msg->new_pf.name;
+		if (msg->new_pf.satellite->data != NULL) {
+			free(msg->new_pf.satellite->data);
+		}
+		msg->new_pf.satellite[0] = be_sql_get_descr(umpf_dbconn, mnemo);
+
+		/* reuse the message to send the answer */
+		msg->hdr.mt++;
+		umpf_print_msg(fd, msg);
 		break;
 	}
 	case UMPF_MSG_GET_PF: {
@@ -161,7 +176,7 @@ interpret_msg(int fd, umpf_msg_t msg)
 		tag = be_sql_new_tag(umpf_dbconn, mnemo, stamp);
 
 		for (size_t i = 0; i < msg->pf.nposs; i++) {
-			const char *sec = msg->pf.poss[i].instr;
+			const char *sec = msg->pf.poss[i].ins->sym;
 			double l = msg->pf.poss[i].qty->_long;
 			double s = msg->pf.poss[i].qty->_shrt;
 			be_sql_set_pos(umpf_dbconn, tag, sec, l, s);
@@ -173,6 +188,60 @@ interpret_msg(int fd, umpf_msg_t msg)
 
 		/* free resources */
 		be_sql_free_tag(umpf_dbconn, tag);
+		break;
+	}
+	case UMPF_MSG_NEW_SEC: {
+		const char *pf_mnemo = msg->new_sec.pf_mnemo;
+		const char *sec_mnemo = msg->new_sec.ins->sym;
+		const struct __satell_s *descr = msg->new_sec.satellite;
+		dbobj_t sec;
+
+		UMPF_DEBUG(MOD_PRE ": new_sec();\n");
+		sec = be_sql_new_sec(umpf_dbconn, pf_mnemo, sec_mnemo, *descr);
+
+		/* reuse the message to send the answer */
+		msg->hdr.mt++;
+		umpf_print_msg(fd, msg);
+
+		/* free resources */
+		be_sql_free_sec(umpf_dbconn, sec);
+		break;
+	}
+	case UMPF_MSG_SET_SEC: {
+		const char *pf_mnemo = msg->new_sec.pf_mnemo;
+		const char *sec_mnemo = msg->new_sec.ins->sym;
+		const struct __satell_s *descr = msg->new_sec.satellite;
+		dbobj_t sec;
+
+		UMPF_DEBUG(MOD_PRE ": set_sec();\n");
+		sec = be_sql_set_sec(umpf_dbconn, pf_mnemo, sec_mnemo, *descr);
+
+		/* reuse the message to send the answer,
+		 * we should check if SEC is a valid sec-id actually and
+		 * send an error otherwise */
+		msg->hdr.mt++;
+		umpf_print_msg(fd, msg);
+
+		/* free resources */
+		be_sql_free_sec(umpf_dbconn, sec);
+		break;
+	}
+	case UMPF_MSG_GET_SEC: {
+		const char *pf_mnemo;
+		const char *sec_mnemo;
+
+		UMPF_DEBUG(MOD_PRE ": get_sec();\n");
+		pf_mnemo = msg->new_sec.pf_mnemo;
+		sec_mnemo = msg->new_sec.ins->sym;
+		if (msg->new_sec.satellite->data != NULL) {
+			free(msg->new_sec.satellite->data);
+		}
+		msg->new_sec.satellite[0] =
+			be_sql_get_sec(umpf_dbconn, pf_mnemo, sec_mnemo);
+
+		/* reuse the message to send the answer */
+		msg->hdr.mt++;
+		umpf_print_msg(fd, msg);
 		break;
 	}
 	default:
@@ -193,14 +262,17 @@ handle_data(umpf_conn_t ctx, char *msg, size_t msglen)
 	umpf_ctx_t p = get_fd_data(ctx);
 	umpf_msg_t umsg;
 
-	msg[msglen] = '\0';
-	UMPF_DEBUG(MOD_PRE "/ctx: %p %zu\n%s\n", ctx, msglen, msg);
+	UMPF_DEBUG(MOD_PRE "/ctx: %p %zu\n", ctx, msglen);
+#if defined DEBUG_FLAG
+	/* safely write msg to logerr now */
+	fwrite(msg, msglen, 1, logout);
+#endif	/* DEBUG_FLAG */
 
 	if ((umsg = umpf_parse_blob_r(&p, msg, msglen)) != NULL) {
 		/* definite success */
 		interpret_msg(get_fd(ctx), umsg);
 
-	} else if (/* umsg == NULL && */ctx == NULL) {
+	} else if (/* umsg == NULL && */p == NULL) {
 		/* error occurred */
 		UMPF_DEBUG(MOD_PRE ": ERROR\n");
 	} else {

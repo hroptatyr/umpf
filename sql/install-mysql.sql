@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS `aou_umpf_portfolio` (
 	-- nickname used to identify this portfolio externally
 	short VARCHAR(64) CHARSET ASCII NOT NULL,
 	-- description to elaborate on this pf
-	description TEXT,
+	description MEDIUMTEXT,
 	UNIQUE KEY (`short`)
 ) ENGINE InnoDB CHARSET utf8 COLLATE utf8_unicode_ci;
 
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS `aou_umpf_security` (
 	-- nickname used to identify this security externally
 	short VARCHAR(64) CHARSET ASCII NOT NULL,
 	-- used to elaborate on the security if need be
-	description TEXT,
+	description MEDIUMTEXT,
 	UNIQUE KEY (`portfolio_id`, `short`),
 	FOREIGN KEY (`portfolio_id`)
 		REFERENCES `aou_umpf_portfolio` (`portfolio_id`)
