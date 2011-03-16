@@ -213,7 +213,7 @@ interpret_msg(int fd, umpf_msg_t msg)
 		const struct __satell_s *descr = msg->new_sec.satellite;
 		dbobj_t sec;
 
-		UMPF_DEBUG(MOD_PRE ": new_sec();\n");
+		UMPF_DEBUG(MOD_PRE ": set_sec();\n");
 		sec = be_sql_set_sec(umpf_dbconn, pf_mnemo, sec_mnemo, *descr);
 
 		/* reuse the message to send the answer,
