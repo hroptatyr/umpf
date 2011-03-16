@@ -435,6 +435,16 @@ make_umpf_get_pf_msg(const char *mnemo)
 }
 
 static umpf_msg_t
+make_umpf_get_poss_msg(const char *mnemo, const time_t stamp)
+{
+	umpf_msg_t res = make_umpf_msg();
+	umpf_set_msg_type(res, UMPF_MSG_GET_PF);
+	res->pf.name = strdup(mnemo);
+	res->pf.stamp = stamp;
+	return res;
+}
+
+static umpf_msg_t
 make_umpf_get_sec_msg(const char *pf_mnemo, const char *mnemo)
 {
 	umpf_msg_t res = make_umpf_msg();
@@ -489,6 +499,12 @@ umpf_process(struct __clo_s *clo)
 		const char *mnemo = clo->set_sec->mnemo;
 		const char *pf_mnemo = clo->set_sec->pf;
 		msg = make_umpf_get_sec_msg(pf_mnemo, mnemo);
+		break;
+	}
+	case UMPF_CMD_GET_POSS: {
+		const char *mnemo = clo->get_poss->pf;
+		const time_t stamp = clo->get_poss->stamp ?: time(NULL);
+		msg = make_umpf_get_poss_msg(mnemo, stamp);
 		break;
 	}
 	default:
@@ -620,12 +636,12 @@ parse_set_poss_args(struct __clo_s *clo, int argc, char *argv[])
 			/* could be -d or --date or -f or --file */
 			if (*p == 'd') {
 				clo->set_poss->date = __get_val(&i, 2, argv);
-			} else if (strncmp(p, "-descr", 6) == 0) {
-				clo->set_poss->date = __get_val(&i, 7, argv);
+			} else if (strncmp(p, "-date", 5) == 0) {
+				clo->set_poss->date = __get_val(&i, 6, argv);
 			} else if (*p == 'f') {
 				clo->set_poss->file = __get_val(&i, 2, argv);
-			} else if (strncmp(p, "-file", 3) == 0) {
-				clo->set_poss->file = __get_val(&i, 4, argv);
+			} else if (strncmp(p, "-file", 5) == 0) {
+				clo->set_poss->file = __get_val(&i, 6, argv);
 			}
 		} else if (clo->set_poss->pf == NULL) {
 			/* must be the name then */
@@ -720,7 +736,11 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 				parse_set_sec_args(clo, new_argc, new_argv);
 				continue;
 			} else if (strcmp(p, "et-poss") == 0) {
-				clo->cmd = UMPF_CMD_SET_POSS;
+				if (p[-1] == 'g') {
+					clo->cmd = UMPF_CMD_GET_POSS;
+				} else {
+					clo->cmd = UMPF_CMD_SET_POSS;
+				}
 				parse_set_poss_args(clo, new_argc, new_argv);
 				continue;
 			}
