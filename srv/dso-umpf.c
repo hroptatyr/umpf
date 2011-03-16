@@ -230,11 +230,11 @@ interpret_msg(int fd, umpf_msg_t msg)
 		const char *pf_mnemo;
 		const char *sec_mnemo;
 
-		UMPF_DEBUG(MOD_PRE ": new_sec();\n");
+		UMPF_DEBUG(MOD_PRE ": get_sec();\n");
 		pf_mnemo = msg->new_sec.pf_mnemo;
 		sec_mnemo = msg->new_sec.ins->sym;
-		if (msg->new_sec.satellite != NULL) {
-			free(msg->new_sec.satellite);
+		if (msg->new_sec.satellite->data != NULL) {
+			free(msg->new_sec.satellite->data);
 		}
 		msg->new_sec.satellite[0] =
 			be_sql_get_sec(umpf_dbconn, pf_mnemo, sec_mnemo);
