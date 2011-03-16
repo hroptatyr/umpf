@@ -315,7 +315,7 @@ static void
 mysql_time_to_tm(struct tm *tgt, MYSQL_TIME *src)
 {
 	tgt->tm_year = src->year - 1900;
-	tgt->tm_mon = src->month + 1;
+	tgt->tm_mon = src->month - 1;
 	tgt->tm_mday = src->day;
 	tgt->tm_hour = src->hour;
 	tgt->tm_min = src->minute;
