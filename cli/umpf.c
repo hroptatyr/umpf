@@ -348,11 +348,7 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 	while ((nfds = ep_wait(epg, SRV_TIMEOUT)) > 0) {
 		assert(nfds == 1);
 
-		if (epg->ev[0].events & (EPOLLERR | EPOLLRDHUP | EPOLLHUP)) {
-			nfds = -1;
-			break;
-
-		} else if (epg->ev[0].events & EPOLLIN) {
+		if (LIKELY(epg->ev[0].events & EPOLLIN)) {
 			/* read what's on the wire */
 			umpf_msg_t rpl = read_reply(epg->ev[0].data.fd);
 
@@ -372,6 +368,13 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 #endif	/* DEBUG_FLAG */
 			umpf_print_msg(epg->ev[0].data.fd, msg);
 			msg = NULL;
+		} else {
+#if defined DEBUG_FLAG
+			fprintf(stderr, "epoll repl exitted, flags %x\n",
+				epg->ev[0].events);
+#endif	/* DEBUG_FLAG */
+			nfds = -1;
+			break;
 		}
 	}
 	/* stop waiting for events */
