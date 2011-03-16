@@ -689,6 +689,11 @@ make_umpf_set_poss_msg(const char *mnemo, const time_t stamp, const char *file)
 	for (ssize_t nrd, ln = 0; (nrd = getline(&line, &llen, f)) >= 0; ln++) {
 		struct __ins_qty_s iq = {0};
 
+		/* bit complicated would be the case that the command line
+		 * option (--date) should take precedence, it _could_ be
+		 * useful if your portfolio hasn't changed since yesterday
+		 * and now you just want to stamp it off under a different
+		 * name or different time stamp */
 		if (ln == 0 && (res = __massage_first(line, nrd)) != NULL) {
 			/* first line is full of cookies */
 			continue;
