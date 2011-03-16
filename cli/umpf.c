@@ -332,6 +332,117 @@ read_reply(volatile int fd)
 	return rpl;
 }
 
+static void
+fput_zulu(time_t stamp, FILE *where)
+{
+	struct tm tm[1] = {{0}};
+	char buf[32];
+
+	if (LIKELY(stamp > 0)) {
+		gmtime_r(&stamp, tm);
+		(void)strftime(buf, sizeof(buf), "%FT%T%z", tm);
+		fputs(buf, where);
+	} else {
+		fputc('0', where);
+	}
+	return;
+}
+
+static void
+fput_date(time_t stamp, FILE *where)
+{
+	struct tm tm[1] = {{0}};
+	char buf[32];
+
+	if (LIKELY(stamp > 0)) {
+		gmtime_r(&stamp, tm);
+		(void)strftime(buf, sizeof(buf), "%F", tm);
+		fputs(buf, where);
+	} else {
+		fputc('0', where);
+	}
+	return;
+}
+
+static void
+pretty_print(umpf_msg_t msg)
+{
+	switch (umpf_get_msg_type(msg)) {
+	case UMPF_MSG_NEW_PF:
+	case UMPF_MSG_SET_DESCR:
+		fputs(":portfolio \"", stdout);
+		fputs(msg->new_pf.name, stdout);
+		fputs("\"\n", stdout);
+		{
+			const char *data = msg->new_pf.satellite->data;
+			const size_t size = msg->new_pf.satellite->size;
+			fwrite(data, size, 1, stdout);
+			if (data[size - 1] != '\n') {
+				fputc('\n', stdout);
+			}
+		}
+		break;
+	case UMPF_MSG_GET_DESCR:
+		fputs(":portfolio \"", stdout);
+		fputs(msg->new_pf.name, stdout);
+		fputs("\"\n", stdout);
+		break;
+	case UMPF_MSG_SET_SEC:
+	case UMPF_MSG_NEW_SEC:
+		fputs(":portfolio \"", stdout);
+		fputs(msg->new_sec.pf_mnemo, stdout);
+		fputs("\" :security \"", stdout);
+		fputs(msg->new_sec.ins->sym, stdout);
+		fputs("\"\n", stdout);
+		if (msg->new_sec.satellite->data) {
+			const char *data = msg->new_sec.satellite->data;
+			const size_t size = msg->new_sec.satellite->size;
+			fwrite(data, size, 1, stdout);
+			if (data[size - 1] != '\n') {
+				fputc('\n', stdout);
+			}
+		}
+		break;		
+	case UMPF_MSG_GET_SEC:
+		fputs(":portfolio \"", stdout);
+		fputs(msg->new_sec.pf_mnemo, stdout);
+		fputs("\" :security \"", stdout);
+		fputs(msg->new_sec.ins->sym, stdout);
+		fputs("\"\n", stdout);
+		break;
+
+	case UMPF_MSG_SET_PF:
+		fputs(":portfolio \"", stdout);
+		fputs(msg->pf.name, stdout);
+		fputs("\" :stamp ", stdout);
+		fput_zulu(msg->pf.stamp, stdout);
+		fputs(" :clear ", stdout);
+		fput_date(msg->pf.clr_dt, stdout);
+		fputc('\n', stdout);
+
+		for (size_t i = 0; i < msg->pf.nposs; i++) {
+			struct __ins_qty_s *pos = msg->pf.poss + i;
+			fputs(pos->ins->sym, stdout);
+			fprintf(stdout, "\t%.6f\t%.6f\n",
+				pos->qty->_long, pos->qty->_shrt);
+		}
+		break;
+	case UMPF_MSG_GET_PF:
+		fputs(":portfolio \"", stdout);
+		fputs(msg->pf.name, stdout);
+		fputs("\" :stamp ", stdout);
+		fput_zulu(msg->pf.stamp, stdout);
+		fputs(" :clear ", stdout);
+		fput_date(msg->pf.clr_dt, stdout);
+		fputc('\n', stdout);
+		break;
+	default:
+		fputs("cannot interpret response\n", stderr);
+		break;
+	}
+	return;
+}
+
 /* main loop */
 static int
 umpf_repl(umpf_msg_t msg, volatile int sock)
@@ -361,6 +472,7 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 #if defined DEBUG_FLAG
 				umpf_print_msg(STDERR_FILENO, rpl);
 #endif	/* DEBUG_FLAG */
+				pretty_print(rpl);
 				umpf_free_msg(rpl);
 				nfds = 0;
 				break;
@@ -401,10 +513,11 @@ make_umpf_new_pf_msg(const char *mnemo, const char *satell, size_t ssize)
 	umpf_msg_t res = make_umpf_msg();
 	umpf_set_msg_type(res, UMPF_MSG_NEW_PF);
 	res->new_pf.name = strdup(mnemo);
-	res->new_pf.satellite->data =
-		malloc((res->new_pf.satellite->size = ssize) + 1);
-	memcpy(res->new_pf.satellite->data, satell, ssize);
-	res->new_pf.satellite->data[ssize] = '\0';
+	if (LIKELY(satell != NULL)) {
+		res->new_pf.satellite->data =
+			malloc((res->new_pf.satellite->size = ssize));
+		memcpy(res->new_pf.satellite->data, satell, ssize);
+	}
 	return res;
 }
 
@@ -416,10 +529,11 @@ make_umpf_new_sec_msg(
 	umpf_set_msg_type(res, UMPF_MSG_NEW_SEC);
 	res->new_sec.ins->sym = strdup(sym);
 	res->new_sec.pf_mnemo = strdup(pf);
-	res->new_sec.satellite->data =
-		malloc((res->new_sec.satellite->size = satlen) + 1);
-	memcpy(res->new_sec.satellite->data, sat, satlen);
-	res->new_pf.satellite->data[satlen] = '\0';
+	if (LIKELY(sat != NULL)) {
+		res->new_sec.satellite->data =
+			malloc((res->new_sec.satellite->size = satlen));
+		memcpy(res->new_sec.satellite->data, sat, satlen);
+	}
 	return res;
 }
 
@@ -429,6 +543,16 @@ make_umpf_get_pf_msg(const char *mnemo)
 	umpf_msg_t res = make_umpf_msg();
 	umpf_set_msg_type(res, UMPF_MSG_GET_DESCR);
 	res->new_pf.name = strdup(mnemo);
+	return res;
+}
+
+static umpf_msg_t
+make_umpf_get_poss_msg(const char *mnemo, const time_t stamp)
+{
+	umpf_msg_t res = make_umpf_msg();
+	umpf_set_msg_type(res, UMPF_MSG_GET_PF);
+	res->pf.name = strdup(mnemo);
+	res->pf.stamp = stamp;
 	return res;
 }
 
@@ -450,19 +574,32 @@ umpf_process(struct __clo_s *clo)
 	volatile int sock;
 
 	switch (clo->cmd) {
+	case UMPF_CMD_SET_PF:
+		/* FIXML can't distinguish between new_pf and set_pf,
+		 * so we just use NEW_PF for this */
 	case UMPF_CMD_NEW_PF: {
 		const char *mnemo = clo->set_pf->mnemo;
 		const char *descr = clo->set_pf->descr;
-		const size_t dsize = strlen(descr);
+		const size_t dsize = descr ? strlen(descr) : 0;
 		msg = make_umpf_new_pf_msg(mnemo, descr, dsize);
 		break;
 	}
 	case UMPF_CMD_NEW_SEC: {
 		const char *mnemo = clo->set_sec->mnemo;
 		const char *descr = clo->set_sec->descr;
-		const size_t dsize = strlen(descr);
+		const size_t dsize = descr ? strlen(descr) : 0;
 		const char *pf_mnemo = clo->set_sec->pf;
 		msg = make_umpf_new_sec_msg(pf_mnemo, mnemo, descr, dsize);
+		break;
+	}
+	case UMPF_CMD_SET_SEC: {
+		const char *mnemo = clo->set_sec->mnemo;
+		const char *pf_mnemo = clo->set_sec->pf;
+		const char *descr = clo->set_sec->descr;
+		const size_t dsize = descr ? strlen(descr) : 0;
+		/* call __new_sec_msg() and fiddle with the msg type later */
+		msg = make_umpf_new_sec_msg(pf_mnemo, mnemo, descr, dsize);
+		umpf_set_msg_type(msg, UMPF_MSG_SET_SEC);
 		break;
 	}
 	case UMPF_CMD_GET_PF: {
@@ -474,6 +611,12 @@ umpf_process(struct __clo_s *clo)
 		const char *mnemo = clo->set_sec->mnemo;
 		const char *pf_mnemo = clo->set_sec->pf;
 		msg = make_umpf_get_sec_msg(pf_mnemo, mnemo);
+		break;
+	}
+	case UMPF_CMD_GET_POSS: {
+		const char *mnemo = clo->get_poss->pf;
+		const time_t stamp = clo->get_poss->stamp ?: time(NULL);
+		msg = make_umpf_get_poss_msg(mnemo, stamp);
 		break;
 	}
 	default:
@@ -605,12 +748,12 @@ parse_set_poss_args(struct __clo_s *clo, int argc, char *argv[])
 			/* could be -d or --date or -f or --file */
 			if (*p == 'd') {
 				clo->set_poss->date = __get_val(&i, 2, argv);
-			} else if (strncmp(p, "-descr", 6) == 0) {
-				clo->set_poss->date = __get_val(&i, 7, argv);
+			} else if (strncmp(p, "-date", 5) == 0) {
+				clo->set_poss->date = __get_val(&i, 6, argv);
 			} else if (*p == 'f') {
 				clo->set_poss->file = __get_val(&i, 2, argv);
-			} else if (strncmp(p, "-file", 3) == 0) {
-				clo->set_poss->file = __get_val(&i, 4, argv);
+			} else if (strncmp(p, "-file", 5) == 0) {
+				clo->set_poss->file = __get_val(&i, 6, argv);
 			}
 		} else if (clo->set_poss->pf == NULL) {
 			/* must be the name then */
@@ -705,7 +848,11 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 				parse_set_sec_args(clo, new_argc, new_argv);
 				continue;
 			} else if (strcmp(p, "et-poss") == 0) {
-				clo->cmd = UMPF_CMD_SET_POSS;
+				if (p[-1] == 'g') {
+					clo->cmd = UMPF_CMD_GET_POSS;
+				} else {
+					clo->cmd = UMPF_CMD_SET_POSS;
+				}
 				parse_set_poss_args(clo, new_argc, new_argv);
 				continue;
 			}
