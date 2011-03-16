@@ -85,6 +85,11 @@ struct __ins_qty_s {
 	struct __qty_s qty[1];
 };
 
+struct __satell_s {
+	char *data;
+	size_t size;
+};
+
 struct umpf_msg_hdr_s {
 	/* this is generally msg_type * 2 */
 	unsigned int mt;
@@ -96,7 +101,7 @@ struct umpf_msg_new_pf_s {
 	struct umpf_msg_hdr_s hdr;
 
 	char *name;
-	char *satellite;
+	struct __satell_s satellite[1];
 };
 
 /* SecDefUpd -> new_sec */
@@ -104,7 +109,7 @@ struct umpf_msg_new_sec_s {
 	struct umpf_msg_hdr_s hdr;
 
 	struct __ins_s ins[1];
-	char *satellite;
+	struct __satell_s satellite[1];
 
 	char *pf_mnemo;
 };

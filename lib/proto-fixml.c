@@ -1194,12 +1194,12 @@ sax_bo_AOU_elt(
 			/* ah, finally, glue indeed is supported here */
 			void *ptr;
 
-			if (UNLIKELY(msg->new_pf.satellite != NULL)) {
+			if (UNLIKELY(msg->new_pf.satellite->data != NULL)) {
 				/* someone else, prob us, was faster */
 				break;
 			}
 			/* the glue code wants a pointer to the satellite */
-			ptr = &msg->new_pf.satellite;
+			ptr = msg->new_pf.satellite;
 			(void)push_state(ctx, UMPF_TAG_GLUE, ptr);
 			goto glue_setup;
 		}
@@ -1208,12 +1208,12 @@ sax_bo_AOU_elt(
 			/* ah, finally, glue indeed is supported here */
 			void *ptr;
 
-			if (UNLIKELY(msg->new_sec.satellite != NULL)) {
+			if (UNLIKELY(msg->new_sec.satellite->data != NULL)) {
 				/* someone else, prob us, was faster */
 				break;
 			}
 			/* the glue code wants a pointer to the satellite */
-			ptr = &msg->new_sec.satellite;
+			ptr = msg->new_sec.satellite;
 			(void)push_state(ctx, UMPF_TAG_GLUE, ptr);
 			goto glue_setup;
 		}
@@ -1627,8 +1627,8 @@ umpf_free_msg(umpf_msg_t msg)
 	switch (umpf_get_msg_type(msg)) {
 	case UMPF_MSG_NEW_PF:
 		/* satellite only occurs in new pf */
-		if (msg->new_pf.satellite) {
-			xfree(msg->new_pf.satellite);
+		if (msg->new_pf.satellite->data) {
+			xfree(msg->new_pf.satellite->data);
 		}
 		goto common;
 
@@ -1636,8 +1636,8 @@ umpf_free_msg(umpf_msg_t msg)
 	case UMPF_MSG_GET_SEC:
 	case UMPF_MSG_SET_SEC:
 		/* satellite and portfolio mnemo must be freed */
-		if (msg->new_sec.satellite) {
-			xfree(msg->new_sec.satellite);
+		if (msg->new_sec.satellite->data) {
+			xfree(msg->new_sec.satellite->data);
 		}
 		if (msg->new_sec.pf_mnemo) {
 			xfree(msg->new_sec.pf_mnemo);

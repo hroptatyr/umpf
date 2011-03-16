@@ -371,7 +371,9 @@ print_pty(__ctx_t ctx, const char *id, unsigned int role, char src, size_t ind)
 }
 
 static void
-print_rg_dtl(__ctx_t ctx, const char *name, const char *satell, size_t indent)
+print_rg_dtl(
+	__ctx_t ctx, const char *name,
+	const struct __satell_s satell, size_t indent)
 {
 	print_indent(ctx, indent);
 	sputs(ctx, "<RgDtl>\n");
@@ -386,14 +388,15 @@ print_rg_dtl(__ctx_t ctx, const char *name, const char *satell, size_t indent)
 		sputc(ctx, '"');
 	}
 
-	if (satell) {
+	if (satell.data) {
 		/* finalise the tag */
 		sputs(ctx, ">\n");
 
 		print_indent(ctx, indent + 4);
 		sputs(ctx, "<aou:glue content-type=\"text/plain\">\n");
 
-		sputs(ctx, satell);
+		snputs(ctx, satell.data, satell.size);
+		sputc(ctx, '\n');
 
 		print_indent(ctx, indent + 4);
 		sputs(ctx, "</aou:glue>\n");
@@ -509,7 +512,7 @@ print_rgst_instrctns(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 	print_indent(ctx, indent);
 	sputs(ctx, "<RgstInstrctns TransTyp=\"0\">\n");
 
-	print_rg_dtl(ctx, msg->new_pf.name, msg->new_pf.satellite, indent + 2);
+	print_rg_dtl(ctx, msg->new_pf.name, *msg->new_pf.satellite, indent + 2);
 
 	print_indent(ctx, indent);
 	sputs(ctx, "</RgstInstrctns>\n");
@@ -585,7 +588,7 @@ print_pos_rpt(__ctx_t ctx, umpf_msg_t msg, size_t idx, size_t indent)
 }
 
 static void
-print_sec_xml(__ctx_t ctx, const char *satell, size_t indent)
+print_sec_xml(__ctx_t ctx, const struct __satell_s satell, size_t indent)
 {
 	print_indent(ctx, indent);
 	sputs(ctx, "<SecXML>\n");
@@ -593,7 +596,7 @@ print_sec_xml(__ctx_t ctx, const char *satell, size_t indent)
 	print_indent(ctx, indent + 2);
 	sputs(ctx, "<aou:glue content-type=\"text/plain\">\n");
 
-	sputs(ctx, satell);
+	snputs(ctx, satell.data, satell.size);
 
 	print_indent(ctx, indent + 2);
 	sputs(ctx, "</aou:glue>\n");
@@ -620,8 +623,8 @@ print_sec_def(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 
 	print_instrmt(ctx, msg->new_sec.ins, indent + 2);
 
-	if (LIKELY(msg->new_sec.satellite != NULL)) {
-		print_sec_xml(ctx, msg->new_sec.satellite, indent + 2);
+	if (LIKELY(msg->new_sec.satellite->data != NULL)) {
+		print_sec_xml(ctx, *msg->new_sec.satellite, indent + 2);
 	}
 
 	print_indent(ctx, indent);
@@ -668,8 +671,8 @@ print_sec_def_upd(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 
 	print_instrmt(ctx, msg->new_sec.ins, indent + 2);
 
-	if (LIKELY(msg->new_sec.satellite != NULL)) {
-		print_sec_xml(ctx, msg->new_sec.satellite, indent + 2);
+	if (LIKELY(msg->new_sec.satellite->data != NULL)) {
+		print_sec_xml(ctx, *msg->new_sec.satellite, indent + 2);
 	}
 
 	print_indent(ctx, indent);
