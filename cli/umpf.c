@@ -44,6 +44,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <time.h>
+#include <ctype.h>
 /* network stuff */
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -117,9 +119,9 @@ struct __get_sec_clo_s {
 struct __set_poss_clo_s {
 	const char *pf;
 	const char *date;
+	time_t stamp;
 	const char *file;
 	const char *poss;
-	time_t stamp;
 };
 
 struct __get_poss_clo_s {
@@ -362,6 +364,26 @@ fput_date(time_t stamp, FILE *where)
 		fputc('0', where);
 	}
 	return;
+}
+
+static time_t
+from_zulu(const char *buf)
+{
+	struct tm tm[1] = {{0}};
+
+	/* skip over whitespace */
+	for (; *buf && isspace(*buf); buf++);
+
+	if (strptime(buf, "%Y-%m-%dT%H:%M:%S%Z", tm)) {
+		;
+	} else if (strptime(buf, "%Y-%m-%dT%H:%M:%S", tm)) {
+		;
+	} else if (strptime(buf, "%Y-%m-%d", tm)) {
+		;
+	} else {
+		return strtoul(buf, NULL, 10);
+	}
+	return timegm(tm);
 }
 
 static void
@@ -918,6 +940,10 @@ check__poss_args(struct __clo_s *clo)
 	if (clo->set_poss->pf == NULL) {
 		fputs("portfolio mnemonic must not be NULL\n", stderr);
 		return -1;
+	}
+	if (clo->set_poss->date) {
+		/* convert */
+		clo->set_poss->stamp = from_zulu(clo->set_poss->date);
 	}
 	if (clo->set_poss->file) {
 		/* check if file exists */

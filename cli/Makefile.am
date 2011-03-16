@@ -17,7 +17,7 @@ umpf_SOURCES += epoll-helpers.h
 umpf_SOURCES += ud-sock.h
 umpf_LDFLAGS = -static
 umpf_LDADD = $(top_builddir)/lib/libumpf.la
-umpf_CPPFLAGS = -I$(top_srcdir)/lib
+umpf_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/lib
 endif ## BUILD_CLIAPPS
 
 
