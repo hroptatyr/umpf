@@ -937,7 +937,8 @@ check__sec_args(struct __clo_s *clo)
 static int
 check__poss_args(struct __clo_s *clo)
 {
-	if (clo->set_poss->pf == NULL) {
+	if (clo->set_poss->pf == NULL && clo->cmd == UMPF_CMD_GET_POSS) {
+		/* allow empty mnemonic in SET_POSS mode but not in GET_POSS */
 		fputs("portfolio mnemonic must not be NULL\n", stderr);
 		return -1;
 	}
