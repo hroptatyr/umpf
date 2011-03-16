@@ -313,21 +313,23 @@ read_reply(volatile int fd)
 	static char buf[4096];
 	static umpf_ctx_t p = NULL;
 	ssize_t nrd;
-	umpf_msg_t rpl;
+	umpf_msg_t rpl = NULL;
 
 	while ((nrd = recv(fd, buf, sizeof(buf), 0)) > 0) {
+#if defined DEBUG_FLAG
 		fprintf(stderr, "read %zd\n", nrd);
+#endif	/* DEBUG_FLAG */
 		if ((rpl = umpf_parse_blob(&p, buf, nrd)) != NULL) {
 			/* bingo */
-			return rpl;
+			break;
 
 		} else if (/* rpl == NULL && */p == NULL) {
 			/* error */
-			return (umpf_msg_t)(-1L);
+			break;
 		}
 		/* not enough data yet, request more */
 	}
-	return (void*)nrd;
+	return rpl;
 }
 
 /* main loop */
@@ -354,16 +356,11 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 			/* read what's on the wire */
 			umpf_msg_t rpl = read_reply(epg->ev[0].data.fd);
 
-			if (rpl == (void*)(-1L)) {
-				/* somethings gone pear-shaped */
-				nfds = -1;
-				break;
-			} else if (rpl == NULL) {
-				/* we need more input */
-				;
-			} else {
+			if (LIKELY(rpl != NULL)) {
 				/* everything's brill */
-				umpf_print_msg(STDOUT_FILENO, rpl);
+#if defined DEBUG_FLAG
+				umpf_print_msg(STDERR_FILENO, rpl);
+#endif	/* DEBUG_FLAG */
 				umpf_free_msg(rpl);
 				nfds = 0;
 				break;
