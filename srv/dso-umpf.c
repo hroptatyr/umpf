@@ -104,13 +104,12 @@ interpret_msg(int fd, umpf_msg_t msg)
 	switch (umpf_get_msg_type(msg)) {
 	case UMPF_MSG_NEW_PF:
 	case UMPF_MSG_SET_DESCR: {
-		const char *mnemo, *descr;
+		const char *mnemo = msg->new_pf.name;
+		const struct __satell_s *descr = msg->new_pf.satellite;
 		dbobj_t pf;
 
 		UMPF_DEBUG(MOD_PRE ": new_pf()/set_descr();\n");
-		mnemo = msg->new_pf.name;
-		descr = msg->new_pf.satellite;
-		pf = be_sql_new_pf(umpf_dbconn, mnemo, descr);
+		pf = be_sql_new_pf(umpf_dbconn, mnemo, descr[0]);
 
 		/* reuse the message to send the answer */
 		msg->hdr.mt++;
@@ -125,10 +124,10 @@ interpret_msg(int fd, umpf_msg_t msg)
 
 		UMPF_DEBUG(MOD_PRE ": get_descr();\n");
 		mnemo = msg->new_pf.name;
-		if (msg->new_pf.satellite != NULL) {
-			free(msg->new_pf.satellite);
+		if (msg->new_pf.satellite->data != NULL) {
+			free(msg->new_pf.satellite->data);
 		}
-		msg->new_pf.satellite = be_sql_get_descr(umpf_dbconn, mnemo);
+		msg->new_pf.satellite[0] = be_sql_get_descr(umpf_dbconn, mnemo);
 
 		/* reuse the message to send the answer */
 		msg->hdr.mt++;
@@ -192,15 +191,13 @@ interpret_msg(int fd, umpf_msg_t msg)
 		break;
 	}
 	case UMPF_MSG_NEW_SEC: {
-		const char *pf_mnemo;
-		const char *sec_mnemo, *descr;
+		const char *pf_mnemo = msg->new_sec.pf_mnemo;
+		const char *sec_mnemo = msg->new_sec.ins->sym;
+		const struct __satell_s *descr = msg->new_sec.satellite;
 		dbobj_t sec;
 
 		UMPF_DEBUG(MOD_PRE ": new_sec();\n");
-		pf_mnemo = msg->new_sec.pf_mnemo;
-		sec_mnemo = msg->new_sec.ins->sym;
-		descr = msg->new_sec.satellite;
-		sec = be_sql_new_sec(umpf_dbconn, pf_mnemo, sec_mnemo, descr);
+		sec = be_sql_new_sec(umpf_dbconn, pf_mnemo, sec_mnemo, *descr);
 
 		/* reuse the message to send the answer */
 		msg->hdr.mt++;
@@ -211,15 +208,13 @@ interpret_msg(int fd, umpf_msg_t msg)
 		break;
 	}
 	case UMPF_MSG_SET_SEC: {
-		const char *pf_mnemo;
-		const char *sec_mnemo, *descr;
+		const char *pf_mnemo = msg->new_sec.pf_mnemo;
+		const char *sec_mnemo = msg->new_sec.ins->sym;
+		const struct __satell_s *descr = msg->new_sec.satellite;
 		dbobj_t sec;
 
-		UMPF_DEBUG(MOD_PRE ": new_sec();\n");
-		pf_mnemo = msg->new_sec.pf_mnemo;
-		sec_mnemo = msg->new_sec.ins->sym;
-		descr = msg->new_sec.satellite;
-		sec = be_sql_set_sec(umpf_dbconn, pf_mnemo, sec_mnemo, descr);
+		UMPF_DEBUG(MOD_PRE ": set_sec();\n");
+		sec = be_sql_set_sec(umpf_dbconn, pf_mnemo, sec_mnemo, *descr);
 
 		/* reuse the message to send the answer,
 		 * we should check if SEC is a valid sec-id actually and
@@ -235,13 +230,13 @@ interpret_msg(int fd, umpf_msg_t msg)
 		const char *pf_mnemo;
 		const char *sec_mnemo;
 
-		UMPF_DEBUG(MOD_PRE ": new_sec();\n");
+		UMPF_DEBUG(MOD_PRE ": get_sec();\n");
 		pf_mnemo = msg->new_sec.pf_mnemo;
 		sec_mnemo = msg->new_sec.ins->sym;
-		if (msg->new_sec.satellite != NULL) {
-			free(msg->new_sec.satellite);
+		if (msg->new_sec.satellite->data != NULL) {
+			free(msg->new_sec.satellite->data);
 		}
-		msg->new_sec.satellite =
+		msg->new_sec.satellite[0] =
 			be_sql_get_sec(umpf_dbconn, pf_mnemo, sec_mnemo);
 
 		/* reuse the message to send the answer */

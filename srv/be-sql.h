@@ -57,7 +57,8 @@ DECLF void be_sql_close(dbconn_t conn);
 /* actual actions */
 /**
  * Corresponds to UMPF_MSG_NEW_PF */
-DECLF dbobj_t be_sql_new_pf(dbconn_t, const char *mnemo, const char *descr);
+DECLF dbobj_t
+be_sql_new_pf(dbconn_t, const char *mnemo, const struct __satell_s descr);
 
 /**
  * Free resources associated with PF as obtained by `be_sql_new_pf()'. */
@@ -65,7 +66,7 @@ DECLF void be_sql_free_pf(dbconn_t, dbobj_t pf);
 
 /**
  * Corresponds to UMPF_MSG_GET_DESCR, get the description of pf MNEMO. */
-DECLF char *be_sql_get_descr(dbconn_t, const char *mnemo);
+DECLF struct __satell_s be_sql_get_descr(dbconn_t, const char *mnemo);
 
 /**
  * Corresponds to the first part of UMPF_MSG_SET_PF.
@@ -121,18 +122,18 @@ be_sql_get_pos(
 DECLF dbobj_t
 be_sql_new_sec(
 	dbconn_t, const char *pf_mnemo,
-	const char *sec_mnemo, const char *descr);
+	const char *sec_mnemo, const struct __satell_s descr);
 
 /**
  * Corresponds to UMPF_MSG_SET_SEC */
 DECLF dbobj_t
 be_sql_set_sec(
 	dbconn_t, const char *pf_mnemo,
-	const char *sec_mnemo, const char *descr);
+	const char *sec_mnemo, const struct __satell_s descr);
 
 /**
  * Corresponds to UMPF_MSG_GET_SEC */
-DECLF char*
+DECLF struct __satell_s
 be_sql_get_sec(dbconn_t, const char *pf_mnemo, const char *sec_mnemo);
 
 /**

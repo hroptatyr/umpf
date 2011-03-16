@@ -988,7 +988,7 @@ LIMIT 1";
 
 /* public functions */
 DEFUN dbobj_t
-be_sql_new_pf(dbconn_t conn, const char *mnemo, const char *descr)
+be_sql_new_pf(dbconn_t conn, const char *mnemo, const struct __satell_s descr)
 {
 /* new_pf is a get_pf_id + update the description */
 	size_t dlen;
@@ -1006,19 +1006,18 @@ UPDATE aou_umpf_portfolio SET description = ? WHERE portfolio_id = ?";
 		return NULL;
 	}
 
-	if (LIKELY(descr == NULL)) {
+	if (LIKELY(descr.data == NULL)) {
 		return (dbobj_t)pf_id;
 	}
 	/* otherwise there's more work to be done */
-	dlen = strlen(descr);
 	stmt = be_sql_prep(conn, pre, countof_m1(pre));
 
 	/* bind the params */
 	{
 		struct __bind_s b[2] = {{
 				.type = BE_BIND_TYPE_TEXT,
-				.txt = descr,
-				.len = dlen,
+				.txt = descr.data,
+				.len = descr.size,
 			}, {
 				.type = BE_BIND_TYPE_INT64,
 				.i64 = pf_id,
@@ -1030,7 +1029,7 @@ UPDATE aou_umpf_portfolio SET description = ? WHERE portfolio_id = ?";
 	return (dbobj_t)pf_id;
 }
 
-DECLF char*
+DECLF struct __satell_s
 be_sql_get_descr(dbconn_t conn, const char *pf_mnemo)
 {
 /* this is a get_pf + update */
@@ -1038,11 +1037,14 @@ be_sql_get_descr(dbconn_t conn, const char *pf_mnemo)
 SELECT description FROM aou_umpf_portfolio WHERE short = ?";
 	dbstmt_t stmt;
 	uint64_t pf_id;
-	char *descr;
+	struct __satell_s res = {
+		.data = NULL,
+		.size = 0UL,
+	};
 
 	if (UNLIKELY(pf_mnemo == NULL)) {
 		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
-		return NULL;
+		return res;
 	}
 
 	/* get them statements prepared */
@@ -1064,11 +1066,12 @@ SELECT description FROM aou_umpf_portfolio WHERE short = ?";
 					.ptr = NULL,
 				}};
 			be_sql_fetch(conn, stmt, rb, countof(rb));
-			descr = rb[0].ptr;
+			res.data = rb[0].ptr;
+			res.size = rb[0].len;
 		}
 		be_sql_fin(conn, stmt);
 	}
-	return descr;
+	return res;
 }
 
 DEFUN void
@@ -1253,7 +1256,7 @@ WHERE tag_id = ?";
 DEFUN dbobj_t
 be_sql_new_sec(
 	dbconn_t conn, const char *pf_mnemo,
-	const char *sec_mnemo, const char *descr)
+	const char *sec_mnemo, const struct __satell_s descr)
 {
 /* this is a get_pf + get_sec/INSERT + update */
 	size_t dlen;
@@ -1277,19 +1280,19 @@ UPDATE aou_umpf_security SET description = ? WHERE security_id = ?";
 	}
 
 	/* otherwise there's more work to be done */
-	if (UNLIKELY(descr == NULL)) {
+	if (UNLIKELY(descr.data == NULL)) {
 		/* journey ends here */
 		return (dbobj_t)sec_id;
 	}
-	dlen = strlen(descr);
+
 	stmt = be_sql_prep(conn, pre, countof_m1(pre));
 
 	/* bind the params */
 	{
 		struct __bind_s b[2] = {{
 				.type = BE_BIND_TYPE_TEXT,
-				.txt = descr,
-				.len = dlen,
+				.txt = descr.data,
+				.len = descr.size,
 			}, {
 				.type = BE_BIND_TYPE_INT64,
 				.i64 = sec_id,
@@ -1304,7 +1307,7 @@ UPDATE aou_umpf_security SET description = ? WHERE security_id = ?";
 DEFUN dbobj_t
 be_sql_set_sec(
 	dbconn_t conn, const char *pf_mnemo,
-	const char *sec_mnemo, const char *descr)
+	const char *sec_mnemo, const struct __satell_s descr)
 {
 /* this is a get_sec + update */
 	size_t dlen;
@@ -1323,19 +1326,18 @@ UPDATE aou_umpf_security SET description = ? WHERE security_id = ?";
 		return NULL;
 	}
 
-	if (UNLIKELY(descr == NULL)) {
+	if (UNLIKELY(descr.data == NULL)) {
 		return (dbobj_t)sec_id;
 	}
 	/* otherwise there's more work to be done */
-	dlen = strlen(descr);
 	stmt = be_sql_prep(conn, pre, countof_m1(pre));
 
 	/* bind the params */
 	{
 		struct __bind_s b[2] = {{
 				.type = BE_BIND_TYPE_TEXT,
-				.txt = descr,
-				.len = dlen,
+				.txt = descr.data,
+				.len = descr.size,
 			}, {
 				.type = BE_BIND_TYPE_INT64,
 				.i64 = sec_id,
@@ -1347,7 +1349,7 @@ UPDATE aou_umpf_security SET description = ? WHERE security_id = ?";
 	return (dbobj_t)sec_id;
 }
 
-DECLF char*
+DECLF struct __satell_s
 be_sql_get_sec(dbconn_t conn, const char *pf_mnemo, const char *sec_mnemo)
 {
 /* this is a get_sec + update */
@@ -1355,16 +1357,19 @@ be_sql_get_sec(dbconn_t conn, const char *pf_mnemo, const char *sec_mnemo)
 SELECT description FROM aou_umpf_security WHERE security_id = ?";
 	dbstmt_t stmt;
 	uint64_t sec_id;
-	char *descr;
+	struct __satell_s res = {
+		.data = NULL,
+		.size = 0UL,
+	};
 
 	if (UNLIKELY(pf_mnemo == NULL || sec_mnemo == NULL)) {
 		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
-		return NULL;
+		return res;
 	} else if ((sec_id = __get_sec_id_from_mnemos(
 			    conn, pf_mnemo, sec_mnemo)) == 0) {
 		/* portfolio getter is fucked */
 		UMPF_DEBUG(BE_SQL ": could not obtain security id\n");
-		return NULL;
+		return res;
 	}
 
 	/* get them statements prepared */
@@ -1385,11 +1390,12 @@ SELECT description FROM aou_umpf_security WHERE security_id = ?";
 					.ptr = NULL,
 				}};
 			be_sql_fetch(conn, stmt, rb, countof(rb));
-			descr = rb[0].ptr;
+			res.data = rb[0].ptr;
+			res.size = rb[0].len;
 		}
 		be_sql_fin(conn, stmt);
 	}
-	return descr;
+	return res;
 }
 
 DEFUN void

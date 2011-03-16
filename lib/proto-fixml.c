@@ -543,6 +543,31 @@ __sup##_add_##__slot(struct __##__sup##_s *o)		\
 	return res;					\
 }
 
+
+static void
+__eat_ws_ass(struct __satell_s *sat, const char *d, size_t l)
+{
+	const char *p = d;
+
+#if defined __INTEL_COMPILER
+# pragma warning (disable:981)
+#endif	/* __INTEL_COMPILER */
+
+	/* strip leading and trailing whitespace */
+	while (isspace(*p++));
+	l -= --p - d;
+	while (isspace(p[--l]));
+	l++;
+
+#if defined __INTEL_COMPILER
+# pragma warning (default:981)
+#endif	/* __INTEL_COMPILER */
+
+	sat->data = malloc((sat->size = l) + 1);
+	memcpy(sat->data, p, l);
+	return;
+}
+
 
 static umpf_tid_t
 sax_tid_from_tag(const char *tag)
@@ -1194,12 +1219,12 @@ sax_bo_AOU_elt(
 			/* ah, finally, glue indeed is supported here */
 			void *ptr;
 
-			if (UNLIKELY(msg->new_pf.satellite != NULL)) {
+			if (UNLIKELY(msg->new_pf.satellite->data != NULL)) {
 				/* someone else, prob us, was faster */
 				break;
 			}
 			/* the glue code wants a pointer to the satellite */
-			ptr = &msg->new_pf.satellite;
+			ptr = msg->new_pf.satellite;
 			(void)push_state(ctx, UMPF_TAG_GLUE, ptr);
 			goto glue_setup;
 		}
@@ -1208,12 +1233,12 @@ sax_bo_AOU_elt(
 			/* ah, finally, glue indeed is supported here */
 			void *ptr;
 
-			if (UNLIKELY(msg->new_sec.satellite != NULL)) {
+			if (UNLIKELY(msg->new_sec.satellite->data != NULL)) {
 				/* someone else, prob us, was faster */
 				break;
 			}
 			/* the glue code wants a pointer to the satellite */
-			ptr = &msg->new_sec.satellite;
+			ptr = msg->new_sec.satellite;
 			(void)push_state(ctx, UMPF_TAG_GLUE, ptr);
 			goto glue_setup;
 		}
@@ -1261,7 +1286,7 @@ sax_eo_AOU_elt(__ctx_t ctx, const char *name)
 
 	switch (tid) {
 	case UMPF_TAG_GLUE: {
-		char **ptr;
+		struct __satell_s *ptr;
 		size_t len = ctx->sbix - AOU_CONT_OFFS;
 
 		UMPF_DEBUG(PFIXML_PRE " /GLUE\n");
@@ -1276,8 +1301,8 @@ sax_eo_AOU_elt(__ctx_t ctx, const char *name)
 			break;
 		}
 
-		/* frob contents */
-		*ptr = strndup(ctx->sbuf + AOU_CONT_OFFS, len);
+		/* frob contents, eat whitespace and assign */
+		__eat_ws_ass(ptr, ctx->sbuf + AOU_CONT_OFFS, len);
 		/* job done, back to normal */
 		pop_state(ctx);
 		break;
@@ -1627,8 +1652,8 @@ umpf_free_msg(umpf_msg_t msg)
 	switch (umpf_get_msg_type(msg)) {
 	case UMPF_MSG_NEW_PF:
 		/* satellite only occurs in new pf */
-		if (msg->new_pf.satellite) {
-			xfree(msg->new_pf.satellite);
+		if (msg->new_pf.satellite->data) {
+			xfree(msg->new_pf.satellite->data);
 		}
 		goto common;
 
@@ -1636,8 +1661,8 @@ umpf_free_msg(umpf_msg_t msg)
 	case UMPF_MSG_GET_SEC:
 	case UMPF_MSG_SET_SEC:
 		/* satellite and portfolio mnemo must be freed */
-		if (msg->new_sec.satellite) {
-			xfree(msg->new_sec.satellite);
+		if (msg->new_sec.satellite->data) {
+			xfree(msg->new_sec.satellite->data);
 		}
 		if (msg->new_sec.pf_mnemo) {
 			xfree(msg->new_sec.pf_mnemo);
