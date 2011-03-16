@@ -355,6 +355,29 @@ pretty_print(umpf_msg_t msg)
 		fputs(msg->new_pf.name, stdout);
 		fputs("\"\n", stdout);
 		break;
+	case UMPF_MSG_SET_SEC:
+	case UMPF_MSG_NEW_SEC:
+		fputs(":portfolio \"", stdout);
+		fputs(msg->new_sec.pf_mnemo, stdout);
+		fputs("\" :security \"", stdout);
+		fputs(msg->new_sec.ins->sym, stdout);
+		fputs("\"\n", stdout);
+		if (msg->new_sec.satellite->data) {
+			const char *data = msg->new_sec.satellite->data;
+			const size_t size = msg->new_sec.satellite->size;
+			fwrite(data, size, 1, stdout);
+			if (data[size - 1] != '\n') {
+				fputc('\n', stdout);
+			}
+		}
+		break;		
+	case UMPF_MSG_GET_SEC:
+		fputs(":portfolio \"", stdout);
+		fputs(msg->new_sec.pf_mnemo, stdout);
+		fputs("\" :security \"", stdout);
+		fputs(msg->new_sec.ins->sym, stdout);
+		fputs("\"\n", stdout);
+		break;
 	default:
 		fputs("cannot interpret response\n", stderr);
 		break;
