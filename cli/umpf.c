@@ -470,6 +470,16 @@ umpf_process(struct __clo_s *clo)
 		msg = make_umpf_new_sec_msg(pf_mnemo, mnemo, descr, dsize);
 		break;
 	}
+	case UMPF_CMD_SET_SEC: {
+		const char *mnemo = clo->set_sec->mnemo;
+		const char *pf_mnemo = clo->set_sec->pf;
+		const char *descr = clo->set_sec->descr;
+		const size_t dsize = descr ? strlen(descr) : 0;
+		/* call __new_sec_msg() and fiddle with the msg type later */
+		msg = make_umpf_new_sec_msg(pf_mnemo, mnemo, descr, dsize);
+		umpf_set_msg_type(msg, UMPF_MSG_SET_SEC);
+		break;
+	}
 	case UMPF_CMD_GET_PF: {
 		const char *mnemo = clo->set_pf->mnemo;
 		msg = make_umpf_get_pf_msg(mnemo);
