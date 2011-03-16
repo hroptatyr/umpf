@@ -64,6 +64,10 @@ DECLF dbobj_t be_sql_new_pf(dbconn_t, const char *mnemo, const char *descr);
 DECLF void be_sql_free_pf(dbconn_t, dbobj_t pf);
 
 /**
+ * Corresponds to UMPF_MSG_GET_DESCR, get the description of pf MNEMO. */
+DECLF char *be_sql_get_descr(dbconn_t, const char *mnemo);
+
+/**
  * Corresponds to the first part of UMPF_MSG_SET_PF.
  * \param MNEMO is the mnemonic of the portfolio.
  * \param STAMP is the time stamp at which positions are to be recorded. */
