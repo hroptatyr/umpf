@@ -583,7 +583,7 @@ print_pos_rpt(__ctx_t ctx, umpf_msg_t msg, size_t idx, size_t indent)
 #endif
 
 	print_indent(ctx, indent);
-	sputs(ctx, "<PosRpt>\n");
+	sputs(ctx, "</PosRpt>\n");
 	return;
 }
 
