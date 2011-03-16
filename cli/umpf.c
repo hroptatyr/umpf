@@ -117,9 +117,9 @@ struct __get_sec_clo_s {
 struct __set_poss_clo_s {
 	const char *pf;
 	const char *date;
+	time_t stamp;
 	const char *file;
 	const char *poss;
-	time_t stamp;
 };
 
 struct __get_poss_clo_s {
