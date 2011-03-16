@@ -332,6 +332,36 @@ read_reply(volatile int fd)
 	return rpl;
 }
 
+static void
+pretty_print(umpf_msg_t msg)
+{
+	switch (umpf_get_msg_type(msg)) {
+	case UMPF_MSG_NEW_PF:
+	case UMPF_MSG_SET_DESCR:
+		fputs(":portfolio \"", stdout);
+		fputs(msg->new_pf.name, stdout);
+		fputs("\"\n", stdout);
+		{
+			const char *data = msg->new_pf.satellite->data;
+			const size_t size = msg->new_pf.satellite->size;
+			fwrite(data, size, 1, stdout);
+			if (data[size - 1] != '\n') {
+				fputc('\n', stdout);
+			}
+		}
+		break;
+	case UMPF_MSG_GET_DESCR:
+		fputs(":portfolio \"", stdout);
+		fputs(msg->new_pf.name, stdout);
+		fputs("\"\n", stdout);
+		break;
+	default:
+		fputs("cannot interpret response\n", stderr);
+		break;
+	}
+	return;
+}
+
 /* main loop */
 static int
 umpf_repl(umpf_msg_t msg, volatile int sock)
@@ -361,6 +391,7 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 #if defined DEBUG_FLAG
 				umpf_print_msg(STDERR_FILENO, rpl);
 #endif	/* DEBUG_FLAG */
+				pretty_print(rpl);
 				umpf_free_msg(rpl);
 				nfds = 0;
 				break;
