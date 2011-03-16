@@ -346,11 +346,15 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 	ep_prep_et_rdwr(epg, sock);
 
 	while ((nfds = ep_wait(epg, SRV_TIMEOUT)) > 0) {
+		typeof(epg->ev[0].events) ev = epg->ev[0].events;
+		int fd = epg->ev[0].data.fd;
+
+		/* we've only asked for one, so it would be peculiar */
 		assert(nfds == 1);
 
-		if (LIKELY(epg->ev[0].events & EPOLLIN)) {
+		if (LIKELY(ev & EPOLLIN)) {
 			/* read what's on the wire */
-			umpf_msg_t rpl = read_reply(epg->ev[0].data.fd);
+			umpf_msg_t rpl = read_reply(fd);
 
 			if (LIKELY(rpl != NULL)) {
 				/* everything's brill */
@@ -362,16 +366,15 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 				break;
 			}
 
-		} else if (epg->ev[0].events & EPOLLOUT && msg) {
+		} else if (ev & EPOLLOUT && msg) {
 #if defined DEBUG_FLAG
 			umpf_print_msg(STDERR_FILENO, msg);
 #endif	/* DEBUG_FLAG */
-			umpf_print_msg(epg->ev[0].data.fd, msg);
+			umpf_print_msg(fd, msg);
 			msg = NULL;
 		} else {
 #if defined DEBUG_FLAG
-			fprintf(stderr, "epoll repl exitted, flags %x\n",
-				epg->ev[0].events);
+			fprintf(stderr, "epoll repl exitted, flags %x\n", ev);
 #endif	/* DEBUG_FLAG */
 			nfds = -1;
 			break;
