@@ -309,19 +309,20 @@ epoll_guts(epoll_guts_action_t action)
 }
 
 
+static char gbuf[4096];
+
 static umpf_msg_t
 read_reply(volatile int fd)
 {
-	static char buf[4096];
 	static umpf_ctx_t p = NULL;
 	ssize_t nrd;
 	umpf_msg_t rpl = NULL;
 
-	while ((nrd = recv(fd, buf, sizeof(buf), 0)) > 0) {
+	while ((nrd = recv(fd, gbuf, sizeof(gbuf), 0)) > 0) {
 #if defined DEBUG_FLAG
 		fprintf(stderr, "read %zd\n", nrd);
 #endif	/* DEBUG_FLAG */
-		if ((rpl = umpf_parse_blob(&p, buf, nrd)) != NULL) {
+		if ((rpl = umpf_parse_blob(&p, gbuf, nrd)) != NULL) {
 			/* bingo */
 			break;
 
@@ -332,6 +333,20 @@ read_reply(volatile int fd)
 		/* not enough data yet, request more */
 	}
 	return rpl;
+}
+
+static int
+write_request(int fd, const char *buf, size_t len)
+{
+	ssize_t wrt;
+	size_t tot = 0;
+
+	while ((wrt = write(fd, buf + tot, len - tot)) > 0 &&
+	       (tot += wrt) < len);
+#if defined DEBUG_FLAG
+	fprintf(stderr, "written %zu\n", tot);
+#endif	/* DEBUG_FLAG */
+	return tot;
 }
 
 static void
@@ -472,6 +487,11 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 #define SRV_TIMEOUT	(4000/*millis*/)
 	ep_ctx_t epg;
 	int nfds;
+	/* serialise the message */
+	char *buf = gbuf;
+	size_t nsz = umpf_seria_msg(&buf, -countof(gbuf), msg);
+	/* track the number of bytes written */
+	size_t wrt = 0;
 
 	/* also set up our epoll magic */
 	epg = epoll_guts(GUTS_GET);
@@ -500,12 +520,10 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 				break;
 			}
 
-		} else if (ev & EPOLLOUT && msg) {
-#if defined DEBUG_FLAG
-			umpf_print_msg(STDERR_FILENO, msg);
-#endif	/* DEBUG_FLAG */
-			umpf_print_msg(fd, msg);
-			msg = NULL;
+		} else if (ev & EPOLLOUT && (wrt < nsz)) {
+			/* write a bit of the message */
+			wrt += write_request(fd, buf + wrt, nsz - wrt);
+
 		} else {
 #if defined DEBUG_FLAG
 			fprintf(stderr, "epoll repl exitted, flags %x\n", ev);
@@ -517,6 +535,11 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 	/* stop waiting for events */
 	ep_fini(epg, sock);
 	(void)epoll_guts(GUTS_FREE);
+
+	/* free serialisation resources */
+	if (buf != gbuf) {
+		free(buf);
+	}
 	return nfds;
 }
 
