@@ -874,7 +874,7 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 	switch (tid) {
 	case UMPF_TAG_REQ_FOR_POSS:
 		umpf_set_msg_type(msg, UMPF_MSG_GET_PF);
-		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
 			proc_REQ_FOR_POSS_attr(
 				ctx, attrs[j], attrs[j + 1]);
 		}
@@ -883,7 +883,7 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 
 	case UMPF_TAG_REQ_FOR_POSS_ACK:
 		umpf_set_msg_type(msg, UMPF_MSG_SET_PF);
-		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
 			proc_REQ_FOR_POSS_ACK_attr(
 				ctx, attrs[j], attrs[j + 1]);
 		}
@@ -904,7 +904,7 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 
 	case UMPF_TAG_RGST_INSTRCTNS_RSP:
 		umpf_set_msg_type(msg, UMPF_MSG_GET_DESCR);
-		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
 			proc_RGST_INSTRCTNS_RSP_attr(
 				ctx, attrs[j], attrs[j + 1]);
 		}
@@ -913,7 +913,7 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 
 	case UMPF_TAG_SEC_DEF_REQ:
 		umpf_set_msg_type(msg, UMPF_MSG_GET_SEC);
-		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
 			proc_SEC_DEF_all_attr(ctx, attrs[j], attrs[j + 1]);
 		}
 		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
@@ -921,7 +921,7 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 
 	case UMPF_TAG_SEC_DEF_UPD:
 		umpf_set_msg_type(msg, UMPF_MSG_SET_SEC);
-		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
 			proc_SEC_DEF_all_attr(ctx, attrs[j], attrs[j + 1]);
 		}
 		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
@@ -929,7 +929,7 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 
 	case UMPF_TAG_SEC_DEF:
 		umpf_set_msg_type(msg, UMPF_MSG_NEW_SEC);
-		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
 			proc_SEC_DEF_all_attr(ctx, attrs[j], attrs[j + 1]);
 		}
 		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
@@ -952,6 +952,11 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 		/* has got to be the root */
 		assert(ctx->state == NULL);
 		umpf_init(ctx);
+
+		if (UNLIKELY(attrs == NULL)) {
+			break;
+		}
+
 		for (int i = 0; attrs[i] != NULL; i += 2) {
 			proc_FIXML_attr(ctx, attrs[i], attrs[i + 1]);
 		}
@@ -1011,6 +1016,11 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 		case UMPF_TAG_REQ_FOR_POSS:
 		case UMPF_TAG_REQ_FOR_POSS_ACK:
 			(void)push_state(ctx, tid, msg);
+
+			if (UNLIKELY(attrs == NULL)) {
+				break;
+			}
+
 			for (size_t j = 0; attrs[j] != NULL; j += 2) {
 				proc_PTY_attr(ctx, attrs[j], attrs[j + 1]);
 			}
@@ -1028,6 +1038,10 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 	}
 
 	case UMPF_TAG_INSTRMT: 
+
+		if (UNLIKELY(attrs == NULL)) {
+			break;
+		}
 
 		switch (get_state_otype(ctx)) {
 		case UMPF_TAG_POS_RPT:
@@ -1057,6 +1071,10 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 			UMPF_DEBUG(
 				PFIXML_PRE
 				" WARN: Qty outside of PosRpt\n");
+			break;
+		}
+
+		if (UNLIKELY(attrs == NULL)) {
 			break;
 		}
 
