@@ -1442,9 +1442,11 @@ final_blob_p(__ctx_t ctx)
 	return BLOB_M_PLZ;
 }
 
-static void
+static int
 parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
+	int res;
+
 	switch (get_state_otype(ctx)) {
 		size_t cns;
 	case UMPF_TAG_GLUE:
@@ -1456,22 +1458,20 @@ parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 			buf += cns;
 			bsz -= cns;
 		} else {
-			break;
+			res = 0;
 		}
 		UMPF_DEBUG(PFIXML_PRE ": GLUE consumed %zu\n", cns);
 	default:
-		xmlParseChunk(ctx->pp, buf, bsz, bsz == 0);
-		break;
+		res = (xmlParseChunk(ctx->pp, buf, bsz, bsz == 0) == 0) - 1;
 	}
-	return;
+	return res;
 }
 
-static void
+static int
 parse_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
 	ctx->pp = xmlCreatePushParserCtxt(ctx->hdl, ctx, buf, 0, NULL);
-	parse_more_blob(ctx, buf, bsz);
-	return;
+	return parse_more_blob(ctx, buf, bsz);
 }
 
 
@@ -1584,10 +1584,15 @@ ctx_deinitted_p(__ctx_t ctx)
 }
 
 static umpf_msg_t
-check_ret(__ctx_t ctx)
+check_ret(__ctx_t ctx, int ret)
 {
 	umpf_msg_t res;
-	int ret = final_blob_p(ctx);
+
+	if (ret == 0) {
+		ret = final_blob_p(ctx);
+	} else {
+		ret = BLOB_ERROR;
+	}
 
 	switch (ret) {
 	case BLOB_READY:
@@ -1608,21 +1613,19 @@ check_ret(__ctx_t ctx)
 	return res;
 }
 
-static void
+static umpf_msg_t
 __umpf_parse_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
 	init(ctx);
 	UMPF_DEBUG(PFIXML_PRE ": parsing blob of size %zu\n", bsz);
-	parse_blob(ctx, buf, bsz);
-	return;
+	return check_ret(ctx, parse_blob(ctx, buf, bsz));
 }
 
-static void
+static umpf_msg_t
 __umpf_parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
 	UMPF_DEBUG(PFIXML_PRE ": parsing more blob of size %zu\n", bsz);
-	parse_more_blob(ctx, buf, bsz);
-	return;
+	return check_ret(ctx, parse_more_blob(ctx, buf, bsz));
 }
 
 umpf_msg_t
@@ -1633,11 +1636,11 @@ umpf_parse_blob(umpf_ctx_t *ctx, const char *buf, size_t bsz)
 
 	if (UNLIKELY(*ctx == NULL)) {
 		*ctx = __ctx;
-		__umpf_parse_blob(*ctx, buf, bsz);
+		res = __umpf_parse_blob(*ctx, buf, bsz);
 	} else {
-		__umpf_parse_more_blob(*ctx, buf, bsz);
+		res = __umpf_parse_more_blob(*ctx, buf, bsz);
 	}
-	res = check_ret(*ctx);
+
 	if (ctx_deinitted_p(*ctx)) {
 		*ctx = NULL;
 	}
@@ -1651,12 +1654,11 @@ umpf_parse_blob_r(umpf_ctx_t *ctx, const char *buf, size_t bsz)
 
 	if (UNLIKELY(*ctx == NULL)) {
 		*ctx = calloc(1, sizeof(struct __ctx_s));
-		__umpf_parse_blob(*ctx, buf, bsz);
+		res = __umpf_parse_blob(*ctx, buf, bsz);
 	} else {
-		__umpf_parse_more_blob(*ctx, buf, bsz);
+		res = __umpf_parse_more_blob(*ctx, buf, bsz);
 	}
 
-	res = check_ret(*ctx);
 	if (ctx_deinitted_p(*ctx)) {
 		free_ctx(*ctx);
 		*ctx = NULL;
