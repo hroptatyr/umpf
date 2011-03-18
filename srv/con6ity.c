@@ -20,6 +20,21 @@
 
 #define C10Y_PRE	"mod/umpf/con6ity"
 
+struct __wbuf_s {
+	ev_io io[1];
+	union {
+		char *buf;
+		const char *cbuf;
+	};
+	size_t len;
+	size_t nwr;
+	enum {
+		WBUF_FL_NIL,
+		/* set when buffer should be freed after sending */
+		WBUF_FL_FREE,
+	} flags;
+};
+
 
 /* services for includers that need not know about libev */
 #define FD_MAP_TYPE	ev_io*
@@ -50,6 +65,7 @@ put_fd_data(umpf_conn_t ctx, void *data)
 /* connection mumbo-jumbo */
 size_t nwio = 0;
 static ev_io __wio[2];
+static void *gloop = NULL;
 
 static void
 __shut_sock(int s)
@@ -222,23 +238,50 @@ handle_close(umpf_conn_t UNUSED(c))
 #endif	/* !HAVE_handle_close */
 
 static void
+writ_cb(EV_P_ ev_io *e, int UNUSED(re))
+{
+	int fd = e->fd;
+	struct __wbuf_s *wb = (void*)e;
+	size_t len = wb->len - wb->nwr;
+	ssize_t nwr;
+
+	if ((nwr = write(fd, wb->cbuf + wb->nwr, len)) < 0) {
+		goto clo;
+	}
+	UMPF_DEBUG(C10Y_PRE ": wrote %zd to %d\n", nwr, fd);
+	if ((wb->nwr += nwr) < wb->len) {
+		return;
+	}
+clo:
+	UMPF_DEBUG(C10Y_PRE ": %d not needed for write, cleaning up\n", fd);
+	/* unsubscribe interest */
+	ev_io_stop(EV_A_ e);
+
+	if (wb->flags & WBUF_FL_FREE) {
+		free(wb->buf);
+	}
+	free(wb);
+	return;
+}
+
+static void
 data_cb(EV_P_ ev_io *w, int UNUSED(re))
 {
 	char buf[4096];
 	ssize_t nrd;
 
 	if ((nrd = read(w->fd, buf, sizeof(buf))) <= 0) {
-		UMPF_DEBUG(C10Y_PRE ": no data, closing socket %d\n", w->fd);
-		handle_close(w);
-		clo_wio(EV_A_ w);
-		return;
+		goto clo;
 	}
 	UMPF_DEBUG(C10Y_PRE ": new data in sock %d\n", w->fd);
 	if (handle_data(w, buf, nrd) < 0) {
-		UMPF_DEBUG(C10Y_PRE ": negative, closing down\n");
-		handle_close(w);
-		clo_wio(EV_A_ w);
+		goto clo;
 	}
+	return;
+clo:
+	UMPF_DEBUG(C10Y_PRE ": %zd data, closing socket %d\n", nrd, w->fd);
+	handle_close(w);
+	clo_wio(EV_A_ w);
 	return;
 }
 
@@ -291,6 +334,8 @@ init_conn_watchers(void *loop, int s)
         /* initialise an io watcher, then start it */
         ev_io_init(wio, inco_cb, s, EV_READ);
         ev_io_start(EV_A_ wio);
+	/* last loop wins */
+	gloop = loop;
 	return;
 }
 
@@ -306,6 +351,53 @@ deinit_conn_watchers(void *UNUSED(loop))
 	}
 #endif	/* EV_WALK_ENABLE */
 	return;
+}
+
+
+/* helpers for careless writing */
+DECLF_W int
+write_soon(umpf_conn_t conn, const char *buf, size_t len)
+{
+	struct __wbuf_s *wb;
+
+	if (buf == NULL || len == 0) {
+		return -1;
+	}
+	/* otherwise the user isn't so much a prick as we thought*/
+	wb = xnew(*wb);
+	/* fill in */
+	wb->cbuf = buf;
+	wb->len = len;
+	wb->nwr = 0UL;
+	wb->flags = WBUF_FL_NIL;
+	
+	/* finally we pretend interest in this socket */
+        ev_io_init(wb->io, writ_cb, ((FD_MAP_TYPE)conn)->fd, EV_WRITE);
+        ev_io_start(gloop, wb->io);
+	return 0;
+}
+
+/* like write_sonn, but free() the buffer when it's printed */
+DECLF_W int
+write_soon_and_free(umpf_conn_t conn, char *buf, size_t len)
+{
+	struct __wbuf_s *wb;
+
+	if (buf == NULL || len == 0) {
+		return -1;
+	}
+	/* otherwise the user isn't so much a prick as we thought*/
+	wb = xnew(*wb);
+	/* fill in */
+	wb->buf = buf;
+	wb->len = len;
+	wb->nwr = 0UL;
+	wb->flags = WBUF_FL_FREE;
+	
+	/* finally we pretend interest in this socket */
+        ev_io_init(wb->io, writ_cb, ((FD_MAP_TYPE)conn)->fd, EV_WRITE);
+        ev_io_start(gloop, wb->io);
+	return 0;
 }
 
 /* con6ity.c ends here */

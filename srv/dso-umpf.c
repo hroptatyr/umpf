@@ -94,10 +94,12 @@ get_cb(char *mnemo, double l, double s, void *clo)
 	return 0;
 }
 
-static void
-interpret_msg(int fd, umpf_msg_t msg)
+static size_t
+interpret_msg(char **buf, umpf_msg_t msg)
 {
-#if defined DEBUG_FLAG
+	size_t len;
+
+#if defined DEBUG_FLAG && 0
 	umpf_print_msg(STDERR_FILENO, msg);
 #endif	/* DEBUG_FLAG */
 
@@ -113,7 +115,7 @@ interpret_msg(int fd, umpf_msg_t msg)
 
 		/* reuse the message to send the answer */
 		msg->hdr.mt++;
-		umpf_print_msg(fd, msg);
+		len = umpf_seria_msg(buf, 0, msg);
 
 		/* free resources */
 		be_sql_free_pf(umpf_dbconn, pf);
@@ -131,7 +133,7 @@ interpret_msg(int fd, umpf_msg_t msg)
 
 		/* reuse the message to send the answer */
 		msg->hdr.mt++;
-		umpf_print_msg(fd, msg);
+		len = umpf_seria_msg(buf, 0, msg);
 		break;
 	}
 	case UMPF_MSG_GET_PF: {
@@ -159,7 +161,7 @@ interpret_msg(int fd, umpf_msg_t msg)
 
 		/* reuse the message to send the answer */
 		msg->hdr.mt++;
-		umpf_print_msg(fd, msg);
+		len = umpf_seria_msg(buf, 0, msg);
 
 		/* free resources */
 		be_sql_free_tag(umpf_dbconn, tag);
@@ -184,7 +186,7 @@ interpret_msg(int fd, umpf_msg_t msg)
 
 		/* reuse the message to send the answer */
 		msg->hdr.mt++;
-		umpf_print_msg(fd, msg);
+		len = umpf_seria_msg(buf, 0, msg);
 
 		/* free resources */
 		be_sql_free_tag(umpf_dbconn, tag);
@@ -201,7 +203,7 @@ interpret_msg(int fd, umpf_msg_t msg)
 
 		/* reuse the message to send the answer */
 		msg->hdr.mt++;
-		umpf_print_msg(fd, msg);
+		len = umpf_seria_msg(buf, 0, msg);
 
 		/* free resources */
 		be_sql_free_sec(umpf_dbconn, sec);
@@ -220,7 +222,7 @@ interpret_msg(int fd, umpf_msg_t msg)
 		 * we should check if SEC is a valid sec-id actually and
 		 * send an error otherwise */
 		msg->hdr.mt++;
-		umpf_print_msg(fd, msg);
+		len = umpf_seria_msg(buf, 0, msg);
 
 		/* free resources */
 		be_sql_free_sec(umpf_dbconn, sec);
@@ -241,7 +243,7 @@ interpret_msg(int fd, umpf_msg_t msg)
 
 		/* reuse the message to send the answer */
 		msg->hdr.mt++;
-		umpf_print_msg(fd, msg);
+		len = umpf_seria_msg(buf, 0, msg);
 		break;
 	}
 	default:
@@ -250,7 +252,7 @@ interpret_msg(int fd, umpf_msg_t msg)
 	}
 	/* free 'im 'ere */
 	umpf_free_msg(msg);
-	return;
+	return len;
 }
 
 /**
@@ -270,7 +272,14 @@ handle_data(umpf_conn_t ctx, char *msg, size_t msglen)
 
 	if ((umsg = umpf_parse_blob_r(&p, msg, msglen)) != NULL) {
 		/* definite success */
-		interpret_msg(get_fd(ctx), umsg);
+		char *buf = NULL;
+		size_t len;
+
+		/* serialise, put results in BUF*/
+		len = interpret_msg(&buf, umsg);
+		write_soon_and_free(ctx, buf, len);
+		put_fd_data(ctx, NULL);
+		return 0;
 
 	} else if (/* umsg == NULL && */p == NULL) {
 		/* error occurred */
