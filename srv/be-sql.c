@@ -991,7 +991,6 @@ DEFUN dbobj_t
 be_sql_new_pf(dbconn_t conn, const char *mnemo, const struct __satell_s descr)
 {
 /* new_pf is a get_pf_id + update the description */
-	size_t dlen;
 	static const char pre[] = "\
 UPDATE aou_umpf_portfolio SET description = ? WHERE portfolio_id = ?";
 	dbstmt_t stmt;
@@ -1036,7 +1035,6 @@ be_sql_get_descr(dbconn_t conn, const char *pf_mnemo)
 	static const char pre[] = "\
 SELECT description FROM aou_umpf_portfolio WHERE short = ?";
 	dbstmt_t stmt;
-	uint64_t pf_id;
 	struct __satell_s res = {
 		.data = NULL,
 		.size = 0UL,
@@ -1259,7 +1257,6 @@ be_sql_new_sec(
 	const char *sec_mnemo, const struct __satell_s descr)
 {
 /* this is a get_pf + get_sec/INSERT + update */
-	size_t dlen;
 	static const char pre[] = "\
 UPDATE aou_umpf_security SET description = ? WHERE security_id = ?";
 	dbstmt_t stmt;
@@ -1310,7 +1307,6 @@ be_sql_set_sec(
 	const char *sec_mnemo, const struct __satell_s descr)
 {
 /* this is a get_sec + update */
-	size_t dlen;
 	static const char pre[] = "\
 UPDATE aou_umpf_security SET description = ? WHERE security_id = ?";
 	dbstmt_t stmt;
