@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<!--
+
+Apply allocation changes to a portfolio.
+
+-->
+<FIXML xmlns="http://www.fixprotocol.org/FIXML-5-0" v="5.0">
+	<Batch>
+		<AllocInstrctn ID="alloc1234567"
+			TransTyp="0"
+			Typ="5"
+			Side="2"
+			TrdDt="2010-10-10"
+			SettlDt="2010-10-10"
+			Qty="255">
+			<Instrmt Sym="DAX"/>
+			<Alloc Qty="255" Acct="me_currencies"/>
+		</AllocInstrctn>
+		<AllocInstrctn ID="alloc1234568"
+			TransTyp="0"
+			Typ="5"
+			Side="1"
+			TrdDt="2010-10-10">
+			<Instrmt Sym="ESX"/>
+			<Amt Typ="SETL" Ccy="EUR" Amt="-588895.00"/>
+			<Alloc Qty="25" Acct="me_currencies"/>
+		</AllocInstrctn>
+	</Batch>
+</FIXML>
+
+<!-- response -->
+<?xml version="1.0"?>
+<FIXML xmlns="http://www.fixprotocol.org/FIXML-5-0" v="5.0">
+	<Batch>
+		<AllocInstrctnAck ID="alloc1234567" Stat="0"/>
+		<AllocInstrctnAck ID="alloc1234568" Stat="0"/>
+	</Batch>
+</FIXML>
