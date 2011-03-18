@@ -94,6 +94,15 @@ get_cb(char *mnemo, double l, double s, void *clo)
 	return 0;
 }
 
+static int
+wr_fin_cb(umpf_conn_t ctx)
+{
+	char *buf = get_fd_data(ctx);
+	UMPF_DEBUG(MOD_PRE ": finished writing buf %p\n", buf);
+	free(buf);
+	return 0;
+}
+
 static size_t
 interpret_msg(char **buf, umpf_msg_t msg)
 {
@@ -276,8 +285,14 @@ handle_data(umpf_conn_t ctx, char *msg, size_t msglen)
 		size_t len;
 
 		/* serialise, put results in BUF*/
-		len = interpret_msg(&buf, umsg);
-		write_soon_and_free(ctx, buf, len);
+		if ((len = interpret_msg(&buf, umsg))) {
+			umpf_conn_t wr;
+
+			UMPF_DEBUG(MOD_PRE ": installing buf wr'er %p\n", buf);
+			wr = write_soon(ctx, buf, len, wr_fin_cb);
+			put_fd_data(wr, buf);
+		}
+		/* kick original context's data */
 		put_fd_data(ctx, NULL);
 		return 0;
 

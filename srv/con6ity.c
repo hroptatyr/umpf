@@ -29,10 +29,13 @@ struct __wbuf_s {
 	size_t len;
 	size_t nwr;
 	enum {
-		WBUF_FL_NIL,
+		WBUF_FL_NIL = 0,
 		/* set when buffer should be freed after sending */
-		WBUF_FL_FREE,
+		WBUF_FL_FREE = 1,
+		/* keep the struct alive, but prescind from further notifs */
+		WBUF_FL_KEEP = 2,
 	} flags;
+	int(*notify_cb)(umpf_conn_t);
 };
 
 
@@ -257,10 +260,16 @@ clo:
 	/* unsubscribe interest */
 	ev_io_stop(EV_A_ e);
 
+	if (wb->notify_cb) {
+		/* call the user's idea of what has to be done now */
+		wb->notify_cb(wb);
+	}
 	if (wb->flags & WBUF_FL_FREE) {
 		free(wb->buf);
 	}
-	free(wb);
+	if (wb->flags & WBUF_FL_KEEP) {
+		free(wb);
+	}
 	return;
 }
 
@@ -355,13 +364,13 @@ deinit_conn_watchers(void *UNUSED(loop))
 
 
 /* helpers for careless writing */
-DECLF_W int
-write_soon(umpf_conn_t conn, const char *buf, size_t len)
+DECLF_W umpf_conn_t
+write_soon(umpf_conn_t conn, const char *buf, size_t len, int(*cb)(umpf_conn_t))
 {
 	struct __wbuf_s *wb;
 
 	if (buf == NULL || len == 0) {
-		return -1;
+		return NULL;
 	}
 	/* otherwise the user isn't so much a prick as we thought*/
 	wb = xnew(*wb);
@@ -370,34 +379,12 @@ write_soon(umpf_conn_t conn, const char *buf, size_t len)
 	wb->len = len;
 	wb->nwr = 0UL;
 	wb->flags = WBUF_FL_NIL;
+	wb->notify_cb = cb;
 	
 	/* finally we pretend interest in this socket */
         ev_io_init(wb->io, writ_cb, ((FD_MAP_TYPE)conn)->fd, EV_WRITE);
         ev_io_start(gloop, wb->io);
-	return 0;
-}
-
-/* like write_sonn, but free() the buffer when it's printed */
-DECLF_W int
-write_soon_and_free(umpf_conn_t conn, char *buf, size_t len)
-{
-	struct __wbuf_s *wb;
-
-	if (buf == NULL || len == 0) {
-		return -1;
-	}
-	/* otherwise the user isn't so much a prick as we thought*/
-	wb = xnew(*wb);
-	/* fill in */
-	wb->buf = buf;
-	wb->len = len;
-	wb->nwr = 0UL;
-	wb->flags = WBUF_FL_FREE;
-	
-	/* finally we pretend interest in this socket */
-        ev_io_init(wb->io, writ_cb, ((FD_MAP_TYPE)conn)->fd, EV_WRITE);
-        ev_io_start(gloop, wb->io);
-	return 0;
+	return wb;
 }
 
 /* con6ity.c ends here */

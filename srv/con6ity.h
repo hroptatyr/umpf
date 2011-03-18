@@ -69,9 +69,10 @@ DECLF void deinit_conn_watchers(void *loop);
 DECLF_W int handle_data(umpf_conn_t, char *msg, size_t msglen);
 DECLF_W void handle_close(umpf_conn_t);
 
-/* helper functions for as long as there is no edge-triggered writer */
-DECLF_W int write_soon(umpf_conn_t, const char *buf, size_t len);
-/* like write_sonn, but free() the buffer when it's printed */
-DECLF_W int write_soon_and_free(umpf_conn_t, char *buf, size_t len);
+/* helper functions for as long as there is no edge-triggered writer
+ * CB is called when the buffer has been written completely or there
+ * was an error. */
+DECLF_W umpf_conn_t
+write_soon(umpf_conn_t, const char *buf, size_t len, int(*cb)(umpf_conn_t));
 
 #endif	/* INCLUDED_con6ity_h_ */
