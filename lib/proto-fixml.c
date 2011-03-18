@@ -622,18 +622,24 @@ proc_FIXML_attr(__ctx_t ctx, const char *attr, const char *value)
 	return;
 }
 
-static void
-proc_REQ_FOR_POSS_attr(__ctx_t ctx, const char *attr, const char *value)
+static umpf_aid_t
+check_attr(__ctx_t ctx, const char *attr)
 {
 	const char *rattr = tag_massage(attr);
 	const umpf_aid_t aid = sax_aid_from_attr(rattr);
-	umpf_msg_t msg = ctx->msg;
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
 		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
+		return UMPF_ATTR_UNK;
 	}
+	return aid;
+}
+
+static void
+proc_REQ_FOR_POSS_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
+{
+	umpf_msg_t msg = ctx->msg;
 
 	switch (aid) {
 	case UMPF_ATTR_REQ_ID:
@@ -652,24 +658,16 @@ proc_REQ_FOR_POSS_attr(__ctx_t ctx, const char *attr, const char *value)
 		msg->pf.stamp = get_zulu(value);
 		break;
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
 }
 
 static void
-proc_REQ_FOR_POSS_ACK_attr(__ctx_t ctx, const char *attr, const char *value)
+proc_REQ_FOR_POSS_ACK_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 {
-	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	umpf_msg_t msg = ctx->msg;
-
-	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
-	}
 
 	switch (aid) {
 	case UMPF_ATTR_RPT_ID:
@@ -697,31 +695,23 @@ proc_REQ_FOR_POSS_ACK_attr(__ctx_t ctx, const char *attr, const char *value)
 		/* ignored */
 		break;
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
 }
 
-static void __attribute__((noinline))
-proc_RGST_INSTRCTNS_RSP_attr(__ctx_t ctx, const char *attr, const char *value)
+static void
+proc_RGST_INSTRCTNS_RSP_attr(__ctx_t ctx, const umpf_aid_t aid, const char *v)
 {
-	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	umpf_msg_t msg = ctx->msg;
-
-	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
-	}
 
 	switch (aid) {
 	case UMPF_ATTR_ID:
 		/* dont overwrite stuff without free()ing
 		 * actually this is a bit rich, too much knowledge in here */
 		if (msg->new_pf.name == NULL) {
-			msg->new_pf.name = unquot(value);
+			msg->new_pf.name = unquot(v);
 		}
 		break;
 	case UMPF_ATTR_TRANS_TYP:
@@ -731,24 +721,16 @@ proc_RGST_INSTRCTNS_RSP_attr(__ctx_t ctx, const char *attr, const char *value)
 		/* ignored */
 		break;
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
 }
 
 static void
-proc_PTY_attr(__ctx_t ctx, const char *attr, const char *value)
+proc_PTY_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 {
-	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	umpf_msg_t msg = get_state_object(ctx);
-
-	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
-	}
 
 	switch (aid) {
 	case UMPF_ATTR_ID:
@@ -765,24 +747,15 @@ proc_PTY_attr(__ctx_t ctx, const char *attr, const char *value)
 		/* ignored */
 		break;
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
 }
 
 static void
-proc_INSTRMT_attr(__ctx_t ctx, const char *attr, const char *value)
+proc_INSTRMT_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 {
-	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(rattr);
-
-	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
-	}
-
 	switch (aid) {
 	case UMPF_ATTR_SYM: {
 		struct __ins_s *ins = get_state_object(ctx);
@@ -790,24 +763,16 @@ proc_INSTRMT_attr(__ctx_t ctx, const char *attr, const char *value)
 		break;
 	}
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
 }
 
 static void
-proc_QTY_attr(__ctx_t ctx, const char *attr, const char *value)
+proc_QTY_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 {
-	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	struct __ins_qty_s *iq = get_state_object(ctx);
-
-	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
-	}
 
 	switch (aid) {
 	case UMPF_ATTR_TYP:
@@ -823,24 +788,16 @@ proc_QTY_attr(__ctx_t ctx, const char *attr, const char *value)
 		/* ignored */
 		break;
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
 }
 
 static void
-proc_SEC_DEF_all_attr(__ctx_t ctx, const char *attr, const char *value)
+proc_SEC_DEF_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 {
-	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	umpf_msg_t msg = ctx->msg;
-
-	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
-	}
 
 	switch (aid) {
 	case UMPF_ATTR_TXT:
@@ -850,6 +807,7 @@ proc_SEC_DEF_all_attr(__ctx_t ctx, const char *attr, const char *value)
 		/* ignored */
 		break;
 	default:
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
@@ -859,7 +817,6 @@ proc_SEC_DEF_all_attr(__ctx_t ctx, const char *attr, const char *value)
 static void
 sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 {
-
 	umpf_msg_t msg;
 
 	if (UNLIKELY(ctx->msg != NULL)) {
@@ -875,8 +832,8 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 	case UMPF_TAG_REQ_FOR_POSS:
 		umpf_set_msg_type(msg, UMPF_MSG_GET_PF);
 		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
-			proc_REQ_FOR_POSS_attr(
-				ctx, attrs[j], attrs[j + 1]);
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_REQ_FOR_POSS_attr(ctx, aid, attrs[j + 1]);
 		}
 		(void)push_state(ctx, tid, msg);
 		break;
@@ -884,8 +841,8 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 	case UMPF_TAG_REQ_FOR_POSS_ACK:
 		umpf_set_msg_type(msg, UMPF_MSG_SET_PF);
 		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
-			proc_REQ_FOR_POSS_ACK_attr(
-				ctx, attrs[j], attrs[j + 1]);
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_REQ_FOR_POSS_ACK_attr(ctx, aid, attrs[j + 1]);
 		}
 		if (msg->pf.nposs > 0) {
 			size_t iqsz =
@@ -905,8 +862,8 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 	case UMPF_TAG_RGST_INSTRCTNS_RSP:
 		umpf_set_msg_type(msg, UMPF_MSG_GET_DESCR);
 		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
-			proc_RGST_INSTRCTNS_RSP_attr(
-				ctx, attrs[j], attrs[j + 1]);
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_RGST_INSTRCTNS_RSP_attr(ctx, aid, attrs[j + 1]);
 		}
 		(void)push_state(ctx, tid, msg);
 		break;
@@ -914,7 +871,8 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 	case UMPF_TAG_SEC_DEF_REQ:
 		umpf_set_msg_type(msg, UMPF_MSG_GET_SEC);
 		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
-			proc_SEC_DEF_all_attr(ctx, attrs[j], attrs[j + 1]);
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_SEC_DEF_all_attr(ctx, aid, attrs[j + 1]);
 		}
 		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
 		break;
@@ -922,7 +880,8 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 	case UMPF_TAG_SEC_DEF_UPD:
 		umpf_set_msg_type(msg, UMPF_MSG_SET_SEC);
 		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
-			proc_SEC_DEF_all_attr(ctx, attrs[j], attrs[j + 1]);
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_SEC_DEF_all_attr(ctx, aid, attrs[j + 1]);
 		}
 		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
 		break;
@@ -930,7 +889,8 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 	case UMPF_TAG_SEC_DEF:
 		umpf_set_msg_type(msg, UMPF_MSG_NEW_SEC);
 		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
-			proc_SEC_DEF_all_attr(ctx, attrs[j], attrs[j + 1]);
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_SEC_DEF_all_attr(ctx, aid, attrs[j + 1]);
 		}
 		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
 		break;
@@ -1017,12 +977,9 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 		case UMPF_TAG_REQ_FOR_POSS_ACK:
 			(void)push_state(ctx, tid, msg);
 
-			if (UNLIKELY(attrs == NULL)) {
-				break;
-			}
-
-			for (size_t j = 0; attrs[j] != NULL; j += 2) {
-				proc_PTY_attr(ctx, attrs[j], attrs[j + 1]);
+			for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+				const umpf_aid_t a = check_attr(ctx, attrs[j]);
+				proc_PTY_attr(ctx, a, attrs[j + 1]);
 			}
 			break;
 		default:
@@ -1051,8 +1008,9 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 			/* we use the fact that __ins_qty_s == __ins_s
 			 * in posrpt mode and in sec-def mode we rely
 			 * on the right push there */
-			for (int j = 0; attrs[j] != NULL; j += 2) {
-				proc_INSTRMT_attr(ctx, attrs[j], attrs[j + 1]);
+			for (int j = 0; attrs && attrs[j] != NULL; j += 2) {
+				const umpf_aid_t a = check_attr(ctx, attrs[j]);
+				proc_INSTRMT_attr(ctx, a, attrs[j + 1]);
 			}
 			break;
 		default:
@@ -1074,12 +1032,9 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 			break;
 		}
 
-		if (UNLIKELY(attrs == NULL)) {
-			break;
-		}
-
-		for (int j = 0; attrs[j] != NULL; j += 2) {
-			proc_QTY_attr(ctx, attrs[j], attrs[j + 1]);
+		for (int j = 0; attrs && attrs[j] != NULL; j += 2) {
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_QTY_attr(ctx, aid, attrs[j + 1]);
 		}
 		break;
 	}
