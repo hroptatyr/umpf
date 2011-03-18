@@ -874,7 +874,7 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 	switch (tid) {
 	case UMPF_TAG_REQ_FOR_POSS:
 		umpf_set_msg_type(msg, UMPF_MSG_GET_PF);
-		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
 			proc_REQ_FOR_POSS_attr(
 				ctx, attrs[j], attrs[j + 1]);
 		}
@@ -883,7 +883,7 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 
 	case UMPF_TAG_REQ_FOR_POSS_ACK:
 		umpf_set_msg_type(msg, UMPF_MSG_SET_PF);
-		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
 			proc_REQ_FOR_POSS_ACK_attr(
 				ctx, attrs[j], attrs[j + 1]);
 		}
@@ -904,7 +904,7 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 
 	case UMPF_TAG_RGST_INSTRCTNS_RSP:
 		umpf_set_msg_type(msg, UMPF_MSG_GET_DESCR);
-		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
 			proc_RGST_INSTRCTNS_RSP_attr(
 				ctx, attrs[j], attrs[j + 1]);
 		}
@@ -913,7 +913,7 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 
 	case UMPF_TAG_SEC_DEF_REQ:
 		umpf_set_msg_type(msg, UMPF_MSG_GET_SEC);
-		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
 			proc_SEC_DEF_all_attr(ctx, attrs[j], attrs[j + 1]);
 		}
 		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
@@ -921,7 +921,7 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 
 	case UMPF_TAG_SEC_DEF_UPD:
 		umpf_set_msg_type(msg, UMPF_MSG_SET_SEC);
-		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
 			proc_SEC_DEF_all_attr(ctx, attrs[j], attrs[j + 1]);
 		}
 		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
@@ -929,7 +929,7 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 
 	case UMPF_TAG_SEC_DEF:
 		umpf_set_msg_type(msg, UMPF_MSG_NEW_SEC);
-		for (size_t j = 0; attrs[j] != NULL; j += 2) {
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
 			proc_SEC_DEF_all_attr(ctx, attrs[j], attrs[j + 1]);
 		}
 		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
@@ -952,6 +952,11 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 		/* has got to be the root */
 		assert(ctx->state == NULL);
 		umpf_init(ctx);
+
+		if (UNLIKELY(attrs == NULL)) {
+			break;
+		}
+
 		for (int i = 0; attrs[i] != NULL; i += 2) {
 			proc_FIXML_attr(ctx, attrs[i], attrs[i + 1]);
 		}
@@ -1011,6 +1016,11 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 		case UMPF_TAG_REQ_FOR_POSS:
 		case UMPF_TAG_REQ_FOR_POSS_ACK:
 			(void)push_state(ctx, tid, msg);
+
+			if (UNLIKELY(attrs == NULL)) {
+				break;
+			}
+
 			for (size_t j = 0; attrs[j] != NULL; j += 2) {
 				proc_PTY_attr(ctx, attrs[j], attrs[j + 1]);
 			}
@@ -1028,6 +1038,10 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 	}
 
 	case UMPF_TAG_INSTRMT: 
+
+		if (UNLIKELY(attrs == NULL)) {
+			break;
+		}
 
 		switch (get_state_otype(ctx)) {
 		case UMPF_TAG_POS_RPT:
@@ -1057,6 +1071,10 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 			UMPF_DEBUG(
 				PFIXML_PRE
 				" WARN: Qty outside of PosRpt\n");
+			break;
+		}
+
+		if (UNLIKELY(attrs == NULL)) {
 			break;
 		}
 
@@ -1424,9 +1442,11 @@ final_blob_p(__ctx_t ctx)
 	return BLOB_M_PLZ;
 }
 
-static void
+static int
 parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
+	int res;
+
 	switch (get_state_otype(ctx)) {
 		size_t cns;
 	case UMPF_TAG_GLUE:
@@ -1438,22 +1458,20 @@ parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 			buf += cns;
 			bsz -= cns;
 		} else {
-			break;
+			res = 0;
 		}
 		UMPF_DEBUG(PFIXML_PRE ": GLUE consumed %zu\n", cns);
 	default:
-		xmlParseChunk(ctx->pp, buf, bsz, bsz == 0);
-		break;
+		res = (xmlParseChunk(ctx->pp, buf, bsz, bsz == 0) == 0) - 1;
 	}
-	return;
+	return res;
 }
 
-static void
+static int
 parse_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
 	ctx->pp = xmlCreatePushParserCtxt(ctx->hdl, ctx, buf, 0, NULL);
-	parse_more_blob(ctx, buf, bsz);
-	return;
+	return parse_more_blob(ctx, buf, bsz);
 }
 
 
@@ -1566,10 +1584,15 @@ ctx_deinitted_p(__ctx_t ctx)
 }
 
 static umpf_msg_t
-check_ret(__ctx_t ctx)
+check_ret(__ctx_t ctx, int ret)
 {
 	umpf_msg_t res;
-	int ret = final_blob_p(ctx);
+
+	if (ret == 0) {
+		ret = final_blob_p(ctx);
+	} else {
+		ret = BLOB_ERROR;
+	}
 
 	switch (ret) {
 	case BLOB_READY:
@@ -1590,21 +1613,19 @@ check_ret(__ctx_t ctx)
 	return res;
 }
 
-static void
+static umpf_msg_t
 __umpf_parse_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
 	init(ctx);
 	UMPF_DEBUG(PFIXML_PRE ": parsing blob of size %zu\n", bsz);
-	parse_blob(ctx, buf, bsz);
-	return;
+	return check_ret(ctx, parse_blob(ctx, buf, bsz));
 }
 
-static void
+static umpf_msg_t
 __umpf_parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
 	UMPF_DEBUG(PFIXML_PRE ": parsing more blob of size %zu\n", bsz);
-	parse_more_blob(ctx, buf, bsz);
-	return;
+	return check_ret(ctx, parse_more_blob(ctx, buf, bsz));
 }
 
 umpf_msg_t
@@ -1615,11 +1636,11 @@ umpf_parse_blob(umpf_ctx_t *ctx, const char *buf, size_t bsz)
 
 	if (UNLIKELY(*ctx == NULL)) {
 		*ctx = __ctx;
-		__umpf_parse_blob(*ctx, buf, bsz);
+		res = __umpf_parse_blob(*ctx, buf, bsz);
 	} else {
-		__umpf_parse_more_blob(*ctx, buf, bsz);
+		res = __umpf_parse_more_blob(*ctx, buf, bsz);
 	}
-	res = check_ret(*ctx);
+
 	if (ctx_deinitted_p(*ctx)) {
 		*ctx = NULL;
 	}
@@ -1633,12 +1654,11 @@ umpf_parse_blob_r(umpf_ctx_t *ctx, const char *buf, size_t bsz)
 
 	if (UNLIKELY(*ctx == NULL)) {
 		*ctx = calloc(1, sizeof(struct __ctx_s));
-		__umpf_parse_blob(*ctx, buf, bsz);
+		res = __umpf_parse_blob(*ctx, buf, bsz);
 	} else {
-		__umpf_parse_more_blob(*ctx, buf, bsz);
+		res = __umpf_parse_more_blob(*ctx, buf, bsz);
 	}
 
-	res = check_ret(*ctx);
 	if (ctx_deinitted_p(*ctx)) {
 		free_ctx(*ctx);
 		*ctx = NULL;

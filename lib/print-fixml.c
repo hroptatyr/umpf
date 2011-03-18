@@ -781,6 +781,8 @@ umpf_print_msg(int out, umpf_msg_t msg)
 {
 	static char gbuf[INITIAL_GBUF_SIZE];
 	static struct __ctx_s ctx[1];
+	ssize_t wrt;
+	size_t tot = 0;
 
 	ctx->gbuf = gbuf;
 	ctx->gbsz = -INITIAL_GBUF_SIZE;
@@ -792,13 +794,15 @@ umpf_print_msg(int out, umpf_msg_t msg)
 	/* finish off with a \nul byte */
 	check_realloc(ctx, 1);
 	ctx->gbuf[ctx->idx] = '\0';
-	write(out, ctx->gbuf, ctx->idx);
+
+	while ((wrt = write(out, ctx->gbuf + tot, ctx->idx - tot)) > 0 &&
+	       (tot += wrt) < ctx->idx);
 
 	/* check if we need to free stuff */
 	if (ctx->gbsz != -INITIAL_GBUF_SIZE) {
 		free(ctx->gbuf);
 	}
-	return ctx->idx;
+	return tot;
 }
 
 /* print-fixml.c ends here */
