@@ -268,8 +268,31 @@ interpret_msg(char **buf, umpf_msg_t msg)
 
 		for (size_t i = 0; i < msg->pf.nposs; i++) {
 			const char *sec = msg->pf.poss[i].ins->sym;
-			double l = msg->pf.poss[i].qty->_long;
-			double s = msg->pf.poss[i].qty->_shrt;
+			double v = msg->pf.poss[i].qsd->pos;
+			double l;
+			double s;
+
+			switch (msg->pf.poss[i].qsd->sd) {
+			case QSIDE_OPEN_LONG:
+				l = v;
+				s = 0;
+				break;
+			case QSIDE_CLOSE_LONG:
+				l = -v;
+				s = 0;
+				break;
+			case QSIDE_OPEN_SHORT:
+				l = 0;
+				s = v;
+				break;
+			case QSIDE_CLOSE_SHORT:
+				l = 0;
+				s = -v;
+				break;
+			case QSIDE_UNK:
+			default:
+				continue;
+			}
 			be_sql_add_pos(umpf_dbconn, tag, sec, l, s);
 		}
 
