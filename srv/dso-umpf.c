@@ -255,6 +255,32 @@ interpret_msg(char **buf, umpf_msg_t msg)
 		len = umpf_seria_msg(buf, 0, msg);
 		break;
 	}
+	case UMPF_MSG_PATCH: {
+		/* replay position changes */
+		const char *mnemo;
+		time_t stamp;
+		dbobj_t tag;
+
+		UMPF_DEBUG(MOD_PRE ": patch();\n");
+		mnemo = msg->pf.name;
+		stamp = msg->pf.stamp;
+		tag = be_sql_copy_tag(umpf_dbconn, mnemo, stamp);
+
+		for (size_t i = 0; i < msg->pf.nposs; i++) {
+			const char *sec = msg->pf.poss[i].ins->sym;
+			double l = msg->pf.poss[i].qty->_long;
+			double s = msg->pf.poss[i].qty->_shrt;
+			be_sql_add_pos(umpf_dbconn, tag, sec, l, s);
+		}
+
+		/* reuse the message to send the answer */
+		msg->hdr.mt++;
+		len = umpf_seria_msg(buf, 0, msg);
+
+		/* free resources */
+		be_sql_free_tag(umpf_dbconn, tag);
+		break;
+	}
 	default:
 		UMPF_DEBUG(MOD_PRE ": unknown message %u\n", msg->hdr.mt);
 		len = 0;
