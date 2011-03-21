@@ -693,7 +693,7 @@ __frob_poss_line(struct __ins_qty_s *iq, const char *line, const size_t llen)
 static umpf_msg_t
 make_umpf_set_poss_msg(const char *mnemo, const time_t stamp, const char *file)
 {
-	umpf_msg_t res;
+	umpf_msg_t res = NULL;
 	size_t llen;
 	char *line;
 	FILE *f;
@@ -710,7 +710,7 @@ make_umpf_set_poss_msg(const char *mnemo, const time_t stamp, const char *file)
 	line = malloc(llen);
 
 	for (ssize_t nrd, ln = 0; (nrd = getline(&line, &llen, f)) >= 0; ln++) {
-		struct __ins_qty_s iq = {0};
+		struct __ins_qty_s iq = {};
 
 		/* bit complicated would be the case that the command line
 		 * option (--date) should take precedence, it _could_ be
