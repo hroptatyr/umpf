@@ -79,6 +79,12 @@ DECLF dbobj_t be_sql_new_tag(dbconn_t, const char *mnemo, time_t stamp);
 DECLF dbobj_t be_sql_new_tag_pf(dbconn_t, dbobj_t pf, time_t stamp);
 
 /**
+ * Atomically do a __get_tag() then create a new tag from it.
+ * \param MNEMO is the mnemonic of the portfolio.
+ * \param STAMP is the time stamp at which positions are to be recorded. */
+DECLF dbobj_t be_sql_copy_tag(dbconn_t, const char *mnemo, time_t stamp);
+
+/**
  * Corresponds to the first part of UMPF_MSG_GET_PF.
  * \param MNEMO is the mnemonic of the portfolio.
  * \param STAMP is the time stamp at which positions have been recorded. */
@@ -116,6 +122,15 @@ DECLF void
 be_sql_get_pos(
 	dbconn_t conn, dbobj_t tag,
 	int(*cb)(char*, double, double, void*), void *clo);
+
+/**
+ * Given a tag, add to the position of MNEMO the sides L and S.
+ * \param TAG is the portfolio tag as obtained by `be_sql_new_tag()'.
+ * \param MNEMO is the mnemonic of the security.
+ * \param L is the long side of the position.
+ * \param S is the short side of the position. */
+DECLF void
+be_sql_add_pos(dbconn_t, dbobj_t tag, const char *mnemo, double l, double s);
 
 /**
  * Corresponds to UMPF_MSG_NEW_SEC */

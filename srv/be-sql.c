@@ -1105,6 +1105,61 @@ be_sql_new_tag_pf(dbconn_t conn, dbobj_t pf, time_t stamp)
 }
 
 DEFUN dbobj_t
+be_sql_copy_tag(dbconn_t conn, const char *mnemo, time_t stamp)
+{
+	struct __tag_s *tag, tmp;
+	uint64_t tag_id_old;
+	static const char qry[] = "\
+INSERT INTO aou_umpf_position (tag_id, security_id, long_qty, short_qty) \
+SELECT ? AS tag_id, security_id, long_qty, short_qty \
+FROM aou_umpf_position \
+WHERE tag_id = ?";
+	dbstmt_t stmt;
+
+	/* get portfolio */
+	if ((tmp.pf_id = __get_pf_id(conn, mnemo)) == 0) {
+		UMPF_DEBUG(BE_SQL ": uh oh, no portfolio id for %s\n", mnemo);
+		return NULL;
+	} else if ((stmt = be_sql_prep(conn, qry, countof_m1(qry))) == NULL) {
+		/* query prep must happen now or else we create a broken
+		 * tag in the next statement (or later in __new_tag_id) */
+		return NULL;
+	} else if (__get_tag(&tmp, conn, tmp.pf_id, stamp) == 0) {
+		/* everything's fine */
+		tag_id_old = tmp.tag_id;
+	} else {
+		tag_id_old = 0;
+	}
+	/* create the new tag */
+	if ((tmp.tag_id = __new_tag_id(conn, tmp.pf_id, stamp)) == 0) {
+		/* fuck */
+		UMPF_DEBUG(BE_SQL ": cannot copy portfolio %s\n", mnemo);
+		return NULL;
+	}
+	/* prepare the result */
+	tmp.tag_stamp = stamp;
+	tag = xnew(*tag);
+	*tag = tmp;
+	/* copy the positions */
+	{
+		struct __bind_s b[2] = {{
+				.type = BE_BIND_TYPE_INT64,
+				.i64 = tag->tag_id,
+			}, {
+				.type = BE_BIND_TYPE_INT64,
+				.i64 = tag_id_old,
+			}};
+		be_sql_bind(conn, stmt, b, countof(b));
+		/* execute */
+		be_sql_exec_stmt(conn, stmt);
+		be_sql_fin(conn, stmt);
+	}
+
+	UMPF_DEBUG("tag_id <- %lu for pf_id %lu\n", tag->tag_id, tag->pf_id);
+	return (dbobj_t)tag;
+}
+
+DEFUN dbobj_t
 be_sql_get_tag(dbconn_t conn, const char *mnemo, time_t stamp)
 {
 	struct __tag_s *tag, tmp;
@@ -1165,6 +1220,64 @@ VALUES (?, ?, ?, ?)";
 			}, {
 				.type = BE_BIND_TYPE_DOUBLE,
 				.dbl = s,
+			}};
+		be_sql_bind(c, stmt, b, countof(b));
+		/* execute */
+		be_sql_exec_stmt(c, stmt);
+		be_sql_fin(c, stmt);
+	}
+	return;
+}
+
+DEFUN void
+be_sql_add_pos(dbconn_t c, dbobj_t tag, const char *mnemo, double l, double s)
+{
+	struct __tag_s *t = tag;
+	/* get security */
+	uint64_t sec_id;
+	dbstmt_t stmt;
+	static const char insq[] = "\
+INSERT INTO aou_umpf_position (tag_id, security_id, long_qty, short_qty) \
+VALUES (?, ?, 0, 0)";
+	static const char qry[] = "\
+UPDATE aou_umpf_position \
+SET long_qty = long_qty + ?, short_qty = short_qty + ? \
+WHERE tag_id = ? AND security_id = ?";
+
+	/* obtain a sec id first, get/creator */
+	if ((sec_id = __get_sec_id(c, t->pf_id, mnemo)) == 0UL) {
+		UMPF_DEBUG(BE_SQL ": no security id for pf %lu %s\n",
+			   t->pf_id, mnemo);
+		return;
+	} else if ((stmt = be_sql_prep(c, insq, countof_m1(insq))) != NULL) {
+		/* try an insert first so the update goes through */
+		struct __bind_s b[2] = {{
+				.type = BE_BIND_TYPE_INT64,
+				.i64 = t->tag_id,
+			}, {
+				.type = BE_BIND_TYPE_INT64,
+				.i64 = sec_id,
+			}};
+		be_sql_bind(c, stmt, b, countof(b));
+		/* execute */
+		be_sql_exec_stmt(c, stmt);
+		be_sql_fin(c, stmt);
+	}
+
+	if ((stmt = be_sql_prep(c, qry, countof_m1(qry))) != NULL) {
+		/* bind the params */
+		struct __bind_s b[4] = {{
+				.type = BE_BIND_TYPE_DOUBLE,
+				.dbl = l,
+			}, {
+				.type = BE_BIND_TYPE_DOUBLE,
+				.dbl = s,
+			}, {
+				.type = BE_BIND_TYPE_INT64,
+				.i64 = t->tag_id,
+			}, {
+				.type = BE_BIND_TYPE_INT64,
+				.i64 = sec_id,
 			}};
 		be_sql_bind(c, stmt, b, countof(b));
 		/* execute */
