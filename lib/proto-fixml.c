@@ -818,7 +818,7 @@ static void
 proc_ALLOC_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 {
 	umpf_msg_t msg = ctx->msg;
-	struct __ins_qty_s *pos = get_state_object(ctx);
+	struct __ins_qty_s *qty = get_state_object(ctx);
 
 	switch (aid) {
 	case UMPF_ATTR_ID:
@@ -832,63 +832,41 @@ proc_ALLOC_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 		}
 		UMPF_DEBUG(PFIXML_PRE " WARN: trans type != 0\n");
 		break;
-	case UMPF_ATTR_SIDE: {
-		const double l = pos->qty->_long;
-		const double s = pos->qty->_shrt;
-
+	case UMPF_ATTR_SIDE:
 		if (value == NULL || value[1] != '\0') {
 			goto warn;
 		}
 		switch (value[0]) {
 		case '\0':
 		case '1':
-		case '2':
 		case '3':
+			qty->qsd->sd = QSIDE_OPEN_LONG;
+			break;
+		case '2':
 		case '4':
-			if (fpclassify(l) != FP_ZERO) {
-				/* a Qty attribute was there and left its val */
-				pos->qty->_shrt = 0.0;
-			} else {
-				/* leave our mark */
-				pos->qty->_long = NAN;
-			}
+			qty->qsd->sd = QSIDE_CLOSE_LONG;
 			break;
 		case '5':
 		case '6':
-			if (fpclassify(s) != FP_ZERO) {
-				/* a Qty attribute was there and left its val */
-				pos->qty->_long = 0.0;
-			} else {
-				/* leave our mark */
-				pos->qty->_shrt = NAN;
-			}
+			/* sell short (exempt) */
+			qty->qsd->sd = QSIDE_OPEN_SHORT;
 			break;
+			/* fucking FIXML has no field to denote
+			 * closing of short positions */
 		default:
 		warn:
+			qty->qsd->sd = QSIDE_UNK;
 			UMPF_DEBUG(PFIXML_PRE " WARN: cannot interpret side\n");
 			break;
 		}
 		break;
-	}
+
 	case UMPF_ATTR_SETTL_DT:
 		msg->pf.clr_dt = get_zulu(value);
 		break;
-	case UMPF_ATTR_QTY: {
-		/* grrr, we need the side attribute as well actually */
-		double v = strtod(value, NULL);
-		if (isnan(pos->qty->_long)) {
-			assert(!isnan(pos->qty->_shrt));
-			pos->qty->_long = v;
-		} else if (isnan(pos->qty->_shrt)) {
-			assert(!isnan(pos->qty->_long));
-			pos->qty->_shrt = v;
-		} else {
-			/* nothing there, so just use both slots */
-			pos->qty->_long = v;
-			pos->qty->_shrt = v;
-		}
+	case UMPF_ATTR_QTY:
+		qty->qsd->pos = strtod(value, NULL);
 		break;
-	}
 	case UMPF_ATTR_ACCT:
 		if (msg->pf.name) {
 			/* only instantiate once */
