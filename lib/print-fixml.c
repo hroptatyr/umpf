@@ -680,6 +680,131 @@ print_sec_def_upd(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 	return;
 }
 
+static void
+print_alloc(__ctx_t ctx, struct __qsd_s *qsd, const char *pf, size_t indent)
+{
+	print_indent(ctx, indent);
+	sputs(ctx, "<Alloc");
+
+	if (LIKELY(pf != NULL)) {
+		sputs(ctx, " Acct=\"");
+		sputs_encq(ctx, pf);
+		sputc(ctx, '"');
+	}
+
+	{
+		double v;
+
+		if (UNLIKELY(qsd->pos < 0)) {
+			v = -qsd->pos;
+		} else {
+			v = qsd->pos;
+		}
+		csnprintf(ctx, " Qty=\"%.6f\"", v);
+	}
+
+	sputs(ctx, "/>\n");
+	return;
+}
+
+static void
+print_alloc_instrctn(__ctx_t ctx, umpf_msg_t msg, size_t indent)
+{
+	print_indent(ctx, indent);
+	sputs(ctx, "<Batch>\n");
+
+	for (size_t i = 0; i < msg->pf.nposs; i++) {
+		print_indent(ctx, indent + 2);
+		sputs(ctx, "<AllocInstrctn ID=\"0\" TransTyp=\"0\" Typ=\"5\"");
+
+		if (msg->pf.name) {
+			sputs(ctx, " Acct=\"");
+			sputs_encq(ctx, msg->pf.name);
+			sputc(ctx, '"');
+		}
+
+		if (msg->pf.stamp) {
+			sputs(ctx, " TxnTm=\"");
+			print_zulu(ctx, msg->pf.stamp);
+			sputc(ctx, '"');
+		}
+
+		if (msg->pf.clr_dt) {
+			sputs(ctx, " TrdDt=\"");
+			print_date(ctx, msg->pf.clr_dt);
+			sputs(ctx, "\" SettlDt=\"");
+			print_date(ctx, msg->pf.clr_dt);
+			sputc(ctx, '"');
+		} else if (msg->pf.stamp) {
+			sputs(ctx, " TrdDt=\"");
+			print_date(ctx, msg->pf.stamp);
+			sputs(ctx, "\" SettlDt=\"");
+			print_date(ctx, msg->pf.stamp);
+			sputc(ctx, '"');
+		}
+		{
+			double v;
+
+			if (UNLIKELY(msg->pf.poss[i].qsd->pos < 0)) {
+				v = -msg->pf.poss[i].qsd->pos;
+			} else {
+				v = msg->pf.poss[i].qsd->pos;
+			}
+			csnprintf(ctx, " Qty=\"%.6f\"", v);
+		}
+		/* sigh, we can't serialise all sides, thanks FIXML */
+		sputs(ctx, " Side=\"");
+		switch (msg->pf.poss[i].qsd->sd) {
+		case QSIDE_OPEN_LONG:
+			sputc(ctx, '1');
+			break;
+		case QSIDE_CLOSE_LONG:
+			sputc(ctx, '2');
+			break;
+		case QSIDE_OPEN_SHORT:
+			sputc(ctx, '5');
+			break;
+		case QSIDE_CLOSE_SHORT:
+			/* YES! */
+			break;
+		case QSIDE_UNK:
+		default:
+			sputc(ctx, '0');
+			break;
+		}
+		sputc(ctx, '"');
+
+		/* finalise the attributes */
+		sputs(ctx, ">\n");
+
+		print_instrmt(ctx, msg->pf.poss[i].ins, indent + 4);
+		print_alloc(ctx, msg->pf.poss[i].qsd, msg->pf.name, indent + 4);
+
+		/* finalise the tag */
+		print_indent(ctx, indent + 2);
+		sputs(ctx, "</AllocInstrctn>\n");
+	}
+
+	print_indent(ctx, indent);
+	sputs(ctx, "</Batch>\n");
+	return;
+}
+
+static void
+print_alloc_instrctn_ack(__ctx_t ctx, umpf_msg_t msg, size_t indent)
+{
+	print_indent(ctx, indent);
+	sputs(ctx, "<Batch>\n");
+
+	for (size_t i = 0; i < msg->pf.nposs; i++) {
+		print_indent(ctx, indent + 2);
+		sputs(ctx, "<AllocInstrctnAck ID=\"0\" Stat=\"0\"/>\n");
+	}
+
+	print_indent(ctx, indent);
+	sputs(ctx, "</Batch>\n");
+	return;
+}
 
 static void
 print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
@@ -743,6 +868,12 @@ print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 		print_sec_def_upd(ctx, msg, indent + 2);
 		break;
 
+	case UMPF_MSG_PATCH * 2:
+		print_alloc_instrctn(ctx, msg, indent + 2);
+		break;
+	case UMPF_MSG_PATCH * 2 + 1:
+		print_alloc_instrctn_ack(ctx, msg, indent + 2);
+		break;
 	default:
 		UMPF_DEBUG("Can't print message %u\n", msg->hdr.mt);
 		break;
