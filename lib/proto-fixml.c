@@ -851,8 +851,11 @@ proc_ALLOC_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 			/* sell short (exempt) */
 			qty->qsd->sd = QSIDE_OPEN_SHORT;
 			break;
+		case 'X':
 			/* fucking FIXML has no field to denote
 			 * closing of short positions */
+			qty->qsd->sd = QSIDE_CLOSE_SHORT;
+			break;
 		default:
 		warn:
 			qty->qsd->sd = QSIDE_UNK;

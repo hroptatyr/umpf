@@ -765,7 +765,8 @@ print_alloc_instrctn(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 			sputc(ctx, '5');
 			break;
 		case QSIDE_CLOSE_SHORT:
-			/* YES! */
+			/* YES! thats our own marker to close short positions */
+			sputc(ctx, 'X');
 			break;
 		case QSIDE_UNK:
 		default:
