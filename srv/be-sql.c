@@ -1236,54 +1236,56 @@ be_sql_add_pos(dbconn_t c, dbobj_t tag, const char *mnemo, double l, double s)
 	/* get security */
 	uint64_t sec_id;
 	dbstmt_t stmt;
-	static const char insq[] = "\
-INSERT INTO aou_umpf_position (tag_id, security_id, long_qty, short_qty) \
-VALUES (?, ?, 0, 0)";
-	static const char qry[] = "\
-UPDATE aou_umpf_position \
-SET long_qty = long_qty + ?, short_qty = short_qty + ? \
+	static const char selq[] = "\
+SELECT long_qty, short_qty FROM aou_umpf_position \
 WHERE tag_id = ? AND security_id = ?";
+	static const char repq[] = "\
+REPLACE INTO aou_umpf_position (tag_id, security_id, long_qty, short_qty) \
+VALUES (?, ?, ?, ?)";
+	struct __bind_s b[4];
 
 	/* obtain a sec id first, get/creator */
 	if ((sec_id = __get_sec_id(c, t->pf_id, mnemo)) == 0UL) {
 		UMPF_DEBUG(BE_SQL ": no security id for pf %lu %s\n",
 			   t->pf_id, mnemo);
 		return;
-	} else if ((stmt = be_sql_prep(c, insq, countof_m1(insq))) != NULL) {
-		/* try an insert first so the update goes through */
-		struct __bind_s b[2] = {{
-				.type = BE_BIND_TYPE_INT64,
-				.i64 = t->tag_id,
-			}, {
-				.type = BE_BIND_TYPE_INT64,
-				.i64 = sec_id,
-			}};
-		be_sql_bind(c, stmt, b, countof(b));
-		/* execute */
-		be_sql_exec_stmt(c, stmt);
-		be_sql_fin(c, stmt);
+	} else if ((stmt = be_sql_prep(c, selq, countof_m1(selq))) == NULL) {
+		return;
+	}
+		
+	/* try and get the current positions */
+	b[0].type = BE_BIND_TYPE_INT64;
+	b[0].i64 = t->tag_id;
+	b[1].type = BE_BIND_TYPE_INT64;
+	b[1].i64 = sec_id;
+
+	be_sql_bind(c, stmt, b, 2);
+	/* execute */
+	be_sql_exec_stmt(c, stmt);
+	/* fetch results, reuse b[2]/b[3] */
+	b[2].type = BE_BIND_TYPE_DOUBLE;
+	b[2].dbl = 0.0;
+	b[3].type = BE_BIND_TYPE_DOUBLE;
+	b[3].dbl = 0.0;
+	be_sql_fetch(c, stmt, b + 2, 2);
+	/* and finish this part of the exercise */
+	be_sql_fin(c, stmt);
+
+	if ((stmt = be_sql_prep(c, repq, countof_m1(repq))) == NULL) {
+		/* fuck off silently */
+		return;
 	}
 
-	if ((stmt = be_sql_prep(c, qry, countof_m1(qry))) != NULL) {
-		/* bind the params */
-		struct __bind_s b[4] = {{
-				.type = BE_BIND_TYPE_DOUBLE,
-				.dbl = l,
-			}, {
-				.type = BE_BIND_TYPE_DOUBLE,
-				.dbl = s,
-			}, {
-				.type = BE_BIND_TYPE_INT64,
-				.i64 = t->tag_id,
-			}, {
-				.type = BE_BIND_TYPE_INT64,
-				.i64 = sec_id,
-			}};
-		be_sql_bind(c, stmt, b, countof(b));
-		/* execute */
-		be_sql_exec_stmt(c, stmt);
-		be_sql_fin(c, stmt);
-	}
+	/* fill in the new position values, reuse b[0] and b[1] */
+	b[2].type = BE_BIND_TYPE_DOUBLE;
+	b[2].dbl += l;
+	b[3].type = BE_BIND_TYPE_DOUBLE;
+	b[3].dbl += s;
+
+	be_sql_bind(c, stmt, b, countof(b));
+	/* execute */
+	be_sql_exec_stmt(c, stmt);
+	be_sql_fin(c, stmt);
 	return;
 }
 
