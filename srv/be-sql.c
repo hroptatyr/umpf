@@ -159,6 +159,7 @@ be_sqlite_open(const char *file)
 {
 	sqlite3 *res;
 	sqlite3_open(file, &res);
+	sqlite3_exec(res, "PRAGMA synchronous=OFF;", NULL, NULL, NULL);
 	return res;
 }
 
@@ -594,8 +595,6 @@ be_mysql_fetch(dbstmt_t stmt, __bind_t b, size_t nb)
 static void
 be_sqlite_fetch1(__bind_t tgt, dbstmt_t stmt, int idx)
 {
-	UMPF_DEBUG(BE_SQL ": sqlite result\n");
-
 	switch (tgt->type) {
 	case BE_BIND_TYPE_UNK:
 	case BE_BIND_TYPE_NULL:
