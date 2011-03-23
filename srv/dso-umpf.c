@@ -255,6 +255,71 @@ interpret_msg(char **buf, umpf_msg_t msg)
 		len = umpf_seria_msg(buf, 0, msg);
 		break;
 	}
+	case UMPF_MSG_PATCH: {
+		/* replay position changes */
+		const char *mnemo;
+		time_t stamp;
+		dbobj_t tag;
+		size_t res_nposs = 0;
+
+		UMPF_DEBUG(MOD_PRE ": patch();\n");
+		mnemo = msg->pf.name;
+		stamp = msg->pf.stamp;
+		tag = be_sql_copy_tag(umpf_dbconn, mnemo, stamp);
+
+		for (size_t i = 0, j; i < msg->pf.nposs; i++) {
+			const char *sec = msg->pf.poss[i].ins->sym;
+			double v = msg->pf.poss[i].qsd->pos;
+			double l;
+			double s;
+
+			switch (msg->pf.poss[i].qsd->sd) {
+			case QSIDE_OPEN_LONG:
+				l = v;
+				s = 0;
+				break;
+			case QSIDE_CLOSE_LONG:
+				l = -v;
+				s = 0;
+				break;
+			case QSIDE_OPEN_SHORT:
+				l = 0;
+				s = v;
+				break;
+			case QSIDE_CLOSE_SHORT:
+				l = 0;
+				s = -v;
+				break;
+			case QSIDE_UNK:
+			default:
+				continue;
+			}
+#define P	msg->pf.poss
+			/* condense the resulting position report */
+			for (j = 0; j < res_nposs; j++) {
+				if (!strcmp(P[j].ins->sym, P[i].ins->sym)) {
+					break;
+				}
+			}
+			/* re-assign to j-th slot */
+			P[j].ins->sym = P[i].ins->sym;
+			*P[j].qty = be_sql_add_pos(umpf_dbconn, tag, sec, l, s);
+			/* set new nposs value */
+			if (j >= res_nposs) {
+				res_nposs = j + 1;
+			}
+#undef P
+		}
+
+		/* reuse the message to send the answer */
+		msg->hdr.mt++;
+		msg->pf.nposs = res_nposs;
+		len = umpf_seria_msg(buf, 0, msg);
+
+		/* free resources */
+		be_sql_free_tag(umpf_dbconn, tag);
+		break;
+	}
 	default:
 		UMPF_DEBUG(MOD_PRE ": unknown message %u\n", msg->hdr.mt);
 		len = 0;

@@ -47,6 +47,7 @@
 # include <libxml/parser.h>
 # include <libxml/parserInternals.h>
 #endif	/* HAVE_LIBXML2 */
+#include <math.h>
 #include "nifty.h"
 #include "umpf.h"
 #include "umpf-private.h"
@@ -813,20 +814,88 @@ proc_SEC_DEF_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 	return;
 }
 
+static void
+proc_ALLOC_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
+{
+	umpf_msg_t msg = ctx->msg;
+	struct __ins_qty_s *qty = get_state_object(ctx);
+
+	switch (aid) {
+	case UMPF_ATTR_ID:
+	case UMPF_ATTR_TYP:
+	case UMPF_ATTR_TRD_DT:
+		/* ignored */
+		break;
+	case UMPF_ATTR_TRANS_TYP:
+		if (value && value[0] == '0' && value[1] == '\0') {
+			break;
+		}
+		UMPF_DEBUG(PFIXML_PRE " WARN: trans type != 0\n");
+		break;
+	case UMPF_ATTR_SIDE:
+		if (value == NULL || value[1] != '\0') {
+			goto warn;
+		}
+		switch (value[0]) {
+		case '\0':
+		case '1':
+		case '3':
+			qty->qsd->sd = QSIDE_OPEN_LONG;
+			break;
+		case '2':
+		case '4':
+			qty->qsd->sd = QSIDE_CLOSE_LONG;
+			break;
+		case '5':
+		case '6':
+			/* sell short (exempt) */
+			qty->qsd->sd = QSIDE_OPEN_SHORT;
+			break;
+		case 'X':
+			/* fucking FIXML has no field to denote
+			 * closing of short positions */
+			qty->qsd->sd = QSIDE_CLOSE_SHORT;
+			break;
+		default:
+		warn:
+			qty->qsd->sd = QSIDE_UNK;
+			UMPF_DEBUG(PFIXML_PRE " WARN: cannot interpret side\n");
+			break;
+		}
+		break;
+
+	case UMPF_ATTR_SETTL_DT:
+		msg->pf.clr_dt = get_zulu(value);
+		break;
+	case UMPF_ATTR_QTY:
+		qty->qsd->pos = strtod(value, NULL);
+		break;
+	case UMPF_ATTR_ACCT:
+		if (msg->pf.name) {
+			/* only instantiate once */
+			break;
+		}
+		msg->pf.name = unquot(value);
+		break;
+	case UMPF_ATTR_TXN_TM:
+		msg->pf.stamp = get_zulu(value);
+		break;
+	default:
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
+		break;
+	}
+	return;
+}
+
 
 static void
 sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 {
-	umpf_msg_t msg;
+	umpf_msg_t msg = ctx->msg;
 
-	if (UNLIKELY(ctx->msg != NULL)) {
-		return;
-	} else if (UNLIKELY(get_state_otype(ctx) != UMPF_TAG_FIXML)) {
-		return;
-	}
+	assert(ctx->msg != NULL);
+	assert(get_state_otype(ctx) == UMPF_TAG_FIXML);
 
-	/* generate a massage */
-	ctx->msg = msg = calloc(1, sizeof(*msg));
 	/* sigh, subtle differences */
 	switch (tid) {
 	case UMPF_TAG_REQ_FOR_POSS:
@@ -895,6 +964,20 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
 		break;
 
+	case UMPF_TAG_ALLOC_INSTRCTN: {
+		/* for the instrument guy and the attr code */
+		struct __ins_qty_s *iq = NULL;
+
+		umpf_set_msg_type(msg, UMPF_MSG_PATCH);
+		ctx->msg = msg = umpf_msg_add_pos(msg, 1);
+		iq = msg->pf.poss + msg->pf.nposs - 1;
+		(void)push_state(ctx, tid, iq);
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_ALLOC_all_attr(ctx, aid, attrs[j + 1]);
+		}
+		break;
+	}
 	default:
 		break;
 	}
@@ -920,6 +1003,8 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 		for (int i = 0; attrs[i] != NULL; i += 2) {
 			proc_FIXML_attr(ctx, attrs[i], attrs[i + 1]);
 		}
+		/* generate a massage */
+		ctx->msg = calloc(1, sizeof(*ctx->msg));
 		push_state(ctx, tid, ctx->msg);
 		break;
 	}
@@ -941,6 +1026,10 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 		/* translate to new_sec */
 	case UMPF_TAG_SEC_DEF_UPD:
 		/* translate to set_sec */
+	case UMPF_TAG_ALLOC_INSTRCTN:
+		/* translate to apply */
+	case UMPF_TAG_ALLOC_INSTRCTN_ACK:
+		/* translate to apply */
 		sax_bo_top_level_elt(ctx, tid, attrs);
 		break;
 
@@ -1005,6 +1094,7 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 		case UMPF_TAG_SEC_DEF:
 		case UMPF_TAG_SEC_DEF_REQ:
 		case UMPF_TAG_SEC_DEF_UPD:
+		case UMPF_TAG_ALLOC_INSTRCTN:
 			/* we use the fact that __ins_qty_s == __ins_s
 			 * in posrpt mode and in sec-def mode we rely
 			 * on the right push there */
@@ -1041,10 +1131,19 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 
 	case UMPF_TAG_AMT:
 		/* unsupported */
+		UMPF_DEBUG(PFIXML_PRE ": Amt tags are currently unsupported\n");
 		break;
 
 	case UMPF_TAG_SEC_XML:
 		/* it's just a no-op */
+		break;
+
+	case UMPF_TAG_ALLOC:
+		/* just go through the attrs again */
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_ALLOC_all_attr(ctx, aid, attrs[j + 1]);
+		}
 		break;
 
 	default:
@@ -1081,6 +1180,7 @@ sax_eo_FIXML_elt(__ctx_t ctx, const char *name)
 	case UMPF_TAG_SEC_DEF:
 	case UMPF_TAG_SEC_DEF_REQ:
 	case UMPF_TAG_SEC_DEF_UPD:
+	case UMPF_TAG_ALLOC_INSTRCTN:
 		pop_state(ctx);
 		break;
 	case UMPF_TAG_FIXML:

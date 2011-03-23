@@ -69,6 +69,14 @@ typedef enum {
 	UMPF_MSG_PATCH,
 } umpf_msg_type_t;
 
+typedef enum {
+	QSIDE_UNK,
+	QSIDE_OPEN_LONG,
+	QSIDE_CLOSE_LONG,
+	QSIDE_OPEN_SHORT,
+	QSIDE_CLOSE_SHORT,
+} qside_t;
+
 /* stuff we need to identify an instrument */
 struct __ins_s {
 	char *sym;
@@ -80,9 +88,18 @@ struct __qty_s {
 	double _shrt;
 };
 
+/* qsides are positions plus side */
+struct __qsd_s {
+	double pos;
+	qside_t sd;
+};
+
 struct __ins_qty_s {
 	struct __ins_s ins[1];
-	struct __qty_s qty[1];
+	union {
+		struct __qty_s qty[1];
+		struct __qsd_s qsd[1];
+	};
 };
 
 struct __satell_s {
