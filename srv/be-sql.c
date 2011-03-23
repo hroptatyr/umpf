@@ -39,6 +39,7 @@
 # include "config.h"
 #endif	/* HAVE_CONFIG_H */
 #include <stdint.h>
+#include <math.h>
 #if defined WITH_MYSQL
 # include <mysql/mysql.h>
 #endif	/* WITH_MYSQL */
@@ -1229,7 +1230,7 @@ VALUES (?, ?, ?, ?)";
 	return;
 }
 
-DEFUN void
+DEFUN struct __qty_s
 be_sql_add_pos(dbconn_t c, dbobj_t tag, const char *mnemo, double l, double s)
 {
 	struct __tag_s *t = tag;
@@ -1243,14 +1244,15 @@ WHERE tag_id = ? AND security_id = ?";
 REPLACE INTO aou_umpf_position (tag_id, security_id, long_qty, short_qty) \
 VALUES (?, ?, ?, ?)";
 	struct __bind_s b[4];
+	struct __qty_s res = {._long = NAN, ._shrt = NAN};
 
 	/* obtain a sec id first, get/creator */
 	if ((sec_id = __get_sec_id(c, t->pf_id, mnemo)) == 0UL) {
 		UMPF_DEBUG(BE_SQL ": no security id for pf %lu %s\n",
 			   t->pf_id, mnemo);
-		return;
+		return res;
 	} else if ((stmt = be_sql_prep(c, selq, countof_m1(selq))) == NULL) {
-		return;
+		return res;
 	}
 		
 	/* try and get the current positions */
@@ -1273,20 +1275,20 @@ VALUES (?, ?, ?, ?)";
 
 	if ((stmt = be_sql_prep(c, repq, countof_m1(repq))) == NULL) {
 		/* fuck off silently */
-		return;
+		return res;
 	}
 
 	/* fill in the new position values, reuse b[0] and b[1] */
 	b[2].type = BE_BIND_TYPE_DOUBLE;
-	b[2].dbl += l;
+	res._long = b[2].dbl += l;
 	b[3].type = BE_BIND_TYPE_DOUBLE;
-	b[3].dbl += s;
+	res._shrt = b[3].dbl += s;
 
 	be_sql_bind(c, stmt, b, countof(b));
 	/* execute */
 	be_sql_exec_stmt(c, stmt);
 	be_sql_fin(c, stmt);
-	return;
+	return res;
 }
 
 DEFUN time_t

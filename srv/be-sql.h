@@ -129,7 +129,7 @@ be_sql_get_pos(
  * \param MNEMO is the mnemonic of the security.
  * \param L is the long side of the position.
  * \param S is the short side of the position. */
-DECLF void
+DECLF struct __qty_s
 be_sql_add_pos(dbconn_t, dbobj_t tag, const char *mnemo, double l, double s);
 
 /**

@@ -791,7 +791,7 @@ print_alloc_instrctn(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 	return;
 }
 
-static void
+static void __attribute__((unused))
 print_alloc_instrctn_ack(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 {
 	print_indent(ctx, indent);
@@ -873,7 +873,22 @@ print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 		print_alloc_instrctn(ctx, msg, indent + 2);
 		break;
 	case UMPF_MSG_PATCH * 2 + 1:
+#if 0
+/* should this be configurable? */
 		print_alloc_instrctn_ack(ctx, msg, indent + 2);
+#else  /* !0 */
+		/* more than one child, so Batch it */
+		print_indent(ctx, indent + 2);
+		sputs(ctx, "<Batch>\n");
+
+		print_req_for_poss_ack(ctx, msg, indent + 4);
+		for (size_t i = 0; i < msg->pf.nposs; i++) {
+			print_pos_rpt(ctx, msg, i, indent + 4);
+		}
+
+		print_indent(ctx, indent + 2);
+		sputs(ctx, "</Batch>\n");
+#endif	/* 0 */
 		break;
 	default:
 		UMPF_DEBUG("Can't print message %u\n", msg->hdr.mt);

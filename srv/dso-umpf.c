@@ -293,7 +293,8 @@ interpret_msg(char **buf, umpf_msg_t msg)
 			default:
 				continue;
 			}
-			be_sql_add_pos(umpf_dbconn, tag, sec, l, s);
+			msg->pf.poss[i].qty[0] = be_sql_add_pos(
+				umpf_dbconn, tag, sec, l, s);
 		}
 
 		/* reuse the message to send the answer */
