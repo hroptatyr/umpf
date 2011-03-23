@@ -159,6 +159,7 @@ be_sqlite_open(const char *file)
 {
 	sqlite3 *res;
 	sqlite3_open(file, &res);
+	sqlite3_exec(res, "PRAGMA synchronous=OFF;", NULL, NULL, NULL);
 	return res;
 }
 
