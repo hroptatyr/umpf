@@ -46,6 +46,7 @@
 #include <stdint.h>
 #include <time.h>
 #include <ctype.h>
+#include <math.h>
 /* network stuff */
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -91,6 +92,8 @@ typedef enum {
 	UMPF_CMD_SET_SEC,
 	UMPF_CMD_GET_POSS,
 	UMPF_CMD_SET_POSS,
+	UMPF_CMD_APPLY,
+	UMPF_CMD_DIFF,
 } umpf_cmd_t;
 
 /* new_pf specific options */
@@ -130,6 +133,14 @@ struct __get_poss_clo_s {
 	time_t stamp;
 };
 
+struct __apply_clo_s {
+	const char *pf;
+	const char *date;
+	time_t stamp;
+	const char *file;
+	const char *poss;
+};
+
 /* command line options */
 struct __clo_s {
 	int helpp;
@@ -147,6 +158,7 @@ struct __clo_s {
 		struct __get_sec_clo_s get_sec[1];
 		struct __get_poss_clo_s get_poss[1];
 		struct __set_poss_clo_s set_poss[1];
+		struct __apply_clo_s apply[1];
 	};
 };
 
@@ -200,6 +212,10 @@ Supported commands:\n\
     -d, --date=DATE          Request the portfolio as of DATE\n\
 \n\
   set-poss [OPTIONS] [NAME]  Set the portfolio NAME\n\
+    -d, --date=DATE          Set the portfolio as of DATE\n\
+    -f, --file=FILE          Use positions in FILE, - for stdin\n\
+\n\
+  apply [OPTIONS] [NAME]     Apply order to portfolio NAME\n\
     -d, --date=DATE          Set the portfolio as of DATE\n\
     -f, --file=FILE          Use positions in FILE, - for stdin\n\
 \n\
@@ -309,19 +325,20 @@ epoll_guts(epoll_guts_action_t action)
 }
 
 
+static char gbuf[4096];
+
 static umpf_msg_t
 read_reply(volatile int fd)
 {
-	static char buf[4096];
 	static umpf_ctx_t p = NULL;
 	ssize_t nrd;
 	umpf_msg_t rpl = NULL;
 
-	while ((nrd = recv(fd, buf, sizeof(buf), 0)) > 0) {
+	while ((nrd = recv(fd, gbuf, sizeof(gbuf), 0)) > 0) {
 #if defined DEBUG_FLAG
 		fprintf(stderr, "read %zd\n", nrd);
 #endif	/* DEBUG_FLAG */
-		if ((rpl = umpf_parse_blob(&p, buf, nrd)) != NULL) {
+		if ((rpl = umpf_parse_blob(&p, gbuf, nrd)) != NULL) {
 			/* bingo */
 			break;
 
@@ -332,6 +349,20 @@ read_reply(volatile int fd)
 		/* not enough data yet, request more */
 	}
 	return rpl;
+}
+
+static int
+write_request(int fd, const char *buf, size_t len)
+{
+	ssize_t wrt;
+	size_t tot = 0;
+
+	while ((wrt = write(fd, buf + tot, len - tot)) > 0 &&
+	       (tot += wrt) < len);
+#if defined DEBUG_FLAG
+	fprintf(stderr, "written %zu\n", tot);
+#endif	/* DEBUG_FLAG */
+	return tot;
 }
 
 static void
@@ -472,6 +503,11 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 #define SRV_TIMEOUT	(4000/*millis*/)
 	ep_ctx_t epg;
 	int nfds;
+	/* serialise the message */
+	char *buf = gbuf;
+	size_t nsz = umpf_seria_msg(&buf, -countof(gbuf), msg);
+	/* track the number of bytes written */
+	size_t wrt = 0;
 
 	/* also set up our epoll magic */
 	epg = epoll_guts(GUTS_GET);
@@ -500,12 +536,10 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 				break;
 			}
 
-		} else if (ev & EPOLLOUT && msg) {
-#if defined DEBUG_FLAG
-			umpf_print_msg(STDERR_FILENO, msg);
-#endif	/* DEBUG_FLAG */
-			umpf_print_msg(fd, msg);
-			msg = NULL;
+		} else if (ev & EPOLLOUT && (wrt < nsz)) {
+			/* write a bit of the message */
+			wrt += write_request(fd, buf + wrt, nsz - wrt);
+
 		} else {
 #if defined DEBUG_FLAG
 			fprintf(stderr, "epoll repl exitted, flags %x\n", ev);
@@ -517,6 +551,11 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 	/* stop waiting for events */
 	ep_fini(epg, sock);
 	(void)epoll_guts(GUTS_FREE);
+
+	/* free serialisation resources */
+	if (buf != gbuf) {
+		free(buf);
+	}
 	return nfds;
 }
 
@@ -603,7 +642,6 @@ __massage_first(const char *line, size_t llen)
 
 	/* otherwise set up our message here */
 	res = make_umpf_msg();
-	umpf_set_msg_type(res, UMPF_MSG_SET_PF);
 
 	{
 		const char *pf = line + countof(pf_cookie) - 1;
@@ -670,7 +708,7 @@ __frob_poss_line(struct __ins_qty_s *iq, const char *line, const size_t llen)
 static umpf_msg_t
 make_umpf_set_poss_msg(const char *mnemo, const time_t stamp, const char *file)
 {
-	umpf_msg_t res;
+	umpf_msg_t res = NULL;
 	size_t llen;
 	char *line;
 	FILE *f;
@@ -687,7 +725,7 @@ make_umpf_set_poss_msg(const char *mnemo, const time_t stamp, const char *file)
 	line = malloc(llen);
 
 	for (ssize_t nrd, ln = 0; (nrd = getline(&line, &llen, f)) >= 0; ln++) {
-		struct __ins_qty_s iq = {0};
+		struct __ins_qty_s iq = {};
 
 		/* bit complicated would be the case that the command line
 		 * option (--date) should take precedence, it _could_ be
@@ -696,6 +734,7 @@ make_umpf_set_poss_msg(const char *mnemo, const time_t stamp, const char *file)
 		 * name or different time stamp */
 		if (ln == 0 && (res = __massage_first(line, nrd)) != NULL) {
 			/* first line is full of cookies */
+			umpf_set_msg_type(res, UMPF_MSG_SET_PF);
 			continue;
 
 		} else if (UNLIKELY(ln == 0 && mnemo == NULL)) {
@@ -721,6 +760,99 @@ make_umpf_set_poss_msg(const char *mnemo, const time_t stamp, const char *file)
 			res = realloc(res, sizeof(*res) + iqsz);
 			res->pf.poss[np] = iq;
 		}
+	}
+out:
+	free(line);
+	return res;
+}
+
+static umpf_msg_t
+__ass_pos(umpf_msg_t msg, struct __ins_qty_s *iq)
+{
+	/* we've got to do a realloc() for every line, fuck */
+	size_t np = msg->pf.nposs;
+	size_t to_add = 0;
+	umpf_msg_t res;
+
+	if (fpclassify(iq->qty->_long) != FP_ZERO) {
+		to_add++;
+	}
+	if (fpclassify(iq->qty->_shrt) != FP_ZERO) {
+		to_add++;
+	}
+	/* resize */
+	res = umpf_msg_add_pos(msg, to_add);
+	/* assign */
+	if (iq->qty->_long > 0.0) {
+		res->pf.poss[np].ins->sym = iq->ins->sym;
+		res->pf.poss[np].qsd->pos = iq->qty->_long;
+		res->pf.poss[np++].qsd->sd = QSIDE_OPEN_LONG;
+	} else if (iq->qty->_long < 0.0) {
+		res->pf.poss[np].ins->sym = iq->ins->sym;
+		res->pf.poss[np].qsd->pos = -iq->qty->_long;
+		res->pf.poss[np++].qsd->sd = QSIDE_CLOSE_LONG;
+	}
+	if (iq->qty->_shrt > 0.0) {
+		res->pf.poss[np].ins->sym = iq->ins->sym;
+		res->pf.poss[np].qsd->pos = iq->qty->_shrt;
+		res->pf.poss[np++].qsd->sd = QSIDE_OPEN_SHORT;
+	} else if (iq->qty->_shrt < 0.0) {
+		res->pf.poss[np].ins->sym = iq->ins->sym;
+		res->pf.poss[np].qsd->pos = -iq->qty->_shrt;
+		res->pf.poss[np++].qsd->sd = QSIDE_CLOSE_SHORT;
+	}
+	return res;
+}
+
+static umpf_msg_t
+make_umpf_apply_msg(const char *mnemo, const time_t stamp, const char *file)
+{
+	umpf_msg_t res = NULL;
+	size_t llen;
+	char *line;
+	FILE *f;
+
+	/* sigh, now the hard part, open file and parse positions */
+	if (file[0] == '-' && file[1] == '\0') {
+		f = stdin; 
+	} else if ((f = fopen(file, "r")) == NULL) {
+		return NULL;
+	}
+
+	/* get resources together for our getline */
+	llen = 256;
+	line = malloc(llen);
+
+	for (ssize_t nrd, ln = 0; (nrd = getline(&line, &llen, f)) >= 0; ln++) {
+		struct __ins_qty_s iq = {};
+
+		/* bit complicated would be the case that the command line
+		 * option (--date) should take precedence, it _could_ be
+		 * useful if your portfolio hasn't changed since yesterday
+		 * and now you just want to stamp it off under a different
+		 * name or different time stamp */
+		if (ln == 0 && (res = __massage_first(line, nrd)) != NULL) {
+			/* first line is full of cookies */
+			umpf_set_msg_type(res, UMPF_MSG_PATCH);
+			continue;
+
+		} else if (UNLIKELY(ln == 0 && mnemo == NULL)) {
+			goto out;
+
+		} else if (UNLIKELY(ln == 0)) {
+			res = make_umpf_msg();
+			umpf_set_msg_type(res, UMPF_MSG_PATCH);
+			res->pf.name = strdup(mnemo);
+			res->pf.stamp = stamp ?: time(NULL);
+
+		} else if (UNLIKELY(nrd == 0)) {
+			continue;
+
+		} else if (__frob_poss_line(&iq, line, nrd) < 0) {
+			/* parsing the line failed */
+			continue;
+		}
+		res = __ass_pos(res, &iq);
 	}
 out:
 	free(line);
@@ -785,6 +917,15 @@ umpf_process(struct __clo_s *clo)
 		const time_t stamp = clo->set_poss->stamp;
 		const char *file = clo->set_poss->file;
 		if ((msg = make_umpf_set_poss_msg(mnemo, stamp, file))) {
+			break;
+		}
+		return -1;
+	}
+	case UMPF_CMD_APPLY: {
+		const char *mnemo = clo->apply->pf;
+		const time_t stamp = clo->apply->stamp;
+		const char *file = clo->apply->file;
+		if ((msg = make_umpf_apply_msg(mnemo, stamp, file))) {
 			break;
 		}
 		/* otherwise fall through to default case */
@@ -1028,6 +1169,17 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 			}
 			break;
 		}
+		case 'a': {
+			/* apply */
+			int new_argc = argc - i - 1;
+			char **new_argv = argv + i + 1;
+			if (strcmp(p, "pply") == 0) {
+				clo->cmd = UMPF_CMD_APPLY;
+				parse_set_poss_args(clo, new_argc, new_argv);
+				continue;
+			}
+			break;
+		}
 		default:
 			break;
 		}
@@ -1144,6 +1296,7 @@ main(int argc, char *argv[])
 		break;
 	case UMPF_CMD_GET_POSS:
 	case UMPF_CMD_SET_POSS:
+	case UMPF_CMD_APPLY:
 		if (check__poss_args(&argi)) {
 			print_usage(argi.cmd);
 			return 1;

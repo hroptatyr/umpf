@@ -47,6 +47,7 @@
 # include <libxml/parser.h>
 # include <libxml/parserInternals.h>
 #endif	/* HAVE_LIBXML2 */
+#include <math.h>
 #include "nifty.h"
 #include "umpf.h"
 #include "umpf-private.h"
@@ -622,18 +623,24 @@ proc_FIXML_attr(__ctx_t ctx, const char *attr, const char *value)
 	return;
 }
 
-static void
-proc_REQ_FOR_POSS_attr(__ctx_t ctx, const char *attr, const char *value)
+static umpf_aid_t
+check_attr(__ctx_t ctx, const char *attr)
 {
 	const char *rattr = tag_massage(attr);
 	const umpf_aid_t aid = sax_aid_from_attr(rattr);
-	umpf_msg_t msg = ctx->msg;
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
 		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
+		return UMPF_ATTR_UNK;
 	}
+	return aid;
+}
+
+static void
+proc_REQ_FOR_POSS_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
+{
+	umpf_msg_t msg = ctx->msg;
 
 	switch (aid) {
 	case UMPF_ATTR_REQ_ID:
@@ -652,24 +659,16 @@ proc_REQ_FOR_POSS_attr(__ctx_t ctx, const char *attr, const char *value)
 		msg->pf.stamp = get_zulu(value);
 		break;
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
 }
 
 static void
-proc_REQ_FOR_POSS_ACK_attr(__ctx_t ctx, const char *attr, const char *value)
+proc_REQ_FOR_POSS_ACK_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 {
-	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	umpf_msg_t msg = ctx->msg;
-
-	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
-	}
 
 	switch (aid) {
 	case UMPF_ATTR_RPT_ID:
@@ -697,31 +696,23 @@ proc_REQ_FOR_POSS_ACK_attr(__ctx_t ctx, const char *attr, const char *value)
 		/* ignored */
 		break;
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
 }
 
-static void __attribute__((noinline))
-proc_RGST_INSTRCTNS_RSP_attr(__ctx_t ctx, const char *attr, const char *value)
+static void
+proc_RGST_INSTRCTNS_RSP_attr(__ctx_t ctx, const umpf_aid_t aid, const char *v)
 {
-	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	umpf_msg_t msg = ctx->msg;
-
-	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
-	}
 
 	switch (aid) {
 	case UMPF_ATTR_ID:
 		/* dont overwrite stuff without free()ing
 		 * actually this is a bit rich, too much knowledge in here */
 		if (msg->new_pf.name == NULL) {
-			msg->new_pf.name = unquot(value);
+			msg->new_pf.name = unquot(v);
 		}
 		break;
 	case UMPF_ATTR_TRANS_TYP:
@@ -731,24 +722,16 @@ proc_RGST_INSTRCTNS_RSP_attr(__ctx_t ctx, const char *attr, const char *value)
 		/* ignored */
 		break;
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
 }
 
 static void
-proc_PTY_attr(__ctx_t ctx, const char *attr, const char *value)
+proc_PTY_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 {
-	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	umpf_msg_t msg = get_state_object(ctx);
-
-	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
-	}
 
 	switch (aid) {
 	case UMPF_ATTR_ID:
@@ -765,24 +748,15 @@ proc_PTY_attr(__ctx_t ctx, const char *attr, const char *value)
 		/* ignored */
 		break;
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
 }
 
 static void
-proc_INSTRMT_attr(__ctx_t ctx, const char *attr, const char *value)
+proc_INSTRMT_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 {
-	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(rattr);
-
-	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
-	}
-
 	switch (aid) {
 	case UMPF_ATTR_SYM: {
 		struct __ins_s *ins = get_state_object(ctx);
@@ -790,24 +764,16 @@ proc_INSTRMT_attr(__ctx_t ctx, const char *attr, const char *value)
 		break;
 	}
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
 }
 
 static void
-proc_QTY_attr(__ctx_t ctx, const char *attr, const char *value)
+proc_QTY_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 {
-	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	struct __ins_qty_s *iq = get_state_object(ctx);
-
-	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
-	}
 
 	switch (aid) {
 	case UMPF_ATTR_TYP:
@@ -823,24 +789,16 @@ proc_QTY_attr(__ctx_t ctx, const char *attr, const char *value)
 		/* ignored */
 		break;
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
 }
 
 static void
-proc_SEC_DEF_all_attr(__ctx_t ctx, const char *attr, const char *value)
+proc_SEC_DEF_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 {
-	const char *rattr = tag_massage(attr);
-	const umpf_aid_t aid = sax_aid_from_attr(rattr);
 	umpf_msg_t msg = ctx->msg;
-
-	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
-		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
-		return;
-	}
 
 	switch (aid) {
 	case UMPF_ATTR_TXT:
@@ -850,6 +808,80 @@ proc_SEC_DEF_all_attr(__ctx_t ctx, const char *attr, const char *value)
 		/* ignored */
 		break;
 	default:
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
+		break;
+	}
+	return;
+}
+
+static void
+proc_ALLOC_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
+{
+	umpf_msg_t msg = ctx->msg;
+	struct __ins_qty_s *qty = get_state_object(ctx);
+
+	switch (aid) {
+	case UMPF_ATTR_ID:
+	case UMPF_ATTR_TYP:
+	case UMPF_ATTR_TRD_DT:
+		/* ignored */
+		break;
+	case UMPF_ATTR_TRANS_TYP:
+		if (value && value[0] == '0' && value[1] == '\0') {
+			break;
+		}
+		UMPF_DEBUG(PFIXML_PRE " WARN: trans type != 0\n");
+		break;
+	case UMPF_ATTR_SIDE:
+		if (value == NULL || value[1] != '\0') {
+			goto warn;
+		}
+		switch (value[0]) {
+		case '\0':
+		case '1':
+		case '3':
+			qty->qsd->sd = QSIDE_OPEN_LONG;
+			break;
+		case '2':
+		case '4':
+			qty->qsd->sd = QSIDE_CLOSE_LONG;
+			break;
+		case '5':
+		case '6':
+			/* sell short (exempt) */
+			qty->qsd->sd = QSIDE_OPEN_SHORT;
+			break;
+		case 'X':
+			/* fucking FIXML has no field to denote
+			 * closing of short positions */
+			qty->qsd->sd = QSIDE_CLOSE_SHORT;
+			break;
+		default:
+		warn:
+			qty->qsd->sd = QSIDE_UNK;
+			UMPF_DEBUG(PFIXML_PRE " WARN: cannot interpret side\n");
+			break;
+		}
+		break;
+
+	case UMPF_ATTR_SETTL_DT:
+		msg->pf.clr_dt = get_zulu(value);
+		break;
+	case UMPF_ATTR_QTY:
+		qty->qsd->pos = strtod(value, NULL);
+		break;
+	case UMPF_ATTR_ACCT:
+		if (msg->pf.name) {
+			/* only instantiate once */
+			break;
+		}
+		msg->pf.name = unquot(value);
+		break;
+	case UMPF_ATTR_TXN_TM:
+		msg->pf.stamp = get_zulu(value);
+		break;
+	default:
+		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
@@ -859,24 +891,18 @@ proc_SEC_DEF_all_attr(__ctx_t ctx, const char *attr, const char *value)
 static void
 sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 {
+	umpf_msg_t msg = ctx->msg;
 
-	umpf_msg_t msg;
+	assert(ctx->msg != NULL);
+	assert(get_state_otype(ctx) == UMPF_TAG_FIXML);
 
-	if (UNLIKELY(ctx->msg != NULL)) {
-		return;
-	} else if (UNLIKELY(get_state_otype(ctx) != UMPF_TAG_FIXML)) {
-		return;
-	}
-
-	/* generate a massage */
-	ctx->msg = msg = calloc(1, sizeof(*msg));
 	/* sigh, subtle differences */
 	switch (tid) {
 	case UMPF_TAG_REQ_FOR_POSS:
 		umpf_set_msg_type(msg, UMPF_MSG_GET_PF);
 		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
-			proc_REQ_FOR_POSS_attr(
-				ctx, attrs[j], attrs[j + 1]);
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_REQ_FOR_POSS_attr(ctx, aid, attrs[j + 1]);
 		}
 		(void)push_state(ctx, tid, msg);
 		break;
@@ -884,8 +910,8 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 	case UMPF_TAG_REQ_FOR_POSS_ACK:
 		umpf_set_msg_type(msg, UMPF_MSG_SET_PF);
 		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
-			proc_REQ_FOR_POSS_ACK_attr(
-				ctx, attrs[j], attrs[j + 1]);
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_REQ_FOR_POSS_ACK_attr(ctx, aid, attrs[j + 1]);
 		}
 		if (msg->pf.nposs > 0) {
 			size_t iqsz =
@@ -905,8 +931,8 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 	case UMPF_TAG_RGST_INSTRCTNS_RSP:
 		umpf_set_msg_type(msg, UMPF_MSG_GET_DESCR);
 		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
-			proc_RGST_INSTRCTNS_RSP_attr(
-				ctx, attrs[j], attrs[j + 1]);
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_RGST_INSTRCTNS_RSP_attr(ctx, aid, attrs[j + 1]);
 		}
 		(void)push_state(ctx, tid, msg);
 		break;
@@ -914,7 +940,8 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 	case UMPF_TAG_SEC_DEF_REQ:
 		umpf_set_msg_type(msg, UMPF_MSG_GET_SEC);
 		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
-			proc_SEC_DEF_all_attr(ctx, attrs[j], attrs[j + 1]);
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_SEC_DEF_all_attr(ctx, aid, attrs[j + 1]);
 		}
 		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
 		break;
@@ -922,7 +949,8 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 	case UMPF_TAG_SEC_DEF_UPD:
 		umpf_set_msg_type(msg, UMPF_MSG_SET_SEC);
 		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
-			proc_SEC_DEF_all_attr(ctx, attrs[j], attrs[j + 1]);
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_SEC_DEF_all_attr(ctx, aid, attrs[j + 1]);
 		}
 		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
 		break;
@@ -930,11 +958,26 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 	case UMPF_TAG_SEC_DEF:
 		umpf_set_msg_type(msg, UMPF_MSG_NEW_SEC);
 		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
-			proc_SEC_DEF_all_attr(ctx, attrs[j], attrs[j + 1]);
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_SEC_DEF_all_attr(ctx, aid, attrs[j + 1]);
 		}
 		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
 		break;
 
+	case UMPF_TAG_ALLOC_INSTRCTN: {
+		/* for the instrument guy and the attr code */
+		struct __ins_qty_s *iq = NULL;
+
+		umpf_set_msg_type(msg, UMPF_MSG_PATCH);
+		ctx->msg = msg = umpf_msg_add_pos(msg, 1);
+		iq = msg->pf.poss + msg->pf.nposs - 1;
+		(void)push_state(ctx, tid, iq);
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_ALLOC_all_attr(ctx, aid, attrs[j + 1]);
+		}
+		break;
+	}
 	default:
 		break;
 	}
@@ -960,6 +1003,8 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 		for (int i = 0; attrs[i] != NULL; i += 2) {
 			proc_FIXML_attr(ctx, attrs[i], attrs[i + 1]);
 		}
+		/* generate a massage */
+		ctx->msg = calloc(1, sizeof(*ctx->msg));
 		push_state(ctx, tid, ctx->msg);
 		break;
 	}
@@ -981,6 +1026,10 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 		/* translate to new_sec */
 	case UMPF_TAG_SEC_DEF_UPD:
 		/* translate to set_sec */
+	case UMPF_TAG_ALLOC_INSTRCTN:
+		/* translate to apply */
+	case UMPF_TAG_ALLOC_INSTRCTN_ACK:
+		/* translate to apply */
 		sax_bo_top_level_elt(ctx, tid, attrs);
 		break;
 
@@ -1017,12 +1066,9 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 		case UMPF_TAG_REQ_FOR_POSS_ACK:
 			(void)push_state(ctx, tid, msg);
 
-			if (UNLIKELY(attrs == NULL)) {
-				break;
-			}
-
-			for (size_t j = 0; attrs[j] != NULL; j += 2) {
-				proc_PTY_attr(ctx, attrs[j], attrs[j + 1]);
+			for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+				const umpf_aid_t a = check_attr(ctx, attrs[j]);
+				proc_PTY_attr(ctx, a, attrs[j + 1]);
 			}
 			break;
 		default:
@@ -1048,11 +1094,13 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 		case UMPF_TAG_SEC_DEF:
 		case UMPF_TAG_SEC_DEF_REQ:
 		case UMPF_TAG_SEC_DEF_UPD:
+		case UMPF_TAG_ALLOC_INSTRCTN:
 			/* we use the fact that __ins_qty_s == __ins_s
 			 * in posrpt mode and in sec-def mode we rely
 			 * on the right push there */
-			for (int j = 0; attrs[j] != NULL; j += 2) {
-				proc_INSTRMT_attr(ctx, attrs[j], attrs[j + 1]);
+			for (int j = 0; attrs && attrs[j] != NULL; j += 2) {
+				const umpf_aid_t a = check_attr(ctx, attrs[j]);
+				proc_INSTRMT_attr(ctx, a, attrs[j + 1]);
 			}
 			break;
 		default:
@@ -1074,22 +1122,28 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 			break;
 		}
 
-		if (UNLIKELY(attrs == NULL)) {
-			break;
-		}
-
-		for (int j = 0; attrs[j] != NULL; j += 2) {
-			proc_QTY_attr(ctx, attrs[j], attrs[j + 1]);
+		for (int j = 0; attrs && attrs[j] != NULL; j += 2) {
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_QTY_attr(ctx, aid, attrs[j + 1]);
 		}
 		break;
 	}
 
 	case UMPF_TAG_AMT:
 		/* unsupported */
+		UMPF_DEBUG(PFIXML_PRE ": Amt tags are currently unsupported\n");
 		break;
 
 	case UMPF_TAG_SEC_XML:
 		/* it's just a no-op */
+		break;
+
+	case UMPF_TAG_ALLOC:
+		/* just go through the attrs again */
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_ALLOC_all_attr(ctx, aid, attrs[j + 1]);
+		}
 		break;
 
 	default:
@@ -1126,6 +1180,7 @@ sax_eo_FIXML_elt(__ctx_t ctx, const char *name)
 	case UMPF_TAG_SEC_DEF:
 	case UMPF_TAG_SEC_DEF_REQ:
 	case UMPF_TAG_SEC_DEF_UPD:
+	case UMPF_TAG_ALLOC_INSTRCTN:
 		pop_state(ctx);
 		break;
 	case UMPF_TAG_FIXML:
@@ -1442,9 +1497,11 @@ final_blob_p(__ctx_t ctx)
 	return BLOB_M_PLZ;
 }
 
-static void
+static int
 parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
+	int res;
+
 	switch (get_state_otype(ctx)) {
 		size_t cns;
 	case UMPF_TAG_GLUE:
@@ -1456,22 +1513,20 @@ parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 			buf += cns;
 			bsz -= cns;
 		} else {
-			break;
+			res = 0;
 		}
 		UMPF_DEBUG(PFIXML_PRE ": GLUE consumed %zu\n", cns);
 	default:
-		xmlParseChunk(ctx->pp, buf, bsz, bsz == 0);
-		break;
+		res = (xmlParseChunk(ctx->pp, buf, bsz, bsz == 0) == 0) - 1;
 	}
-	return;
+	return res;
 }
 
-static void
+static int
 parse_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
 	ctx->pp = xmlCreatePushParserCtxt(ctx->hdl, ctx, buf, 0, NULL);
-	parse_more_blob(ctx, buf, bsz);
-	return;
+	return parse_more_blob(ctx, buf, bsz);
 }
 
 
@@ -1584,10 +1639,15 @@ ctx_deinitted_p(__ctx_t ctx)
 }
 
 static umpf_msg_t
-check_ret(__ctx_t ctx)
+check_ret(__ctx_t ctx, int ret)
 {
 	umpf_msg_t res;
-	int ret = final_blob_p(ctx);
+
+	if (ret == 0) {
+		ret = final_blob_p(ctx);
+	} else {
+		ret = BLOB_ERROR;
+	}
 
 	switch (ret) {
 	case BLOB_READY:
@@ -1608,21 +1668,19 @@ check_ret(__ctx_t ctx)
 	return res;
 }
 
-static void
+static umpf_msg_t
 __umpf_parse_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
 	init(ctx);
 	UMPF_DEBUG(PFIXML_PRE ": parsing blob of size %zu\n", bsz);
-	parse_blob(ctx, buf, bsz);
-	return;
+	return check_ret(ctx, parse_blob(ctx, buf, bsz));
 }
 
-static void
+static umpf_msg_t
 __umpf_parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
 	UMPF_DEBUG(PFIXML_PRE ": parsing more blob of size %zu\n", bsz);
-	parse_more_blob(ctx, buf, bsz);
-	return;
+	return check_ret(ctx, parse_more_blob(ctx, buf, bsz));
 }
 
 umpf_msg_t
@@ -1633,11 +1691,11 @@ umpf_parse_blob(umpf_ctx_t *ctx, const char *buf, size_t bsz)
 
 	if (UNLIKELY(*ctx == NULL)) {
 		*ctx = __ctx;
-		__umpf_parse_blob(*ctx, buf, bsz);
+		res = __umpf_parse_blob(*ctx, buf, bsz);
 	} else {
-		__umpf_parse_more_blob(*ctx, buf, bsz);
+		res = __umpf_parse_more_blob(*ctx, buf, bsz);
 	}
-	res = check_ret(*ctx);
+
 	if (ctx_deinitted_p(*ctx)) {
 		*ctx = NULL;
 	}
@@ -1651,12 +1709,11 @@ umpf_parse_blob_r(umpf_ctx_t *ctx, const char *buf, size_t bsz)
 
 	if (UNLIKELY(*ctx == NULL)) {
 		*ctx = calloc(1, sizeof(struct __ctx_s));
-		__umpf_parse_blob(*ctx, buf, bsz);
+		res = __umpf_parse_blob(*ctx, buf, bsz);
 	} else {
-		__umpf_parse_more_blob(*ctx, buf, bsz);
+		res = __umpf_parse_more_blob(*ctx, buf, bsz);
 	}
 
-	res = check_ret(*ctx);
 	if (ctx_deinitted_p(*ctx)) {
 		free_ctx(*ctx);
 		*ctx = NULL;
