@@ -731,14 +731,20 @@ __get_pf_id(dbconn_t conn, const char *mnemo)
 SELECT portfolio_id FROM aou_umpf_portfolio WHERE short = ?";
 	static const char qry2[] = "\
 INSERT INTO aou_umpf_portfolio (short) VALUES (?)";
-	size_t mnlen = strlen(mnemo);
+	size_t mnlen;
 	uint64_t pf_id = 0UL;
 	dbstmt_t stmt;
-	struct __bind_s b[1] = {{
-			.type = BE_BIND_TYPE_TEXT,
-			.txt = mnemo,
-			.len = mnlen,
-		}};
+	struct __bind_s b[1];
+
+	if (UNLIKELY(mnemo == NULL)) {
+		return 0;
+	}
+
+	mnlen = strlen(mnemo);
+	/* assign bind vals */
+	b->type = BE_BIND_TYPE_TEXT;
+	b->txt = mnemo;
+	b->len = mnlen;
 
 	if ((stmt = be_sql_prep(conn, qry1, countof_m1(qry1))) == NULL) {
 		return 0UL;
@@ -824,18 +830,23 @@ __get_sec_id(dbconn_t conn, uint64_t pf_id, const char *mnemo)
 SELECT security_id FROM aou_umpf_security WHERE portfolio_id = ? AND short = ?";
 	static const char qry2[] = "\
 INSERT INTO aou_umpf_security (portfolio_id, short) VALUES (?, ?)";
-	size_t mnlen = strlen(mnemo);
+	size_t mnlen;
 	uint64_t sec_id = 0UL;
 	dbstmt_t stmt;
 	/* for our parameter binding later on */
-	struct __bind_s b[2] = {{
-			.type = BE_BIND_TYPE_INT64,
-			.i64 = pf_id,
-		}, {
-			.type = BE_BIND_TYPE_TEXT,
-			.txt = mnemo,
-			.len = mnlen,
-		}};
+	struct __bind_s b[2];
+
+	if (UNLIKELY(mnemo == NULL)) {
+		return 0UL;
+	}
+
+	mnlen = strlen(mnemo);
+	/* fill in bind struct */
+	b[0].type = BE_BIND_TYPE_INT64;
+	b[0].i64 = pf_id;
+	b[1].type = BE_BIND_TYPE_TEXT;
+	b[1].txt = mnemo;
+	b[1].len = mnlen;
 
 	if ((stmt = be_sql_prep(conn, qry1, countof_m1(qry1))) == NULL) {
 		return 0UL;
