@@ -422,12 +422,14 @@ pretty_print(umpf_msg_t msg)
 {
 	switch (umpf_get_msg_type(msg)) {
 	case UMPF_MSG_NEW_PF:
-	case UMPF_MSG_SET_DESCR:
+	case UMPF_MSG_SET_DESCR: {
+		const char *data;
+
 		fputs(":portfolio \"", stdout);
 		fputs(msg->new_pf.name, stdout);
 		fputs("\"\n", stdout);
-		{
-			const char *data = msg->new_pf.satellite->data;
+
+		if (LIKELY((data = msg->new_pf.satellite->data) != NULL)) {
 			const size_t size = msg->new_pf.satellite->size;
 			fwrite(data, size, 1, stdout);
 			if (data[size - 1] != '\n') {
@@ -435,6 +437,7 @@ pretty_print(umpf_msg_t msg)
 			}
 		}
 		break;
+	}
 	case UMPF_MSG_GET_DESCR:
 		fputs(":portfolio \"", stdout);
 		fputs(msg->new_pf.name, stdout);
