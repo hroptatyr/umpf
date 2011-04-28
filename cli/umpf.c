@@ -110,7 +110,7 @@ struct __get_pf_clo_s {
 struct __set_sec_clo_s {
 	const char *mnemo;
 	const char *pf;
-	const char *file;
+	const char *dfile;
 	const char *descr;
 };
 
@@ -589,17 +589,47 @@ make_umpf_new_pf_msg(const char *mnemo, const char *satell, size_t ssize)
 }
 
 static umpf_msg_t
-make_umpf_new_sec_msg(
-	const char *pf, const char *sym, const char *sat, size_t satlen)
+make_umpf_new_sec_msg(const char *pf, const char *sym, void *clo)
 {
+	struct __set_sec_clo_s *ss = clo;
 	umpf_msg_t res = make_umpf_msg();
+
 	umpf_set_msg_type(res, UMPF_MSG_NEW_SEC);
 	res->new_sec.ins->sym = strdup(sym);
 	res->new_sec.pf_mnemo = strdup(pf);
-	if (LIKELY(sat != NULL)) {
+
+	/* deal with satellite data, prefer descr over dfile */
+	if (LIKELY(ss->descr != NULL)) {
+		const char *sat = ss->descr;
+		const size_t satlen = strlen(sat);
 		res->new_sec.satellite->data =
 			malloc((res->new_sec.satellite->size = satlen));
 		memcpy(res->new_sec.satellite->data, sat, satlen);
+
+	} else if (LIKELY(ss->dfile != NULL)) {
+		struct stat st = {0};
+		int fd;
+
+		if (stat(ss->dfile, &st) < 0) {
+			;
+		} else if ((fd = open(ss->dfile, O_RDONLY)) < 0) {
+			;
+		} else {
+			const size_t fsz = st.st_size;
+
+			res->new_sec.satellite->data =
+				malloc((res->new_sec.satellite->size = fsz));
+			/* read them whole file into the satellite*/
+			for (ssize_t off = 0, nrd;
+			     (nrd = read(
+				      fd,
+				      res->new_sec.satellite->data + off,
+				      fsz - off)) > 0 && nrd < (ssize_t)fsz;
+			     off += nrd);
+
+			/* brilliant, finished we iz */
+			close(fd);
+		}
 	}
 	return res;
 }
@@ -885,19 +915,15 @@ umpf_process(struct __clo_s *clo)
 	}
 	case UMPF_CMD_NEW_SEC: {
 		const char *mnemo = clo->set_sec->mnemo;
-		const char *descr = clo->set_sec->descr;
-		const size_t dsize = descr ? strlen(descr) : 0;
 		const char *pf_mnemo = clo->set_sec->pf;
-		msg = make_umpf_new_sec_msg(pf_mnemo, mnemo, descr, dsize);
+		msg = make_umpf_new_sec_msg(pf_mnemo, mnemo, clo->set_sec);
 		break;
 	}
 	case UMPF_CMD_SET_SEC: {
 		const char *mnemo = clo->set_sec->mnemo;
 		const char *pf_mnemo = clo->set_sec->pf;
-		const char *descr = clo->set_sec->descr;
-		const size_t dsize = descr ? strlen(descr) : 0;
 		/* call __new_sec_msg() and fiddle with the msg type later */
-		msg = make_umpf_new_sec_msg(pf_mnemo, mnemo, descr, dsize);
+		msg = make_umpf_new_sec_msg(pf_mnemo, mnemo, clo->set_sec);
 		umpf_set_msg_type(msg, UMPF_MSG_SET_SEC);
 		break;
 	}
@@ -1045,6 +1071,10 @@ parse_set_sec_args(struct __clo_s *clo, int argc, char *argv[])
 				clo->set_sec->pf = __get_val(&i, 2, argv);
 			} else if (strncmp(p, "-pf", 3) == 0) {
 				clo->set_sec->pf = __get_val(&i, 4, argv);
+			} else if (*p == 'f') {
+				clo->set_sec->dfile = __get_val(&i, 2, argv);
+			} else if (strncmp(p, "-file", 5) == 0) {
+				clo->set_sec->dfile = __get_val(&i, 6, argv);
 			}
 		} else if (clo->set_sec->mnemo == NULL) {
 			/* must be the name then */
@@ -1234,7 +1264,7 @@ check__sec_args(struct __clo_s *clo)
 		fputs("security mnemonic must not be NULL\n", stderr);
 		return -1;
 	}
-	if (clo->set_sec->file) {
+	if (clo->set_sec->dfile) {
 		/* check if file exists */
 	}
 	return 0;
