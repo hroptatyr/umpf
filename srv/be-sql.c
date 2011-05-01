@@ -111,8 +111,10 @@ static char gbuf[4096];
 static dbconn_t
 be_mysql_open(const char *h, const char *u, const char *pw, const char *sch)
 {
-	MYSQL *conn;
-	conn = mysql_init(NULL);
+	MYSQL *conn = mysql_init(NULL);
+	my_bool tmp = true;
+
+	mysql_options(conn, MYSQL_OPT_RECONNECT, &tmp);
 	if (!mysql_real_connect(conn, h, u, pw, sch, 0, NULL, 0)) {
 		UMPF_DEBUG(BE_SQL "failed to connect\n");
 		mysql_close(conn);
