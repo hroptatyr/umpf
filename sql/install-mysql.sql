@@ -61,8 +61,8 @@ CREATE TABLE IF NOT EXISTS `aou_umpf_security` (
 CREATE TABLE IF NOT EXISTS `aou_umpf_position` (
 	tag_id INTEGER NOT NULL,
 	security_id INTEGER NOT NULL,
-	long_qty DECIMAL(18,9),
-	short_qty DECIMAL(18,9),
+	long_qty DECIMAL(36,9),
+	short_qty DECIMAL(36,9),
 	PRIMARY KEY (`tag_id`, `security_id`),
 	FOREIGN KEY (`tag_id`)
 		REFERENCES `aou_umpf_tag` (`tag_id`)
