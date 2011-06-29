@@ -70,6 +70,38 @@ CREATE TABLE IF NOT EXISTS "aou_umpf_position" (
 		ON DELETE CASCADE ON UPDATE CASCADE
 );
 
+-- position groups
+-- this can be used to group a bunch of security positions together
+-- for instance to reflect counter positions and fee positions or
+-- interest
+-- dimension table
+CREATE TABLE IF NOT EXISTS "aou_umpf_posgrp" (
+	posgrp_id INTEGER NOT NULL ON CONFLICT ROLLBACK,
+	portfolio_id INTEGER NOT NULL ON CONFLICT ROLLBACK,
+	-- used to elaborate on the security if need be
+	description TEXT,
+	PRIMARY KEY ("posgrp_id") ON CONFLICT ROLLBACK,
+	FOREIGN KEY ("portfolio_id")
+		REFERENCES "aou_umpf_portfolio" ("portfolio_id")
+		ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- fact table
+CREATE TABLE IF NOT EXISTS "aou_umpf_posgrp_fact" (
+	posgrp_id INTEGER NOT NULL ON CONFLICT ROLLBACK,
+	security_id INTEGER NOT NULL ON CONFLICT ROLLBACK,
+	flavour TEXT(64),
+	PRIMARY KEY ("posgrp_id", "security_id") ON CONFLICT ROLLBACK,
+	FOREIGN KEY ("posgrp_id")
+		REFERENCES "aou_umpf_posgrp" ("posgrp_id")
+		ON DELETE CASCADE ON UPDATE CASCADE,
+	FOREIGN KEY ("security_id")
+		REFERENCES "aou_umpf_security" ("security_id")
+		ON DELETE CASCADE ON UPDATE CASCADE
+);
+CREATE INDEX IF NOT EXISTS "aou_umpf_posgrp_fact_flavour"
+	ON "aou_umpf_posgrp_fact" ("flavour");
+
 -- last portfolio
 -- keeps track of the last tag in chronological order
 CREATE TABLE IF NOT EXISTS "aou_umpf_last" (
