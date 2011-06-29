@@ -50,6 +50,7 @@
 /* network stuff */
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <sys/un.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 /* epoll stuff */
@@ -238,18 +239,38 @@ __connect(unsigned int pref_fam, const char *host, const uint16_t port)
 {
 #define AS_V4(x)	((struct sockaddr_in*)(x))
 #define AS_V6(x)	((struct sockaddr_in6*)(x))
+#define AS_UN(x)	((struct sockaddr_un*)(x))
 	struct hostent *hp;
 	struct sockaddr_storage sa[1];
 	volatile int sock;
+
+	/* rinse */
+	memset(sa, 0, sizeof(*sa));
 
 #if defined __INTEL_COMPILER
 # pragma warning (disable:2259)
 #endif	/* __INTEL_COMPILER */
 	switch (pref_fam) {
+	case PF_UNIX:
+		if ((sock = socket(PF_LOCAL, SOCK_DGRAM, 0)) >= 0) {
+			size_t unsz = sizeof(AS_UN(sa)->sun_path);
+
+			AS_UN(sa)->sun_family = AF_LOCAL;
+			strncpy(AS_UN(sa)->sun_path, host, unsz);
+			AS_UN(sa)->sun_path[unsz - 1] = '\0';
+			unsz = offsetof(struct sockaddr_un, sun_path) +
+				strlen(AS_UN(sa)->sun_path) + 1;
+
+			/* try connect */
+			if (connect(sock, (void*)sa, unsz) >= 0) {
+				break;
+			}
+			close(sock);
+		}
+		/* try v6 next */
 	case PF_UNSPEC:
 	case PF_INET6:
 		/* try ip6 first ... */
-		memset(sa, 0, sizeof(*sa));
 		if ((hp = gethostbyname2(host, AF_INET6)) != NULL &&
 		    (sock = socket(PF_INET6, SOCK_STREAM, IPPROTO_IP)) >= 0) {
 			AS_V6(sa)->sin6_family = AF_INET6;
@@ -266,7 +287,6 @@ __connect(unsigned int pref_fam, const char *host, const uint16_t port)
 		}
 		/* ... then fall back to ip4 */
 	case PF_INET:
-		memset(sa, 0, sizeof(*sa));
 		if ((hp = gethostbyname2(host, AF_INET)) != NULL &&
 		    (sock = socket(PF_INET, SOCK_STREAM, IPPROTO_IP)) >= 0) {
 			AS_V4(sa)->sin_family = AF_INET;
@@ -1027,6 +1047,10 @@ parse_host_args(struct __clo_s *clo, char *argv[])
 	if ((p = strchr(clo->host, ':')) != NULL) {
 		*p = '\0';
 		clo->port = strtoul(p + 1, NULL, 10);
+	} else {
+		/* must be a domain socket */
+		clo->port = 0;
+		clo->pref_fam = PF_UNIX;
 	}
 	return;
 }
