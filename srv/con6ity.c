@@ -305,7 +305,7 @@ inco_cb(EV_P_ ev_io *w, int UNUSED(re))
 
 	UMPF_DEBUG(C10Y_PRE ": they got back to us...");
 	if ((ns = accept(w->fd, (struct sockaddr*)&sa, &sa_size)) < 0) {
-		UMPF_DBGCONT("accept() failed\n");
+		UMPF_DBGCONT("accept() failed %s\n", strerror(errno));
 		return;
 	}
 
