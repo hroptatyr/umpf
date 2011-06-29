@@ -252,7 +252,7 @@ __connect(unsigned int pref_fam, const char *host, const uint16_t port)
 #endif	/* __INTEL_COMPILER */
 	switch (pref_fam) {
 	case PF_UNIX:
-		if ((sock = socket(PF_LOCAL, SOCK_DGRAM, 0)) >= 0) {
+		if ((sock = socket(PF_LOCAL, SOCK_STREAM, 0)) >= 0) {
 			size_t unsz = sizeof(AS_UN(sa)->sun_path);
 
 			AS_UN(sa)->sun_family = AF_LOCAL;
