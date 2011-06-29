@@ -214,7 +214,8 @@ conn_listener_uds(const char *sock_path)
 	/* just unlink the socket */
 	unlink(sock_path);
 	/* we used to retry upon failure, but who cares */
-	if (bind(s, (struct sockaddr*)&__s, sz) < 0) {
+	if (bind(s, (struct sockaddr*)&__s, sz) < 0 ||
+	    listen(s, 2) < 0) {
 		UMPF_DEBUG(C10Y_PRE ": bind() failed: %s\n", strerror(errno));
 		close(s);
 		return -1;
