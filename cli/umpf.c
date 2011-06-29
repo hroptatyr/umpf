@@ -85,6 +85,7 @@ typedef enum {
 typedef enum {
 	UMPF_CMD_UNK,
 	UMPF_CMD_VERSION,
+	UMPF_CMD_LIST_PF,
 	UMPF_CMD_NEW_PF,
 	UMPF_CMD_GET_PF,
 	UMPF_CMD_SET_PF,
@@ -182,6 +183,8 @@ Options common to all commands:\n\
                         Also the form `hostname:port' is supported.\n\
 \n\
 Supported commands:\n\
+\n\
+  list-pf                    List all available portfolios\n\
 \n\
   new-pf [OPTIONS] NAME      Register a new portfolio NAME\n\
     -d, --descr=STRING       Use description from STRING\n\
@@ -664,6 +667,14 @@ make_umpf_get_pf_msg(const char *mnemo)
 }
 
 static umpf_msg_t
+make_umpf_list_pf_msg(void)
+{
+	umpf_msg_t res = make_umpf_msg();
+	umpf_set_msg_type(res, UMPF_MSG_LST_PF);
+	return res;
+}
+
+static umpf_msg_t
 make_umpf_get_poss_msg(const char *mnemo, const time_t stamp)
 {
 	umpf_msg_t res = make_umpf_msg();
@@ -923,6 +934,10 @@ umpf_process(struct __clo_s *clo)
 	volatile int sock;
 
 	switch (clo->cmd) {
+	case UMPF_CMD_LIST_PF: {
+		msg = make_umpf_list_pf_msg();
+		break;
+	}
 	case UMPF_CMD_SET_PF:
 		/* FIXML can't distinguish between new_pf and set_pf,
 		 * so we just use NEW_PF for this */
@@ -1240,6 +1255,13 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 			}
 			break;
 		}
+		case 'l':
+			/* list-pf */
+			if (strcmp(p, "ist-pf") == 0) {
+				clo->cmd = UMPF_CMD_LIST_PF;
+				continue;
+			}
+			break;
 		default:
 			break;
 		}
@@ -1262,6 +1284,12 @@ print_version(void)
 {
 	fputs(VER, stdout);
 	return;
+}
+
+static int
+check__ls_pf_args(struct __clo_s *UNUSED(clo))
+{
+	return 0;
 }
 
 static int
@@ -1338,6 +1366,12 @@ main(int argc, char *argv[])
 	case UMPF_CMD_VERSION:
 		print_version();
 		return 0;
+	case UMPF_CMD_LIST_PF:
+		if (check__ls_pf_args(&argi)) {
+			print_usage(argi.cmd);
+			return 1;
+		}
+		break;
 	case UMPF_CMD_NEW_PF:
 	case UMPF_CMD_GET_PF:
 	case UMPF_CMD_SET_PF:
@@ -1371,4 +1405,4 @@ main(int argc, char *argv[])
 	return 0;
 }
 
-/* umpf-new-pf.c ends here */
+/* umpf.c ends here */

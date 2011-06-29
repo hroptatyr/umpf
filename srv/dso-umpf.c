@@ -95,6 +95,25 @@ get_cb(char *mnemo, double l, double s, void *clo)
 }
 
 static int
+lst_cb(char *mnemo, void *clo)
+{
+	umpf_msg_t *msg = clo;
+
+	UMPF_DEBUG(MOD_PRE ": %s\n", mnemo);
+	if (((*msg)->lst_pf.npfs % 16) == 0) {
+		/* resize */
+		*msg = realloc(
+			*msg,
+			sizeof(**msg) +
+			((*msg)->lst_pf.npfs + 16) *
+			sizeof(*(*msg)->lst_pf.pfs));
+	}
+	(*msg)->lst_pf.pfs[(*msg)->lst_pf.npfs++] = mnemo;
+	/* don't stop on our kind, request more grub */
+	return 0;
+}
+
+static int
 wr_fin_cb(umpf_conn_t ctx)
 {
 	char *buf = get_fd_data(ctx);
@@ -145,6 +164,15 @@ interpret_msg(char **buf, umpf_msg_t msg)
 		len = umpf_seria_msg(buf, 0, msg);
 		break;
 	}
+	case UMPF_MSG_LST_PF:
+		UMPF_DEBUG(MOD_PRE ": lst_pf();\n");
+		be_sql_lst_pf(umpf_dbconn, lst_cb, &msg);
+
+		/* reuse the message to send the answer */
+		msg->hdr.mt++;
+		len = umpf_seria_msg(buf, 0, msg);
+		break;
+
 	case UMPF_MSG_GET_PF: {
 		const char *mnemo;
 		time_t stamp;
