@@ -36,6 +36,7 @@ struct __wbuf_s {
 		WBUF_FL_KEEP = 2,
 	} flags;
 	int(*notify_cb)(umpf_conn_t);
+	void *neigh;
 };
 
 
@@ -279,6 +280,8 @@ clo:
 	if (wb->flags & WBUF_FL_KEEP) {
 		free(wb);
 	}
+	/* remove ourselves from our neighbour's slot */
+	put_fd_data(wb->neigh, NULL);
 	return;
 }
 
@@ -287,6 +290,7 @@ data_cb(EV_P_ ev_io *w, int UNUSED(re))
 {
 	char buf[4096];
 	ssize_t nrd;
+	void *ctx;
 
 	if ((nrd = read(w->fd, buf, sizeof(buf))) <= 0) {
 		goto clo;
@@ -297,6 +301,12 @@ data_cb(EV_P_ ev_io *w, int UNUSED(re))
 	}
 	return;
 clo:
+	if ((ctx = get_fd_data(w)) != NULL) {
+		struct __wbuf_s *wb = ctx;
+		UMPF_DEBUG(C10Y_PRE ": unfinished business on %p\n", ctx);
+		;
+		return;
+	}
 	UMPF_DEBUG(C10Y_PRE ": %zd data, closing socket %d\n", nrd, w->fd);
 	handle_close(w);
 	clo_wio(EV_A_ w);
@@ -389,6 +399,7 @@ write_soon(umpf_conn_t conn, const char *buf, size_t len, int(*cb)(umpf_conn_t))
 	wb->nwr = 0UL;
 	wb->flags = WBUF_FL_NIL;
 	wb->notify_cb = cb;
+	wb->neigh = conn;
 	
 	/* finally we pretend interest in this socket */
         ev_io_init(wb->io, writ_cb, ((FD_MAP_TYPE)conn)->fd, EV_WRITE);
