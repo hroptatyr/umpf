@@ -520,6 +520,26 @@ print_rgst_instrctns(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 }
 
 static void
+print_rgst_instrctns_many(__ctx_t ctx, umpf_msg_t msg, size_t indent)
+{
+/* special case for the portfolio list */
+	print_indent(ctx, indent);
+	sputs(ctx, "<RgstInstrctns TransTyp=\"0\">\n");
+
+	for (size_t i = 0; i < msg->lst_pf.npfs; i++) {
+		static struct __satell_s empty = {
+			.data = NULL,
+			.size = 0UL,
+		};
+		print_rg_dtl(ctx, msg->lst_pf.pfs[i], empty, indent + 2);
+	}
+
+	print_indent(ctx, indent);
+	sputs(ctx, "</RgstInstrctns>\n");
+	return;
+}
+
+static void
 print_rgst_instrctns_rsp(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 {
 	print_indent(ctx, indent);
@@ -822,6 +842,8 @@ print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 
 	switch (msg->hdr.mt) {
 	case UMPF_MSG_LST_PF * 2 + 1:
+		print_rgst_instrctns_many(ctx, msg, indent + 2);
+		break;
 	case UMPF_MSG_NEW_PF * 2:
 	case UMPF_MSG_SET_DESCR * 2:
 	case UMPF_MSG_GET_DESCR * 2 + 1:

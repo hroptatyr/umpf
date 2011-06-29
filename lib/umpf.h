@@ -123,6 +123,14 @@ struct umpf_msg_new_pf_s {
 	struct __satell_s satellite[1];
 };
 
+/* RgstInstrctnsRsp without reg name -> lst_pf */
+struct umpf_msg_lst_pf_s {
+	struct umpf_msg_hdr_s hdr;
+
+	size_t npfs;
+	char *pfs[];
+};
+
 /* SecDefUpd -> new_sec */
 struct umpf_msg_new_sec_s {
 	struct umpf_msg_hdr_s hdr;
@@ -150,6 +158,7 @@ union umpf_msg_u {
 	struct umpf_msg_pf_s pf;
 	struct umpf_msg_new_pf_s new_pf;
 	struct umpf_msg_new_sec_s new_sec;
+	struct umpf_msg_lst_pf_s lst_pf;
 };
 
 

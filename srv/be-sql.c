@@ -1530,4 +1530,27 @@ be_sql_free_sec(dbconn_t UNUSED(conn), dbobj_t UNUSED(pf))
 	return;
 }
 
+DECLF void
+be_sql_lst_pf(dbconn_t conn, int(*cb)(char*, void*), void *clo)
+{
+	dbstmt_t stmt;
+	static const char qry[] = "SELECT `short` FROM `aou_umpf_portfolio`";
+
+	if ((stmt = be_sql_prep(conn, qry, countof_m1(qry))) == NULL) {
+		return;
+	}
+	/* execute */
+	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
+		struct __bind_s mb[1];
+
+		/* just assign the type wishes for the results */
+		mb[0].type = BE_BIND_TYPE_TEXT;
+
+		while (be_sql_fetch(conn, stmt, mb, countof(mb)) == 0 &&
+		       cb(mb[0].ptr, clo) == 0);
+	}
+	be_sql_fin(conn, stmt);
+	return;
+}
+
 /* be-sql.c ends here */

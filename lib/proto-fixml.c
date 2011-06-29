@@ -929,10 +929,15 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 		break;
 
 	case UMPF_TAG_RGST_INSTRCTNS_RSP:
-		umpf_set_msg_type(msg, UMPF_MSG_GET_DESCR);
 		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
 			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
 			proc_RGST_INSTRCTNS_RSP_attr(ctx, aid, attrs[j + 1]);
+		}
+		if (msg->new_pf.name) {
+			umpf_set_msg_type(msg, UMPF_MSG_GET_DESCR);
+		} else {
+			/* must be a list? */
+			umpf_set_msg_type(msg, UMPF_MSG_LST_PF);
 		}
 		(void)push_state(ctx, tid, msg);
 		break;
