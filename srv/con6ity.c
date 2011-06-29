@@ -191,7 +191,7 @@ conn_listener_uds(const char *sock_path)
 	volatile int s;
 	size_t sz;
 
-	if (LIKELY((s = socket(PF_LOCAL, SOCK_DGRAM, 0)) >= 0)) {
+	if (LIKELY((s = socket(PF_LOCAL, SOCK_STREAM, 0)) >= 0)) {
 		/* likely case upfront */
 		;
 	} else {
@@ -217,8 +217,17 @@ conn_listener_uds(const char *sock_path)
 	if (bind(s, (struct sockaddr*)&__s, sz) < 0) {
 		UMPF_DEBUG(C10Y_PRE ": bind() failed: %s\n", strerror(errno));
 		close(s);
+		unlink(sock_path);
 		return -1;
 	}
+	if (listen(s, 2) < 0) {
+		UMPF_DEBUG(C10Y_PRE ": listen() failed: %s\n", strerror(errno));
+		close(s);
+		unlink(sock_path);
+		return -1;
+	}
+	/* allow the whole world to connect to us */
+	chmod(sock_path, 0777);
 	return s;
 }
 
@@ -305,7 +314,7 @@ inco_cb(EV_P_ ev_io *w, int UNUSED(re))
 
 	UMPF_DEBUG(C10Y_PRE ": they got back to us...");
 	if ((ns = accept(w->fd, (struct sockaddr*)&sa, &sa_size)) < 0) {
-		UMPF_DBGCONT("accept() failed\n");
+		UMPF_DBGCONT("accept() failed %s\n", strerror(errno));
 		return;
 	}
 
