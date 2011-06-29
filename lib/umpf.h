@@ -52,6 +52,8 @@ typedef union umpf_msg_u *umpf_msg_t;
 /* message types */
 typedef enum {
 	UMPF_MSG_UNK,
+	/* portfolio transactions */
+	UMPF_MSG_LST_PF,
 	UMPF_MSG_NEW_PF,
 	UMPF_MSG_GET_PF,
 	UMPF_MSG_SET_PF,
