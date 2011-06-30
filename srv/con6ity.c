@@ -387,8 +387,13 @@ DECLF_W umpf_conn_t
 write_soon(umpf_conn_t conn, const char *buf, size_t len, int(*cb)(umpf_conn_t))
 {
 	struct __wbuf_s *wb;
+	ssize_t nwr;
+	int fd = ((FD_MAP_TYPE)conn)->fd;
 
+	/* check if request is trivial and try a test write */
 	if (buf == NULL || len == 0) {
+		return NULL;
+	} else if ((nwr = write(fd, buf, len)) == len) {
 		return NULL;
 	}
 	/* otherwise the user isn't so much a prick as we thought*/
@@ -396,13 +401,13 @@ write_soon(umpf_conn_t conn, const char *buf, size_t len, int(*cb)(umpf_conn_t))
 	/* fill in */
 	wb->cbuf = buf;
 	wb->len = len;
-	wb->nwr = 0UL;
+	wb->nwr = nwr > 0 ? nwr : 0UL;
 	wb->flags = WBUF_FL_NIL;
 	wb->notify_cb = cb;
 	wb->neigh = conn;
 	
 	/* finally we pretend interest in this socket */
-        ev_io_init(wb->io, writ_cb, ((FD_MAP_TYPE)conn)->fd, EV_WRITE);
+        ev_io_init(wb->io, writ_cb, fd, EV_WRITE);
         ev_io_start(gloop, wb->io);
 	return wb;
 }
