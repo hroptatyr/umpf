@@ -565,9 +565,12 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 				break;
 			}
 
-		} else if (ev & EPOLLOUT && (wrt < nsz)) {
-			/* write a bit of the message */
-			wrt += write_request(fd, buf + wrt, nsz - wrt);
+		} else if (ev & EPOLLOUT) {
+			/* have we got stuff to write out? */
+			if (wrt < nsz) {
+				/* write a bit of the message */
+				wrt += write_request(fd, buf + wrt, nsz - wrt);
+			}
 
 		} else {
 #if defined DEBUG_FLAG
