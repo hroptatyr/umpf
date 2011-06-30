@@ -350,7 +350,8 @@ interpret_msg(char **buf, umpf_msg_t msg)
 	}
 	default:
 		UMPF_DEBUG(MOD_PRE ": unknown message %u\n", msg->hdr.mt);
-		len = 0;
+		umpf_set_msg_type(msg, UMPF_MSG_UNK);
+		len = umpf_seria_msg(buf, 0, msg);
 		break;
 	}
 	/* free 'im 'ere */

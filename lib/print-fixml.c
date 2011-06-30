@@ -914,6 +914,15 @@ print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 		sputs(ctx, "</Batch>\n");
 #endif	/* 0 */
 		break;
+	case UMPF_MSG_UNK:
+	case UMPF_MSG_UNK + 1: {
+		static const char err_msg[] = "\
+<Reject RefSeqNum=\"-1\" Txt=\"unknown message\"/>\n";
+		/* we use Reject for that */
+		print_indent(ctx, indent + 2);
+		snputs(ctx, err_msg, countof_m1(err_msg));
+		break;
+	}
 	default:
 		UMPF_DEBUG("Can't print message %u\n", msg->hdr.mt);
 		break;
