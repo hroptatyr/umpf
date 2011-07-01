@@ -1120,13 +1120,18 @@ be_sql_new_tag_pf(dbconn_t conn, dbobj_t pf, time_t stamp)
 DEFUN dbobj_t
 be_sql_copy_tag(dbconn_t conn, const char *mnemo, time_t stamp)
 {
+#if defined UMPF_AUTO_PRUNE
+# define UMPF_PRUNE_SEXP	" AND (long_qty != 0.0 OR short_qty != 0.0)"
+#else  /* !UMPF_AUTO_PRUNE */
+# define UMPF_PRUNE_SEXP	""
+#endif	/* UMPF_AUTO_PRUNE */
 	struct __tag_s *tag, tmp;
 	uint64_t tag_id_old;
 	static const char qry[] = "\
 INSERT INTO aou_umpf_position (tag_id, security_id, long_qty, short_qty) \
 SELECT ? AS tag_id, security_id, long_qty, short_qty \
 FROM aou_umpf_position \
-WHERE tag_id = ?";
+WHERE tag_id = ?" UMPF_PRUNE_SEXP;
 	dbstmt_t stmt;
 
 	/* get portfolio */
@@ -1207,8 +1212,9 @@ be_sql_set_pos(dbconn_t c, dbobj_t tag, const char *mnemo, double l, double s)
 	/* get security */
 	uint64_t sec_id;
 	dbstmt_t stmt;
+	/* we use replace into since auto-sparsity might be in effect */
 	static const char qry[] = "\
-INSERT INTO aou_umpf_position (tag_id, security_id, long_qty, short_qty) \
+REPLACE INTO aou_umpf_position (tag_id, security_id, long_qty, short_qty) \
 VALUES (?, ?, ?, ?)";
 
 	/* obtain a sec id first, get/creator */
