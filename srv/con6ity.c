@@ -20,6 +20,7 @@
 
 #define C10Y_PRE	"mod/umpf/con6ity"
 
+/* helpers for careless writing */
 struct __wbuf_s {
 	ev_io io[1];
 	union {
@@ -38,6 +39,34 @@ struct __wbuf_s {
 	int(*notify_cb)(umpf_conn_t);
 	void *neigh;
 };
+
+
+/* helpers for the buffer writers */
+static size_t nwbs = 0;
+static struct __wbuf_s *wbs = NULL;
+
+static struct __wbuf_s*
+make_wbuf(void)
+{
+	for (size_t i = 0; i < nwbs; i++) {
+		if (wbs[i].buf == NULL) {
+			return wbs + i;
+		}
+	}
+	/* create one, check for resize first */
+	if ((nwbs % 16) == 0) {
+		wbs = realloc(wbs, 16 * sizeof(*wbs));
+		memset(wbs + nwbs, 0, 16 * sizeof(*wbs));
+	}
+	return wbs + nwbs++;
+}
+
+static void
+free_wbuf(struct __wbuf_s *wb)
+{
+	memset(wb, 0, sizeof(*wb));
+	return;
+}
 
 
 /* services for includers that need not know about libev */
@@ -278,7 +307,7 @@ clo:
 		free(wb->buf);
 	}
 	if (wb->flags & WBUF_FL_KEEP) {
-		free(wb);
+		free_wbuf(wb);
 	}
 	/* remove ourselves from our neighbour's slot */
 	put_fd_data(wb->neigh, NULL);
@@ -301,11 +330,15 @@ data_cb(EV_P_ ev_io *w, int UNUSED(re))
 	}
 	return;
 clo:
-	if ((ctx = get_fd_data(w)) != NULL) {
-		struct __wbuf_s *wb = ctx;
-		UMPF_DEBUG(C10Y_PRE ": unfinished business on %p\n", ctx);
-		;
-		return;
+	for (size_t i = 0; i < nwbs; i++) {
+		if (wbs[i].neigh == ctx) {
+			struct __wbuf_s *wb = wbs + i;
+			UMPF_DEBUG(
+				C10Y_PRE
+				": unfinished business on %p  %p %zu of %zu\n",
+				wb, wb->buf, wb->nwr, wb->len);
+			return;
+		}
 	}
 	UMPF_DEBUG(C10Y_PRE ": %zd data, closing socket %d\n", nrd, w->fd);
 	handle_close(w);
@@ -382,7 +415,7 @@ deinit_conn_watchers(void *UNUSED(loop))
 }
 
 
-/* helpers for careless writing */
+/* write buffers */
 DECLF_W umpf_conn_t
 write_soon(umpf_conn_t conn, const char *buf, size_t len, int(*cb)(umpf_conn_t))
 {
@@ -397,7 +430,7 @@ write_soon(umpf_conn_t conn, const char *buf, size_t len, int(*cb)(umpf_conn_t))
 		return NULL;
 	}
 	/* otherwise the user isn't so much a prick as we thought*/
-	wb = xnew(*wb);
+	wb = make_wbuf();
 	/* fill in */
 	wb->cbuf = buf;
 	wb->len = len;

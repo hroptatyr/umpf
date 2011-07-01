@@ -383,10 +383,11 @@ handle_data(umpf_conn_t ctx, char *msg, size_t msglen)
 		/* serialise, put results in BUF*/
 		if ((len = interpret_msg(&buf, umsg)) &&
 		    (wr = write_soon(ctx, buf, len, wr_fin_cb))) {
-			UMPF_DEBUG(MOD_PRE ": installing buf wr'er %p\n", buf);
-			put_fd_data(wr, buf);
+			UMPF_DEBUG(
+				MOD_PRE ": installing buf wr'er %p %p\n",
+				wr, buf);
 		}
-		put_fd_data(ctx, wr);
+		put_fd_data(ctx, NULL);
 		return 0;
 
 	} else if (/* umsg == NULL && */p == NULL) {
