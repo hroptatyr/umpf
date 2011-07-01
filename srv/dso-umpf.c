@@ -73,6 +73,14 @@
 #include "be-sql.h"
 
 #define MOD_PRE		"mod/umpf"
+/* auto-sparsity assumes that positions set are just a subset of the whole
+ * portfolio, and any positions not mentioned are taken over from the
+ * previous tag */
+#define UMPF_AUTO_SPARSE	1
+/* auto pruning assumes that 0 positions are not to be repeated
+ * in copy operations, CAREFUL, this undermines the idea of genericity
+ * for instance when interest rates or price data is captured */
+#define UMPF_AUTO_PRUNE		1
 
 /* global database connexion object */
 static dbconn_t umpf_dbconn;
@@ -211,8 +219,12 @@ interpret_msg(char **buf, umpf_msg_t msg)
 
 		UMPF_DEBUG(MOD_PRE ": set_pf();\n");
 		mnemo = msg->pf.name;
-		stamp = msg->pf.stamp;
+		stamp = msg->pf.stamp;	
+#if defined UMPF_AUTO_SPARSE
+		tag = be_sql_copy_tag(umpf_dbconn, mnemo, stamp);
+#else  /* !UMPF_AUTO_SPARSE */
 		tag = be_sql_new_tag(umpf_dbconn, mnemo, stamp);
+#endif	/* UMPF_AUTO_SPARSE */
 
 		for (size_t i = 0; i < msg->pf.nposs; i++) {
 			const char *sec = msg->pf.poss[i].ins->sym;
