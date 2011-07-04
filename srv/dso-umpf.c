@@ -46,22 +46,10 @@
 #include <unserding/unserding-ctx.h>
 #include <unserding/unserding-cfg.h>
 #include <unserding/module.h>
+#include <unserding/tcp-unix.h>
 
 #include "umpf.h"
 #include "nifty.h"
-
-/* get rid of libev guts */
-#if defined HARD_INCLUDE_con6ity
-# undef DECLF
-# undef DECLF_W
-# undef DEFUN
-# undef DEFUN_W
-# define DECLF		static
-# define DEFUN		static
-# define DECLF_W	static
-# define DEFUN_W	static
-#endif	/* HARD_INCLUDE_con6ity */
-#include "con6ity.h"
 
 /* get rid of sql guts */
 #if defined HARD_INCLUDE_be_sql
@@ -122,9 +110,9 @@ lst_cb(char *mnemo, void *clo)
 }
 
 static int
-wr_fin_cb(umpf_conn_t ctx)
+wr_fin_cb(ud_conn_t UNUSED(c), void *data)
 {
-	char *buf = get_fd_data(ctx);
+	char *buf = data;
 	UMPF_DEBUG(MOD_PRE ": finished writing buf %p\n", buf);
 	free(buf);
 	return 0;
@@ -374,13 +362,13 @@ interpret_msg(char **buf, umpf_msg_t msg)
 /**
  * Take the stuff in MSG of size MSGLEN coming from FD and process it.
  * Return values <0 cause the handler caller to close down the socket. */
-DEFUN int
-handle_data(umpf_conn_t ctx, char *msg, size_t msglen)
+int
+handle_data(ud_conn_t c, char *msg, size_t msglen, void *data)
 {
-	umpf_ctx_t p = get_fd_data(ctx);
+	umpf_ctx_t p = data;
 	umpf_msg_t umsg;
 
-	UMPF_DEBUG(MOD_PRE "/ctx: %p %zu\n", ctx, msglen);
+	UMPF_DEBUG(MOD_PRE "/ctx: %p %zu\n", c, msglen);
 #if defined DEBUG_FLAG
 	/* safely write msg to logerr now */
 	fwrite(msg, msglen, 1, logout);
@@ -390,17 +378,18 @@ handle_data(umpf_conn_t ctx, char *msg, size_t msglen)
 		/* definite success */
 		char *buf = NULL;
 		size_t len;
-		umpf_conn_t wr = NULL;
+		ud_conn_t wr = NULL;
 
 		/* serialise, put results in BUF*/
 		if ((len = interpret_msg(&buf, umsg)) &&
-		    (wr = write_soon(ctx, buf, len, wr_fin_cb))) {
+		    (wr = ud_write_soon(c, buf, len, wr_fin_cb))) {
 			UMPF_DEBUG(
 				MOD_PRE ": installing buf wr'er %p %p\n",
 				wr, buf);
+			ud_conn_put_data(wr, buf);
+			return 0;
 		}
-		put_fd_data(ctx, NULL);
-		return 0;
+		p = NULL;
 
 	} else if (/* umsg == NULL && */p == NULL) {
 		/* error occurred */
@@ -408,36 +397,26 @@ handle_data(umpf_conn_t ctx, char *msg, size_t msglen)
 	} else {
 		UMPF_DEBUG(MOD_PRE ": need more grub\n");
 	}
-	put_fd_data(ctx, p);
+	ud_conn_put_data(c, p);
 	return 0;
 }
-#define HAVE_handle_data
 
-DEFUN void
-handle_close(umpf_conn_t ctx)
+int
+handle_close(ud_conn_t c, void *data)
 {
-	umpf_ctx_t p;
-
-	UMPF_DEBUG("forgetting about %d\n", get_fd(ctx));
-	if ((p = get_fd_data(ctx)) != NULL) {
+	UMPF_DEBUG("forgetting about %p\n", c);
+	if (data) {
 		/* finalise the push parser to avoid mem leaks */
-		umpf_msg_t msg = umpf_parse_blob_r(&p, ctx, 0);
+		umpf_msg_t msg = umpf_parse_blob_r(&data, data, 0);
 
 		if (UNLIKELY(msg != NULL)) {
 			/* sigh */
 			umpf_free_msg(msg);
 		}
 	}
-	put_fd_data(ctx, NULL);
-	return;
+	ud_conn_put_data(c, NULL);
+	return 0;
 }
-#define HAVE_handle_close
-
-
-/* our connectivity cruft */
-#if defined HARD_INCLUDE_con6ity
-# include "con6ity.c"
-#endif	/* HARD_INCLUDE_con6ity */
 
 
 /* our database connexion */
@@ -446,36 +425,22 @@ handle_close(umpf_conn_t ctx)
 #endif	/* HARD_INCLUDE_be_sql */
 
 
-static int
-umpf_init_uds_sock(const char **sock_path, ud_ctx_t ctx, void *settings)
-{
-	volatile int res = -1;
+static const char *umpf_sock_path = NULL;
 
-	udcfg_tbl_lookup_s(sock_path, ctx, settings, "sock");
-	if (*sock_path != NULL &&
-	    (res = conn_listener_uds(*sock_path)) > 0) {
-		/* set up the IO watcher and timer */
-		init_conn_watchers(ctx->mainloop, res);
-	} else {
-		/* make sure we don't accidentally delete arbitrary files */
-		*sock_path = NULL;
-	}
-	return res;
+static ud_conn_t
+umpf_init_uds_sock(ud_ctx_t ctx, void *settings)
+{
+	udcfg_tbl_lookup_s(&umpf_sock_path, ctx, settings, "sock");
+	return make_unix_conn(umpf_sock_path, handle_data, handle_close);
 }
 
-static int
+static ud_conn_t
 umpf_init_net_sock(ud_ctx_t ctx, void *settings)
 {
-	volatile int res = -1;
 	int port;
 
 	port = udcfg_tbl_lookup_i(ctx, settings, "port");
-	if (port &&
-	    (res = conn_listener_net(port)) > 0) {
-		/* set up the IO watcher and timer */
-		init_conn_watchers(ctx->mainloop, res);
-	}
-	return res;
+	return make_tcp_conn(port, handle_data, handle_close);
 }
 
 static dbconn_t
@@ -520,10 +485,8 @@ umpf_init_be_sql(ud_ctx_t ctx, void *s)
 
 
 /* unserding bindings */
-static volatile int umpf_sock_net = -1;
-static volatile int umpf_sock_uds = -1;
-/* path to unix domain socket */
-const char *umpf_sock_path;
+static ud_conn_t __cnet = NULL;
+static ud_conn_t __cuds = NULL;
 
 void
 init(void *clo)
@@ -540,9 +503,9 @@ init(void *clo)
 	}
 	UMPF_DBGCONT("\n");
 	/* obtain the unix domain sock from our settings */
-	umpf_sock_uds = umpf_init_uds_sock(&umpf_sock_path, ctx, settings);
+	__cuds = umpf_init_uds_sock(ctx, settings);
 	/* obtain port number for our network socket */
-	umpf_sock_net = umpf_init_net_sock(ctx, settings);
+	__cnet = umpf_init_net_sock(ctx, settings);
 	/* connect to our database */
 	umpf_dbconn = umpf_init_be_sql(ctx, settings);
 
@@ -561,14 +524,15 @@ reinit(void *UNUSED(clo))
 }
 
 void
-deinit(void *clo)
+deinit(void *UNUSED(clo))
 {
-	ud_ctx_t ctx = clo;
-
 	UMPF_DEBUG(MOD_PRE ": unloading ...");
-	deinit_conn_watchers(ctx->mainloop);
-	umpf_sock_net = -1;
-	umpf_sock_uds = -1;
+	if (__cnet) {
+		ud_conn_fini(__cnet);
+	}
+	if (__cuds) {
+		ud_conn_fini(__cuds);
+	}
 	/* unlink the unix domain socket */
 	if (umpf_sock_path != NULL) {
 		unlink(umpf_sock_path);
