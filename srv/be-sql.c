@@ -912,7 +912,7 @@ INSERT INTO aou_umpf_tag (portfolio_id, tag_stamp) VALUES (?, ?)";
 	return tag_id;
 }
 
-static uint64_t
+static uint64_t __attribute__((unused))
 __get_tag_id(dbconn_t conn, uint64_t pf_id, time_t stamp)
 {
 /* finds the largest tag id whose tag_stamp is before STAMP */
@@ -1092,7 +1092,7 @@ be_sql_free_pf(dbconn_t UNUSED(conn), dbobj_t UNUSED(pf))
 	return;
 }
 
-DEFUN dbobj_t
+DEFUN dbobj_t __attribute__((unused))
 be_sql_new_tag(dbconn_t conn, const char *mnemo, time_t stamp)
 {
 	struct __tag_s *tag = xnew(*tag);
@@ -1105,7 +1105,7 @@ be_sql_new_tag(dbconn_t conn, const char *mnemo, time_t stamp)
 	return (dbobj_t)tag;
 }
 
-DEFUN dbobj_t
+DEFUN dbobj_t __attribute__((unused))
 be_sql_new_tag_pf(dbconn_t conn, dbobj_t pf, time_t stamp)
 {
 	struct __tag_s *tag = xnew(*tag);
