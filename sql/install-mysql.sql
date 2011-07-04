@@ -7,9 +7,9 @@ CREATE TABLE IF NOT EXISTS `aou_umpf_portfolio` (
 	-- nickname used to identify this portfolio externally
 	short VARCHAR(64) CHARSET ASCII NOT NULL,
 	-- description to elaborate on this pf
-	description MEDIUMTEXT,
+	description MEDIUMTEXT CHARSET utf8 COLLATE utf8_bin,
 	UNIQUE KEY (`short`)
-) ENGINE InnoDB CHARSET utf8 COLLATE utf8_unicode_ci;
+) ENGINE InnoDB CHARSET ascii COLLATE ascii_bin;
 
 -- portfolio tags
 -- now the idea is to regard portfolios as the git tags of
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS `aou_umpf_tag` (
 	FOREIGN KEY (`portfolio_id`)
 		REFERENCES `aou_umpf_portfolio` (`portfolio_id`)
 		ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE InnoDB CHARSET ASCII;
+) ENGINE InnoDB CHARSET ascii COLLATE ascii_bin;
 
 -- portfolio securities
 -- this is just a table to allow to elaborate on the securities
@@ -44,14 +44,14 @@ CREATE TABLE IF NOT EXISTS `aou_umpf_security` (
 	-- across portfolios
 	portfolio_id INTEGER NOT NULL,
 	-- nickname used to identify this security externally
-	short VARCHAR(64) CHARSET ASCII NOT NULL,
+	short VARCHAR(64) CHARSET ascii COLLATE ascii_bin NOT NULL,
 	-- used to elaborate on the security if need be
-	description MEDIUMTEXT,
+	description MEDIUMTEXT CHARSET utf8 COLLATE utf8_bin,
 	UNIQUE KEY (`portfolio_id`, `short`),
 	FOREIGN KEY (`portfolio_id`)
 		REFERENCES `aou_umpf_portfolio` (`portfolio_id`)
 		ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE InnoDB CHARSET utf8 COLLATE utf8_unicode_ci;
+) ENGINE InnoDB CHARSET ascii COLLATE ascii_bin;
 
 -- portfolio positions
 -- to actually capture whats inside a portfolio
@@ -70,7 +70,37 @@ CREATE TABLE IF NOT EXISTS `aou_umpf_position` (
 	FOREIGN KEY (`security_id`)
 		REFERENCES `aou_umpf_security` (`security_id`)
 		ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE InnoDB CHARSET ASCII;
+) ENGINE InnoDB CHARSET ascii COLLATE ascii_bin;
+
+-- position groups
+-- this can be used to group a bunch of security positions together
+-- for instance to reflect counter positions and fee positions or
+-- interest
+-- dimension table
+CREATE TABLE IF NOT EXISTS `aou_umpf_posgrp` (
+	posgrp_id INTEGER AUTO_INCREMENT PRIMARY KEY,
+	portfolio_id INTEGER NOT NULL,
+	-- used to elaborate on the security if need be
+	description MEDIUMTEXT CHARSET utf8 COLLATE utf8_bin,
+	FOREIGN KEY (`portfolio_id`)
+		REFERENCES `aou_umpf_portfolio` (`portfolio_id`)
+		ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE InnoDB CHARSET ascii COLLATE ascii_bin;
+
+-- fact table
+CREATE TABLE IF NOT EXISTS `aou_umpf_posgrp_fact` (
+	posgrp_id INTEGER NOT NULL,
+	security_id INTEGER NOT NULL,
+	flavour VARCHAR(64) CHARSET ascii COLLATE ascii_bin,
+	PRIMARY KEY (`posgrp_id`, `security_id`),
+	KEY (`flavour`),
+	FOREIGN KEY (`posgrp_id`)
+		REFERENCES `aou_umpf_posgrp` (`posgrp_id`)
+		ON DELETE CASCADE ON UPDATE CASCADE,
+	FOREIGN KEY (`security_id`)
+		REFERENCES `aou_umpf_security` (`security_id`)
+		ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE InnoDB CHARSET ascii COLLATE ascii_bin;
 
 -- last portfolio
 -- keeps track of the last tag in chronological order
@@ -84,7 +114,7 @@ CREATE TABLE IF NOT EXISTS `aou_umpf_last` (
 	FOREIGN KEY (`tag_id`)
 		REFERENCES `aou_umpf_tag` (`tag_id`)
 		ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE InnoDB CHARSET ASCII;
+) ENGINE InnoDB CHARSET ascii COLLATE ascii_bin;
 
 -- just some getters
 DROP FUNCTION IF EXISTS `aou_umpf_get_security`;

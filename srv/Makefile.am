@@ -23,9 +23,7 @@ dso_umpf_la_CPPFLAGS = $(AM_CPPFLAGS) $(unserding_CFLAGS)
 dso_umpf_la_CPPFLAGS += -I$(top_srcdir)/lib
 dso_umpf_la_CPPFLAGS += $(LIBXML2_CFLAGS)
 dso_umpf_la_SOURCES += dso-umpf.c
-EXTRA_dso_umpf_la_SOURCES += con6ity.c con6ity.h
 EXTRA_dso_umpf_la_SOURCES += be-sql.c be-sql.h
-dso_umpf_la_CPPFLAGS += -DHARD_INCLUDE_con6ity
 noinst_HEADERS += nifty.h
 ## database goodness
 if USE_MYSQL

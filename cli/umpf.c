@@ -50,6 +50,7 @@
 /* network stuff */
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <sys/un.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 /* epoll stuff */
@@ -84,6 +85,7 @@ typedef enum {
 typedef enum {
 	UMPF_CMD_UNK,
 	UMPF_CMD_VERSION,
+	UMPF_CMD_LIST_PF,
 	UMPF_CMD_NEW_PF,
 	UMPF_CMD_GET_PF,
 	UMPF_CMD_SET_PF,
@@ -182,6 +184,8 @@ Options common to all commands:\n\
 \n\
 Supported commands:\n\
 \n\
+  list-pf                    List all available portfolios\n\
+\n\
   new-pf [OPTIONS] NAME      Register a new portfolio NAME\n\
     -d, --descr=STRING       Use description from STRING\n\
     -f, --file=FILE          File with description, - for stdin\n\
@@ -238,18 +242,38 @@ __connect(unsigned int pref_fam, const char *host, const uint16_t port)
 {
 #define AS_V4(x)	((struct sockaddr_in*)(x))
 #define AS_V6(x)	((struct sockaddr_in6*)(x))
+#define AS_UN(x)	((struct sockaddr_un*)(x))
 	struct hostent *hp;
 	struct sockaddr_storage sa[1];
 	volatile int sock;
+
+	/* rinse */
+	memset(sa, 0, sizeof(*sa));
 
 #if defined __INTEL_COMPILER
 # pragma warning (disable:2259)
 #endif	/* __INTEL_COMPILER */
 	switch (pref_fam) {
+	case PF_UNIX:
+		if ((sock = socket(PF_LOCAL, SOCK_STREAM, 0)) >= 0) {
+			size_t unsz = sizeof(AS_UN(sa)->sun_path);
+
+			AS_UN(sa)->sun_family = AF_LOCAL;
+			strncpy(AS_UN(sa)->sun_path, host, unsz);
+			AS_UN(sa)->sun_path[unsz - 1] = '\0';
+			unsz = offsetof(struct sockaddr_un, sun_path) +
+				strlen(AS_UN(sa)->sun_path) + 1;
+
+			/* try connect */
+			if (connect(sock, (void*)sa, unsz) >= 0) {
+				break;
+			}
+			close(sock);
+		}
+		/* try v6 next */
 	case PF_UNSPEC:
 	case PF_INET6:
 		/* try ip6 first ... */
-		memset(sa, 0, sizeof(*sa));
 		if ((hp = gethostbyname2(host, AF_INET6)) != NULL &&
 		    (sock = socket(PF_INET6, SOCK_STREAM, IPPROTO_IP)) >= 0) {
 			AS_V6(sa)->sin6_family = AF_INET6;
@@ -266,7 +290,6 @@ __connect(unsigned int pref_fam, const char *host, const uint16_t port)
 		}
 		/* ... then fall back to ip4 */
 	case PF_INET:
-		memset(sa, 0, sizeof(*sa));
 		if ((hp = gethostbyname2(host, AF_INET)) != NULL &&
 		    (sock = socket(PF_INET, SOCK_STREAM, IPPROTO_IP)) >= 0) {
 			AS_V4(sa)->sin_family = AF_INET;
@@ -542,9 +565,12 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 				break;
 			}
 
-		} else if (ev & EPOLLOUT && (wrt < nsz)) {
-			/* write a bit of the message */
-			wrt += write_request(fd, buf + wrt, nsz - wrt);
+		} else if (ev & EPOLLOUT) {
+			/* have we got stuff to write out? */
+			if (wrt < nsz) {
+				/* write a bit of the message */
+				wrt += write_request(fd, buf + wrt, nsz - wrt);
+			}
 
 		} else {
 #if defined DEBUG_FLAG
@@ -640,6 +666,14 @@ make_umpf_get_pf_msg(const char *mnemo)
 	umpf_msg_t res = make_umpf_msg();
 	umpf_set_msg_type(res, UMPF_MSG_GET_DESCR);
 	res->new_pf.name = strdup(mnemo);
+	return res;
+}
+
+static umpf_msg_t
+make_umpf_list_pf_msg(void)
+{
+	umpf_msg_t res = make_umpf_msg();
+	umpf_set_msg_type(res, UMPF_MSG_LST_PF);
 	return res;
 }
 
@@ -903,6 +937,10 @@ umpf_process(struct __clo_s *clo)
 	volatile int sock;
 
 	switch (clo->cmd) {
+	case UMPF_CMD_LIST_PF: {
+		msg = make_umpf_list_pf_msg();
+		break;
+	}
 	case UMPF_CMD_SET_PF:
 		/* FIXML can't distinguish between new_pf and set_pf,
 		 * so we just use NEW_PF for this */
@@ -1027,6 +1065,10 @@ parse_host_args(struct __clo_s *clo, char *argv[])
 	if ((p = strchr(clo->host, ':')) != NULL) {
 		*p = '\0';
 		clo->port = strtoul(p + 1, NULL, 10);
+	} else {
+		/* must be a domain socket */
+		clo->port = 0;
+		clo->pref_fam = PF_UNIX;
 	}
 	return;
 }
@@ -1216,6 +1258,13 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 			}
 			break;
 		}
+		case 'l':
+			/* list-pf */
+			if (strcmp(p, "ist-pf") == 0) {
+				clo->cmd = UMPF_CMD_LIST_PF;
+				continue;
+			}
+			break;
 		default:
 			break;
 		}
@@ -1238,6 +1287,12 @@ print_version(void)
 {
 	fputs(VER, stdout);
 	return;
+}
+
+static int
+check__ls_pf_args(struct __clo_s *UNUSED(clo))
+{
+	return 0;
 }
 
 static int
@@ -1314,6 +1369,12 @@ main(int argc, char *argv[])
 	case UMPF_CMD_VERSION:
 		print_version();
 		return 0;
+	case UMPF_CMD_LIST_PF:
+		if (check__ls_pf_args(&argi)) {
+			print_usage(argi.cmd);
+			return 1;
+		}
+		break;
 	case UMPF_CMD_NEW_PF:
 	case UMPF_CMD_GET_PF:
 	case UMPF_CMD_SET_PF:
@@ -1347,4 +1408,4 @@ main(int argc, char *argv[])
 	return 0;
 }
 
-/* umpf-new-pf.c ends here */
+/* umpf.c ends here */
