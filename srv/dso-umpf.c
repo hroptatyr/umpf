@@ -362,7 +362,7 @@ interpret_msg(char **buf, umpf_msg_t msg)
 /**
  * Take the stuff in MSG of size MSGLEN coming from FD and process it.
  * Return values <0 cause the handler caller to close down the socket. */
-int
+static int
 handle_data(ud_conn_t c, char *msg, size_t msglen, void *data)
 {
 	umpf_ctx_t p = data;
@@ -401,7 +401,7 @@ handle_data(ud_conn_t c, char *msg, size_t msglen, void *data)
 	return 0;
 }
 
-int
+static int
 handle_close(ud_conn_t c, void *data)
 {
 	UMPF_DEBUG("forgetting about %p\n", c);
@@ -431,7 +431,7 @@ static ud_conn_t
 umpf_init_uds_sock(ud_ctx_t ctx, void *settings)
 {
 	udcfg_tbl_lookup_s(&umpf_sock_path, ctx, settings, "sock");
-	return make_unix_conn(umpf_sock_path, handle_data, handle_close);
+	return make_unix_conn(umpf_sock_path, handle_data, handle_close, NULL);
 }
 
 static ud_conn_t
@@ -440,7 +440,7 @@ umpf_init_net_sock(ud_ctx_t ctx, void *settings)
 	int port;
 
 	port = udcfg_tbl_lookup_i(ctx, settings, "port");
-	return make_tcp_conn(port, handle_data, handle_close);
+	return make_tcp_conn(port, handle_data, handle_close, NULL);
 }
 
 static dbconn_t
