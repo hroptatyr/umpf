@@ -110,9 +110,8 @@ lst_cb(char *mnemo, void *clo)
 }
 
 static int
-wr_fin_cb(ud_conn_t UNUSED(c), void *data)
+wr_fin_cb(ud_conn_t UNUSED(c), char *buf, size_t UNUSED(bsz), void *UNUSED(d))
 {
-	char *buf = data;
 	UMPF_DEBUG(MOD_PRE ": finished writing buf %p\n", buf);
 	free(buf);
 	return 0;
