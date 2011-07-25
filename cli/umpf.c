@@ -784,7 +784,7 @@ make_umpf_set_poss_msg(const char *mnemo, const time_t stamp, const char *file)
 	FILE *f;
 
 	/* sigh, now the hard part, open file and parse positions */
-	if (file[0] == '-' && file[1] == '\0') {
+	if ((file == NULL) || (file[0] == '-' && file[1] == '\0')) {
 		f = stdin; 
 	} else if ((f = fopen(file, "r")) == NULL) {
 		return NULL;
@@ -883,7 +883,7 @@ make_umpf_apply_msg(const char *mnemo, const time_t stamp, const char *file)
 	FILE *f;
 
 	/* sigh, now the hard part, open file and parse positions */
-	if (file[0] == '-' && file[1] == '\0') {
+	if ((file == NULL) || (file[0] == '-' && file[1] == '\0')) {
 		f = stdin; 
 	} else if ((f = fopen(file, "r")) == NULL) {
 		return NULL;
