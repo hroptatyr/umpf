@@ -50,7 +50,16 @@
 #include "umpf.h"
 #include "umpf-private.h"
 
-#define PFIXML_PRE	"mod/umpf/fixml"
+#if defined DEBUG_FLAG
+# include <stdio.h>
+# define PFIXML_DEBUG(args...)			\
+	fprintf(stderr, "[umpf/fixml] " args)
+# define PFIXML_DBGCONT(args...)			\
+	fprintf(stderr, args)
+#else  /* !DEBUG_FLAG */
+# define PFIXML_DEBUG(args...)
+# define PFIXML_DBGCONT(args...)
+#endif	/* DEBUG_FLAG */
 
 #if defined __INTEL_COMPILER
 # pragma warning (disable:424)
@@ -924,7 +933,7 @@ print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 		break;
 	}
 	default:
-		UMPF_DEBUG("Can't print message %u\n", msg->hdr.mt);
+		PFIXML_DEBUG("Can't print message %u\n", msg->hdr.mt);
 		break;
 	}
 
