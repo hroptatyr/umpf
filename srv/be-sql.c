@@ -49,7 +49,13 @@
 #include "nifty.h"
 #include "be-sql.h"
 
-#define BE_SQL		"mod/umpf/sql"
+#define BE_SQL		"/sql"
+#define BE_MOD		UMPF_MOD BE_SQL
+
+/* we assume unserding with logger feature */
+#define BESQL_INFO_LOG(args...)	UD_SYSLOG(LOG_INFO, BE_MOD " " args)
+#define BESQL_ERR_LOG(args...)	UD_SYSLOG(LOG_ERR, BE_MOD " ERROR " args)
+#define BESQL_CRIT_LOG(args...)	UD_SYSLOG(LOG_CRIT, BE_MOD " CRITICAL " args)
 
 typedef void *dbstmt_t;
 
@@ -116,7 +122,7 @@ be_mysql_open(const char *h, const char *u, const char *pw, const char *sch)
 
 	mysql_options(conn, MYSQL_OPT_RECONNECT, &tmp);
 	if (!mysql_real_connect(conn, h, u, pw, sch, 0, NULL, 0)) {
-		UMPF_DEBUG(BE_SQL "failed to connect\n");
+		BESQL_CRIT_LOG("failed to connect to %s@%s/%s\n", u, h, sch);
 		mysql_close(conn);
 		return NULL;
 	}
@@ -202,7 +208,7 @@ be_sql_open(const char *h, const char *u, const char *pw, const char *sch)
 		res = NULL;
 #endif	/* WITH_MYSQL */
 	}
-	UMPF_DEBUG(BE_SQL ": db handle %p\n", res);
+	BESQL_INFO_LOG("db handle %p\n", res);
 	return res;
 }
 
@@ -1010,11 +1016,11 @@ UPDATE aou_umpf_portfolio SET description = ? WHERE portfolio_id = ?";
 	uint64_t pf_id;
 
 	if (UNLIKELY(mnemo == NULL)) {
-		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
+		BESQL_ERR_LOG("new_pf(): mnemonic of size 0 not allowed\n");
 		return NULL;
 	} else if ((pf_id = __get_pf_id(conn, mnemo)) == 0) {
 		/* portfolio getter is fucked */
-		UMPF_DEBUG(BE_SQL ": could not obtain portfolio id\n");
+		BESQL_ERR_LOG("new_pf(): could not obtain portfolio id\n");
 		return NULL;
 	}
 
@@ -1054,7 +1060,7 @@ SELECT description FROM aou_umpf_portfolio WHERE short = ?";
 	};
 
 	if (UNLIKELY(pf_mnemo == NULL)) {
-		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
+		BESQL_ERR_LOG("get_descr(): mnemonic of size 0 not allowed\n");
 		return res;
 	}
 
@@ -1136,7 +1142,7 @@ WHERE tag_id = ?" UMPF_PRUNE_SEXP;
 
 	/* get portfolio */
 	if ((tmp.pf_id = __get_pf_id(conn, mnemo)) == 0) {
-		UMPF_DEBUG(BE_SQL ": uh oh, no portfolio id for %s\n", mnemo);
+		BESQL_ERR_LOG("copy_tag(): no portfolio id for %s\n", mnemo);
 		return NULL;
 	} else if ((stmt = be_sql_prep(conn, qry, countof_m1(qry))) == NULL) {
 		/* query prep must happen now or else we create a broken
@@ -1151,7 +1157,7 @@ WHERE tag_id = ?" UMPF_PRUNE_SEXP;
 	/* create the new tag */
 	if ((tmp.tag_id = __new_tag_id(conn, tmp.pf_id, stamp)) == 0) {
 		/* fuck */
-		UMPF_DEBUG(BE_SQL ": cannot copy portfolio %s\n", mnemo);
+		BESQL_ERR_LOG("copy_tag(): cannot copy portfolio %s\n", mnemo);
 		return NULL;
 	}
 	/* prepare the result */
@@ -1185,7 +1191,7 @@ be_sql_get_tag(dbconn_t conn, const char *mnemo, time_t stamp)
 
 	/* get portfolio */
 	if ((pf_id = __get_pf_id(conn, mnemo)) == 0) {
-		UMPF_DEBUG(BE_SQL ": uh oh, no portfolio id for %s\n", mnemo);
+		BESQL_ERR_LOG("get_tag(): no portfolio id for %s\n", mnemo);
 		return NULL;
 	} else if (__get_tag(&tmp, conn, pf_id, stamp) != 0) {
 		return NULL;
@@ -1193,8 +1199,9 @@ be_sql_get_tag(dbconn_t conn, const char *mnemo, time_t stamp)
 	/* oh we seem to have hit the jackpot */
 	tag = xnew(*tag);
 	*tag = tmp;
-	UMPF_DEBUG(BE_SQL ": tag_id <- %lu (%lu, %ld)\n",
-		   tmp.tag_id, tmp.pf_id, tmp.tag_stamp);
+	UMPF_DEBUG(
+		BE_SQL ": tag_id <- %lu (%lu, %ld)\n",
+		tmp.tag_id, tmp.pf_id, tmp.tag_stamp);
 	return (dbobj_t)tag;
 }
 
@@ -1219,8 +1226,9 @@ VALUES (?, ?, ?, ?)";
 
 	/* obtain a sec id first, get/creator */
 	if ((sec_id = __get_sec_id(c, t->pf_id, mnemo)) == 0UL) {
-		UMPF_DEBUG(BE_SQL ": no security id for pf %lu %s\n",
-			   t->pf_id, mnemo);
+		BESQL_ERR_LOG(
+			"set_pos(): no security id for pf %lu %s\n",
+			t->pf_id, mnemo);
 		return;
 	} else if ((stmt = be_sql_prep(c, qry, countof_m1(qry))) == NULL) {
 		return;
@@ -1266,8 +1274,9 @@ VALUES (?, ?, ?, ?)";
 
 	/* obtain a sec id first, get/creator */
 	if ((sec_id = __get_sec_id(c, t->pf_id, mnemo)) == 0UL) {
-		UMPF_DEBUG(BE_SQL ": no security id for pf %lu %s\n",
-			   t->pf_id, mnemo);
+		BESQL_ERR_LOG(
+			"add_pos(): no security id for pf %lu %s\n",
+			t->pf_id, mnemo);
 		return res;
 	} else if ((stmt = be_sql_prep(c, selq, countof_m1(selq))) == NULL) {
 		return res;
@@ -1399,15 +1408,15 @@ UPDATE aou_umpf_security SET description = ? WHERE security_id = ?";
 	uint64_t sec_id;
 
 	if (UNLIKELY(pf_mnemo == NULL || sec_mnemo == NULL)) {
-		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
+		BESQL_ERR_LOG("new_sec(): mnemonic of size 0 not allowed\n");
 		return NULL;
 	} else if ((pf_id = __get_pf_id(conn, pf_mnemo)) == 0) {
 		/* portfolio getter is fucked */
-		UMPF_DEBUG(BE_SQL ": could not obtain portfolio id\n");
+		BESQL_ERR_LOG("new_sec(): could not obtain portfolio id\n");
 		return NULL;
 	} else if ((sec_id = __get_sec_id(conn, pf_id, sec_mnemo)) == 0) {
 		/* portfolio getter is fucked */
-		UMPF_DEBUG(BE_SQL ": could not obtain security id\n");
+		BESQL_ERR_LOG("new_sec(): could not obtain security id\n");
 		return NULL;
 	}
 
@@ -1448,12 +1457,12 @@ UPDATE aou_umpf_security SET description = ? WHERE security_id = ?";
 	uint64_t sec_id;
 
 	if (UNLIKELY(pf_mnemo == NULL || sec_mnemo == NULL)) {
-		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
+		BESQL_ERR_LOG("set_sec(): mnemonic of size 0 not allowed\n");
 		return NULL;
 	} else if ((sec_id = __get_sec_id_from_mnemos(
 			    conn, pf_mnemo, sec_mnemo)) == 0) {
 		/* portfolio getter is fucked */
-		UMPF_DEBUG(BE_SQL ": could not obtain security id\n");
+		BESQL_ERR_LOG("set_sec(): could not obtain security id\n");
 		return NULL;
 	}
 
@@ -1494,12 +1503,12 @@ SELECT description FROM aou_umpf_security WHERE security_id = ?";
 	};
 
 	if (UNLIKELY(pf_mnemo == NULL || sec_mnemo == NULL)) {
-		UMPF_DEBUG(BE_SQL ": mnemonic of size 0 not allowed\n");
+		BESQL_ERR_LOG("get_sec(): mnemonic of size 0 not allowed\n");
 		return res;
 	} else if ((sec_id = __get_sec_id_from_mnemos(
 			    conn, pf_mnemo, sec_mnemo)) == 0) {
 		/* portfolio getter is fucked */
-		UMPF_DEBUG(BE_SQL ": could not obtain security id\n");
+		BESQL_ERR_LOG("get_sec(): could not obtain security id\n");
 		return res;
 	}
 
