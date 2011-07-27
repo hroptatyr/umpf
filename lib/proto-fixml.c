@@ -52,8 +52,6 @@
 #include "umpf.h"
 #include "umpf-private.h"
 
-#define PFIXML_PRE	"mod/umpf/fixml"
-
 /* gperf goodness */
 #include "proto-fixml-tag.c"
 #include "proto-fixml-attr.c"
@@ -66,6 +64,17 @@
 # include <assert.h>
 #else
 # define assert(args...)
+#endif	/* DEBUG_FLAG */
+
+#if defined DEBUG_FLAG
+# include <stdio.h>
+# define PFIXML_DEBUG(args...)			\
+	fprintf(stderr, "[umpf/fixml] " args)
+# define PFIXML_DBGCONT(args...)			\
+	fprintf(stderr, args)
+#else  /* !DEBUG_FLAG */
+# define PFIXML_DEBUG(args...)
+# define PFIXML_DBGCONT(args...)
 #endif	/* DEBUG_FLAG */
 
 typedef struct __ctx_s *__ctx_t;
@@ -589,7 +598,7 @@ sax_aid_from_attr(const char *attr)
 static void
 proc_FIXML_xmlns(__ctx_t ctx, const char *pref, const char *value)
 {
-	UMPF_DEBUG(PFIXML_PRE ": reg'ging name space %s <- %s\n", pref, value);
+	PFIXML_DEBUG("reg'ging name space %s <- %s\n", pref, value);
 	umpf_reg_ns(ctx, pref, value);
 	return;
 }
@@ -617,7 +626,7 @@ proc_FIXML_attr(__ctx_t ctx, const char *attr, const char *value)
 		/* we're so not interested in version mumbo jumbo */
 		break;
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %s\n", attr);
+		PFIXML_DEBUG("WARN: unknown attr %s\n", attr);
 		break;
 	}
 	return;
@@ -631,7 +640,7 @@ check_attr(__ctx_t ctx, const char *attr)
 
 	if (!umpf_pref_p(ctx, attr, rattr - attr)) {
 		/* dont know what to do */
-		UMPF_DEBUG(PFIXML_PRE ": unknown namespace %s\n", attr);
+		PFIXML_DEBUG("unknown namespace %s\n", attr);
 		return UMPF_ATTR_UNK;
 	}
 	return aid;
@@ -659,7 +668,7 @@ proc_REQ_FOR_POSS_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 		msg->pf.stamp = get_zulu(value);
 		break;
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
+		PFIXML_DEBUG("WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
@@ -696,7 +705,7 @@ proc_REQ_FOR_POSS_ACK_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 		/* ignored */
 		break;
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
+		PFIXML_DEBUG("WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
@@ -722,7 +731,7 @@ proc_RGST_INSTRCTNS_RSP_attr(__ctx_t ctx, const umpf_aid_t aid, const char *v)
 		/* ignored */
 		break;
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
+		PFIXML_DEBUG("WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
@@ -748,7 +757,7 @@ proc_PTY_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 		/* ignored */
 		break;
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
+		PFIXML_DEBUG("WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
@@ -764,7 +773,7 @@ proc_INSTRMT_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 		break;
 	}
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
+		PFIXML_DEBUG("WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
@@ -789,7 +798,7 @@ proc_QTY_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 		/* ignored */
 		break;
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
+		PFIXML_DEBUG("WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
@@ -808,7 +817,7 @@ proc_SEC_DEF_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 		/* ignored */
 		break;
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
+		PFIXML_DEBUG("WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
@@ -830,7 +839,7 @@ proc_ALLOC_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 		if (value && value[0] == '0' && value[1] == '\0') {
 			break;
 		}
-		UMPF_DEBUG(PFIXML_PRE " WARN: trans type != 0\n");
+		PFIXML_DEBUG("WARN: trans type != 0\n");
 		break;
 	case UMPF_ATTR_SIDE:
 		if (value == NULL || value[1] != '\0') {
@@ -859,7 +868,7 @@ proc_ALLOC_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 		default:
 		warn:
 			qty->qsd->sd = QSIDE_UNK;
-			UMPF_DEBUG(PFIXML_PRE " WARN: cannot interpret side\n");
+			PFIXML_DEBUG("WARN: cannot interpret side\n");
 			break;
 		}
 		break;
@@ -881,7 +890,7 @@ proc_ALLOC_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 		msg->pf.stamp = get_zulu(value);
 		break;
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown attr %u\n", aid);
+		PFIXML_DEBUG("WARN: unknown attr %u\n", aid);
 		break;
 	}
 	return;
@@ -1109,8 +1118,7 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 			}
 			break;
 		default:
-			UMPF_DEBUG(PFIXML_PRE " Warn: "
-				   "Instrmt in unknown context\n");
+			PFIXML_DEBUG("WARN: Instrmt in unknown context\n");
 			break;
 		}
 		break;
@@ -1121,9 +1129,7 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 			get_state_object_if(ctx, UMPF_TAG_POS_RPT);
 
 		if (UNLIKELY(iq == NULL)) {
-			UMPF_DEBUG(
-				PFIXML_PRE
-				" WARN: Qty outside of PosRpt\n");
+			PFIXML_DEBUG("WARN: Qty outside of PosRpt\n");
 			break;
 		}
 
@@ -1136,7 +1142,7 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 
 	case UMPF_TAG_AMT:
 		/* unsupported */
-		UMPF_DEBUG(PFIXML_PRE ": Amt tags are currently unsupported\n");
+		PFIXML_DEBUG("Amt tags are currently unsupported\n");
 		break;
 
 	case UMPF_TAG_SEC_XML:
@@ -1152,11 +1158,11 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 		break;
 
 	default:
-		UMPF_DEBUG(PFIXML_PRE " WARN: unknown tag %s\n", name);
+		PFIXML_DEBUG("WARN: unknown tag %s\n", name);
 		break;
 	}
 
-	UMPF_DEBUG(PFIXML_PRE " STATE: %u <- %s\n", get_state_otype(ctx), name);
+	PFIXML_DEBUG("STATE: %u <- %s\n", get_state_otype(ctx), name);
 	return;
 }
 
@@ -1199,7 +1205,7 @@ sax_eo_FIXML_elt(__ctx_t ctx, const char *name)
 		break;
 	}
 
-	UMPF_DEBUG(PFIXML_PRE " STATE: %s -> %u\n", name, get_state_otype(ctx));
+	PFIXML_DEBUG("STATE: %s -> %u\n", name, get_state_otype(ctx));
 	return;
 }
 
@@ -1210,10 +1216,10 @@ __eat_glue(const char *src, size_t len, const char *cookie, size_t cklen)
 	const char *end;
 
 	if ((end = memmem(src, len + cklen, cookie, cklen)) != NULL) {
-		UMPF_DEBUG(PFIXML_PRE " found end tag, eating contents\n");
+		PFIXML_DEBUG("found end tag, eating contents\n");
 		return end - src;
 	} else {
-		UMPF_DEBUG(PFIXML_PRE " end tag not found, eating all\n");
+		PFIXML_DEBUG("end tag not found, eating all\n");
 		return len;
 	}
 }
@@ -1225,7 +1231,7 @@ __push_glue(__ctx_t ctx, const char *src, size_t len)
 	size_t cookie_len = ((size_t*)ctx->sbuf)[0];
 	size_t consum;
 
-	UMPF_DEBUG("looking for %s %zu\n", cookie, cookie_len);
+	PFIXML_DEBUG("looking for %s %zu\n", cookie, cookie_len);
 	consum = __eat_glue(src, len, cookie, cookie_len);
 
 	/* maybe realloc first? */
@@ -1241,7 +1247,7 @@ __push_glue(__ctx_t ctx, const char *src, size_t len)
 	/* stuff chunk into our buffer */
 	memcpy(ctx->sbuf + ctx->sbix, src, consum);
 	ctx->sbuf[ctx->sbix += consum] = '\0';
-	UMPF_DEBUG("pushed %zu\n", consum);
+	PFIXML_DEBUG("pushed %zu\n", consum);
 	return consum;
 }
 
@@ -1258,7 +1264,7 @@ sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int len)
 
 	/* libxml2 specific stuff,
 	 * HACK, cheat on our push parser */
-	UMPF_DEBUG("eating %zu bytes from libxml's buffer\n", consumed);
+	PFIXML_DEBUG("eating %zu bytes from libxml's buffer\n", consumed);
 	if (consumed < max_len) {
 		/* we mustn't wind too far */
 		ctx->pp->input->cur += consumed - len;
@@ -1285,10 +1291,10 @@ sax_bo_AOU_elt(
 		umpf_msg_t msg = ctx->msg;
 
 		/* actually this is the only one we support */
-		UMPF_DEBUG(PFIXML_PRE " GLUE\n");
+		PFIXML_DEBUG("GLUE\n");
 
 		if (UNLIKELY(msg == NULL)) {
-			UMPF_DEBUG("msg NULL, glue is meaningless\n");
+			PFIXML_DEBUG("msg NULL, glue is meaningless\n");
 			break;
 		}
 
@@ -1367,7 +1373,7 @@ sax_eo_AOU_elt(__ctx_t ctx, const char *name)
 		struct __satell_s *ptr;
 		size_t len = ctx->sbix - AOU_CONT_OFFS;
 
-		UMPF_DEBUG(PFIXML_PRE " /GLUE\n");
+		PFIXML_DEBUG("/GLUE\n");
 
 		/* reset stuff buffer */
 		ctx->sbix = 0;
@@ -1400,7 +1406,7 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 	umpf_ns_t ns = __pref_to_ns(ctx, name, rname - name);
 
 	if (UNLIKELY(ns == NULL)) {
-		UMPF_DEBUG(PFIXML_PRE ": unknown prefix in tag %s\n", name);
+		PFIXML_DEBUG("unknown prefix in tag %s\n", name);
 		return;
 	}
 
@@ -1415,13 +1421,12 @@ sax_bo_elt(__ctx_t ctx, const char *name, const char **attrs)
 		break;
 
 	case UMPF_NS_MDDL_3_0:
-		UMPF_DEBUG(PFIXML_PRE ": can't parse mddl yet (%s)\n", rname);
+		PFIXML_DEBUG("can't parse mddl yet (%s)\n", rname);
 		break;
 
 	case UMPF_NS_UNK:
 	default:
-		UMPF_DEBUG(PFIXML_PRE
-			   ": unknown namespace %s (%s)\n", name, ns->href);
+		PFIXML_DEBUG("unknown namespace %s (%s)\n", name, ns->href);
 		break;
 	}
 	return;
@@ -1435,7 +1440,7 @@ sax_eo_elt(__ctx_t ctx, const char *name)
 	umpf_ns_t ns = __pref_to_ns(ctx, name, rname - name);
 
 	if (UNLIKELY(ns == NULL)) {
-		UMPF_DEBUG(PFIXML_PRE ": unknown prefix in tag %s\n", name);
+		PFIXML_DEBUG("unknown prefix in tag %s\n", name);
 		return;
 	}
 
@@ -1450,13 +1455,12 @@ sax_eo_elt(__ctx_t ctx, const char *name)
 		break;
 
 	case UMPF_NS_MDDL_3_0:
-		UMPF_DEBUG(PFIXML_PRE ": can't parse mddl yet (%s)\n", rname);
+		PFIXML_DEBUG("can't parse mddl yet (%s)\n", rname);
 		break;
 
 	case UMPF_NS_UNK:
 	default:
-		UMPF_DEBUG(PFIXML_PRE
-			   ": unknown namespace %s (%s)\n", name, ns->href);
+		PFIXML_DEBUG("unknown namespace %s (%s)\n", name, ns->href);
 		break;
 	}
 	return;
@@ -1494,10 +1498,10 @@ final_blob_p(__ctx_t ctx)
 /* return 1 if we need more blobs, 0 if this was the final blob, -1 on error */
 	if (ctx->msg != NULL && ctx->state == NULL) {
 		/* we're ready */
-		UMPF_DEBUG(PFIXML_PRE ": seems ready\n");
+		PFIXML_DEBUG("seems ready\n");
 		return xmlParseChunk(ctx->pp, ctx->sbuf, 0, 1);
 	}
-	UMPF_DEBUG(PFIXML_PRE ": %p %u\n", ctx->msg, get_state_otype(ctx));
+	PFIXML_DEBUG("%p %u\n", ctx->msg, get_state_otype(ctx));
 	/* request more data */
 	return BLOB_M_PLZ;
 }
@@ -1512,7 +1516,7 @@ parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 	case UMPF_TAG_GLUE:
 		/* better not to push parse this guy
 		 * call our stuff buf pusher instead */
-		UMPF_DEBUG(PFIXML_PRE ": GLUE direct\n");
+		PFIXML_DEBUG("GLUE direct\n");
 		if ((cns = __push_glue(ctx, buf, bsz)) < bsz) {
 			/* oh, we need to wind our buffers */
 			buf += cns;
@@ -1520,7 +1524,7 @@ parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 		} else {
 			res = 0;
 		}
-		UMPF_DEBUG(PFIXML_PRE ": GLUE consumed %zu\n", cns);
+		PFIXML_DEBUG("GLUE consumed %zu\n", cns);
 	default:
 		res = (xmlParseChunk(ctx->pp, buf, bsz, bsz == 0) == 0) - 1;
 	}
@@ -1608,12 +1612,12 @@ __umpf_parse_file(__ctx_t ctx, const char *file)
 	umpf_msg_t res;
 
 	init(ctx);
-	UMPF_DEBUG(PFIXML_PRE ": parsing %s\n", file);
+	PFIXML_DEBUG("parsing %s\n", file);
 	if (LIKELY(parse_file(ctx, file) == 0)) {
-		UMPF_DEBUG(PFIXML_PRE ": done\n");
+		PFIXML_DEBUG("done\n");
 		res = ctx->msg;
 	} else {
-		UMPF_DEBUG(PFIXML_PRE ": failed\n");
+		PFIXML_DEBUG("failed\n");
 		res = NULL;
 	}
 	deinit(ctx);
@@ -1656,16 +1660,16 @@ check_ret(__ctx_t ctx, int ret)
 
 	switch (ret) {
 	case BLOB_READY:
-		UMPF_DEBUG(PFIXML_PRE ": done\n");
+		PFIXML_DEBUG("done\n");
 		res = ctx->msg;
 		break;
 	case BLOB_M_PLZ:
-		UMPF_DEBUG(PFIXML_PRE ": more\n");
+		PFIXML_DEBUG("more\n");
 		return NULL;
 	default:
 	case BLOB_ERROR:
 		/* error of some sort */
-		UMPF_DEBUG(PFIXML_PRE ": failed\n");
+		PFIXML_DEBUG("failed\n");
 		res = NULL;
 		break;
 	}
@@ -1677,14 +1681,14 @@ static umpf_msg_t
 __umpf_parse_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
 	init(ctx);
-	UMPF_DEBUG(PFIXML_PRE ": parsing blob of size %zu\n", bsz);
+	PFIXML_DEBUG("parsing blob of size %zu\n", bsz);
 	return check_ret(ctx, parse_blob(ctx, buf, bsz));
 }
 
 static umpf_msg_t
 __umpf_parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
-	UMPF_DEBUG(PFIXML_PRE ": parsing more blob of size %zu\n", bsz);
+	PFIXML_DEBUG("parsing more blob of size %zu\n", bsz);
 	return check_ret(ctx, parse_more_blob(ctx, buf, bsz));
 }
 

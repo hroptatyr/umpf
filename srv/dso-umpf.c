@@ -60,7 +60,11 @@
 #endif	/* HARD_INCLUDE_be_sql */
 #include "be-sql.h"
 
-#define MOD_PRE		"mod/umpf"
+/* we assume unserding with logger feature */
+#define UMPF_INFO_LOG(args...)	UD_SYSLOG(LOG_INFO, UMPF_MOD " " args)
+#define UMPF_ERR_LOG(args...)	UD_SYSLOG(LOG_ERR, UMPF_MOD " ERROR " args)
+#define UMPF_CRIT_LOG(args...)	UD_SYSLOG(LOG_CRIT, UMPF_MOD " CRITICAL " args)
+
 /* auto-sparsity assumes that positions set are just a subset of the whole
  * portfolio, and any positions not mentioned are taken over from the
  * previous tag */
@@ -133,7 +137,7 @@ interpret_msg(char **buf, umpf_msg_t msg)
 		const struct __satell_s *descr = msg->new_pf.satellite;
 		dbobj_t pf;
 
-		UMPF_DEBUG(MOD_PRE ": new_pf()/set_descr();\n");
+		UMPF_INFO_LOG("new_pf()/set_descr();\n");
 		pf = be_sql_new_pf(umpf_dbconn, mnemo, descr[0]);
 
 		/* reuse the message to send the answer */
@@ -147,7 +151,7 @@ interpret_msg(char **buf, umpf_msg_t msg)
 	case UMPF_MSG_GET_DESCR: {
 		const char *mnemo;
 
-		UMPF_DEBUG(MOD_PRE ": get_descr();\n");
+		UMPF_INFO_LOG("get_descr();\n");
 		mnemo = msg->new_pf.name;
 		if (msg->new_pf.satellite->data != NULL) {
 			free(msg->new_pf.satellite->data);
@@ -160,7 +164,7 @@ interpret_msg(char **buf, umpf_msg_t msg)
 		break;
 	}
 	case UMPF_MSG_LST_PF:
-		UMPF_DEBUG(MOD_PRE ": lst_pf();\n");
+		UMPF_INFO_LOG("lst_pf();\n");
 		be_sql_lst_pf(umpf_dbconn, lst_cb, &msg);
 
 		/* reuse the message to send the answer */
@@ -174,7 +178,7 @@ interpret_msg(char **buf, umpf_msg_t msg)
 		dbobj_t tag;
 		size_t npos;
 
-		UMPF_DEBUG(MOD_PRE ": get_pf();\n");
+		UMPF_INFO_LOG("get_pf();\n");
 		mnemo = msg->pf.name;
 		stamp = msg->pf.stamp;
 
@@ -486,6 +490,7 @@ umpf_init_be_sql(ud_ctx_t ctx, void *s)
 /* unserding bindings */
 static ud_conn_t __cnet = NULL;
 static ud_conn_t __cuds = NULL;
+void *umpf_logout;
 
 void
 init(void *clo)
@@ -493,14 +498,13 @@ init(void *clo)
 	ud_ctx_t ctx = clo;
 	void *settings;
 
-	UMPF_DEBUG(MOD_PRE ": loading ...");
+	UMPF_INFO_LOG("loading aou-umpf module");
 
 	/* glue to lua settings */
 	if ((settings = udctx_get_setting(ctx)) == NULL) {
-		UMPF_DBGCONT("failed\n");
+		UMPF_ERR_LOG("settings could not be read\n");
 		return;
 	}
-	UMPF_DBGCONT("\n");
 	/* obtain the unix domain sock from our settings */
 	__cuds = umpf_init_uds_sock(ctx, settings);
 	/* obtain port number for our network socket */
@@ -508,7 +512,13 @@ init(void *clo)
 	/* connect to our database */
 	umpf_dbconn = umpf_init_be_sql(ctx, settings);
 
-	UMPF_DEBUG(MOD_PRE ": ... loaded\n");
+	UMPF_INFO_LOG("successfully loaded\n");
+
+#if defined DEBUG_FLAG
+	umpf_logout = stderr;
+#else  /* !DEBUG_FLAG */
+	umpf_logout = fopen("/dev/null", "w");
+#endif	/* DEBUG_FLAG */
 
 	/* clean up */
 	udctx_set_setting(ctx, NULL);
@@ -518,14 +528,14 @@ init(void *clo)
 void
 reinit(void *UNUSED(clo))
 {
-	UMPF_DEBUG(MOD_PRE ": reloading ...done\n");
+	UMPF_INFO_LOG("reloading aou-umpf module ... done");
 	return;
 }
 
 void
 deinit(void *UNUSED(clo))
 {
-	UMPF_DEBUG(MOD_PRE ": unloading ...");
+	UMPF_INFO_LOG("unloading aou-umpf module");
 	if (__cnet) {
 		ud_conn_fini(__cnet);
 	}
@@ -540,7 +550,8 @@ deinit(void *UNUSED(clo))
 	if (umpf_dbconn) {
 		be_sql_close(umpf_dbconn);
 	}
-	UMPF_DBGCONT("done\n");
+	fclose(umpf_logout);
+	UMPF_INFO_LOG("aou-umpf successfully unloaded");
 	return;
 }
 
