@@ -58,7 +58,7 @@ PKG_CHECK_MODULES([LUA], [lua >= 5.1.0], [:], [:])
 AM_CONDITIONAL([HAVE_LUA], [test -n "${LUA_LIBS}"])
 
 ## check for unserding
-PKG_CHECK_MODULES([unserding], [unserding >= 0.1.1])
+PKG_CHECK_MODULES([unserding], [unserding >= 0.1.1], [:], [enable_server="no"])
 
 ## just so we know what to build
 AC_ARG_ENABLE([server], [

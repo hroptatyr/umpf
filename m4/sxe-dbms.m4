@@ -1,8 +1,8 @@
 ## database connectors
 
 AC_DEFUN([SXE_CHECK_MYSQL], [dnl
-AC_ARG_WITH([mysql], [
-	AS_HELP_STRING([--with-mysql], [Which mysql to use])], [], [])
+	AC_ARG_WITH([mysql], [
+AS_HELP_STRING([--with-mysql], [Which mysql to use])], [], [])
 
 	if test "${with_mysql}" != "no"; then
 		AC_PATH_PROG([MYSQL_CONFIG], [mysql_config], [:])
@@ -36,7 +36,7 @@ AC_ARG_WITH([mysql], [
 AC_DEFUN([SXE_CHECK_SQLITE], [dnl
 	## database stuff ... does not belong here
 	AC_ARG_WITH([sqlite], [
-	AS_HELP_STRING([--with-sqlite], [Which sqlite to use])], [], [])
+AS_HELP_STRING([--with-sqlite], [Which sqlite to use])], [], [])
 
 	if test "${with_sqlite}" != "no"; then
 		PKG_CHECK_MODULES([sqlite], [sqlite3 >= 3.6.0])
