@@ -77,18 +77,19 @@
 # define xfree(_x)	free(_x)
 #endif	/* !xfree */
 
+#define UMPF_MOD		"[mod/umpf]"
 #if defined DEBUG_FLAG
 # include <stdio.h>
 # define UMPF_DEBUG(args...)			\
-	fprintf(logout, "[umpf] " args)
+	fprintf(umpf_logout, UMPF_MOD " " args)
 # define UMPF_DBGCONT(args...)			\
-	fprintf(logout, args)
+	fprintf(umpf_logout, args)
 #else  /* !DEBUG_FLAG */
 # define UMPF_DEBUG(args...)
 # define UMPF_DBGCONT(args...)
 #endif	/* DEBUG_FLAG */
 
 /* fixme, any chance we can get that one from the server? */
-#define logout		stderr
+extern void *umpf_logout;
 
 #endif	/* INCLUDED_nifty_h_ */

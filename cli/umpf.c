@@ -784,7 +784,7 @@ make_umpf_set_poss_msg(const char *mnemo, const time_t stamp, const char *file)
 	FILE *f;
 
 	/* sigh, now the hard part, open file and parse positions */
-	if (file[0] == '-' && file[1] == '\0') {
+	if ((file == NULL) || (file[0] == '-' && file[1] == '\0')) {
 		f = stdin; 
 	} else if ((f = fopen(file, "r")) == NULL) {
 		return NULL;
@@ -819,11 +819,12 @@ make_umpf_set_poss_msg(const char *mnemo, const time_t stamp, const char *file)
 		} else if (UNLIKELY(nrd == 0)) {
 			continue;
 
-		} else if (__frob_poss_line(&iq, line, nrd) < 0) {
+		}
+
+		if (__frob_poss_line(&iq, line, nrd) < 0) {
 			/* parsing the line failed */
 			continue;
-		}
-		{
+		} else {
 			/* we've got to do a realloc() for every line, fuck */
 			size_t np = res->pf.nposs++;
 			size_t iqsz = sizeof(*res->pf.poss) * (np + 1);
@@ -883,7 +884,7 @@ make_umpf_apply_msg(const char *mnemo, const time_t stamp, const char *file)
 	FILE *f;
 
 	/* sigh, now the hard part, open file and parse positions */
-	if (file[0] == '-' && file[1] == '\0') {
+	if ((file == NULL) || (file[0] == '-' && file[1] == '\0')) {
 		f = stdin; 
 	} else if ((f = fopen(file, "r")) == NULL) {
 		return NULL;
@@ -918,7 +919,10 @@ make_umpf_apply_msg(const char *mnemo, const time_t stamp, const char *file)
 		} else if (UNLIKELY(nrd == 0)) {
 			continue;
 
-		} else if (__frob_poss_line(&iq, line, nrd) < 0) {
+		}
+
+		/* parse the line */
+		if (__frob_poss_line(&iq, line, nrd) < 0) {
 			/* parsing the line failed */
 			continue;
 		}
