@@ -85,7 +85,7 @@ get_cb(char *mnemo, double l, double s, void *clo)
 	umpf_msg_t msg = clo;
 	size_t idx = msg->pf.nposs;
 
-	UMPF_DEBUG(MOD_PRE ": %s %2.4f %2.4f\n", mnemo, l, s);
+	UMPF_DEBUG("%s %2.4f %2.4f\n", mnemo, l, s);
 	msg->pf.poss[idx].ins->sym = mnemo;
 	msg->pf.poss[idx].qty->_long = l;
 	msg->pf.poss[idx].qty->_shrt = s;
@@ -99,7 +99,7 @@ lst_cb(char *mnemo, void *clo)
 {
 	umpf_msg_t *msg = clo;
 
-	UMPF_DEBUG(MOD_PRE ": %s\n", mnemo);
+	UMPF_DEBUG("%s\n", mnemo);
 	if (((*msg)->lst_pf.npfs % 16) == 0) {
 		/* resize */
 		*msg = realloc(
@@ -116,7 +116,7 @@ lst_cb(char *mnemo, void *clo)
 static int
 wr_fin_cb(ud_conn_t UNUSED(c), char *buf, size_t UNUSED(bsz), void *UNUSED(d))
 {
-	UMPF_DEBUG(MOD_PRE ": finished writing buf %p\n", buf);
+	UMPF_DEBUG("finished writing buf %p\n", buf);
 	free(buf);
 	return 0;
 }
@@ -188,7 +188,7 @@ interpret_msg(char **buf, umpf_msg_t msg)
 			msg->pf.stamp = be_sql_get_stamp(umpf_dbconn, tag);
 			/* get the number of positions */
 			npos = be_sql_get_npos(umpf_dbconn, tag);
-			UMPF_DEBUG(MOD_PRE ": found %zu positions\n", npos);
+			UMPF_DEBUG("found %zu positions\n", npos);
 
 			msg = umpf_msg_add_pos(msg, npos);
 			msg->pf.nposs = 0;
@@ -208,7 +208,7 @@ interpret_msg(char **buf, umpf_msg_t msg)
 		time_t stamp;
 		dbobj_t tag;
 
-		UMPF_DEBUG(MOD_PRE ": set_pf();\n");
+		UMPF_DEBUG("set_pf();\n");
 		mnemo = msg->pf.name;
 		stamp = msg->pf.stamp;	
 #if defined UMPF_AUTO_SPARSE
@@ -238,7 +238,7 @@ interpret_msg(char **buf, umpf_msg_t msg)
 		const struct __satell_s *descr = msg->new_sec.satellite;
 		dbobj_t sec;
 
-		UMPF_DEBUG(MOD_PRE ": new_sec();\n");
+		UMPF_DEBUG("new_sec();\n");
 		sec = be_sql_new_sec(umpf_dbconn, pf_mnemo, sec_mnemo, *descr);
 
 		/* reuse the message to send the answer */
@@ -255,7 +255,7 @@ interpret_msg(char **buf, umpf_msg_t msg)
 		const struct __satell_s *descr = msg->new_sec.satellite;
 		dbobj_t sec;
 
-		UMPF_DEBUG(MOD_PRE ": set_sec();\n");
+		UMPF_DEBUG("set_sec();\n");
 		sec = be_sql_set_sec(umpf_dbconn, pf_mnemo, sec_mnemo, *descr);
 
 		/* reuse the message to send the answer,
@@ -272,7 +272,7 @@ interpret_msg(char **buf, umpf_msg_t msg)
 		const char *pf_mnemo;
 		const char *sec_mnemo;
 
-		UMPF_DEBUG(MOD_PRE ": get_sec();\n");
+		UMPF_DEBUG("get_sec();\n");
 		pf_mnemo = msg->new_sec.pf_mnemo;
 		sec_mnemo = msg->new_sec.ins->sym;
 		if (msg->new_sec.satellite->data != NULL) {
@@ -293,7 +293,7 @@ interpret_msg(char **buf, umpf_msg_t msg)
 		dbobj_t tag;
 		size_t res_nposs = 0;
 
-		UMPF_DEBUG(MOD_PRE ": patch();\n");
+		UMPF_DEBUG("patch();\n");
 		mnemo = msg->pf.name;
 		stamp = msg->pf.stamp;
 		tag = be_sql_copy_tag(umpf_dbconn, mnemo, stamp);
@@ -352,7 +352,7 @@ interpret_msg(char **buf, umpf_msg_t msg)
 		break;
 	}
 	default:
-		UMPF_DEBUG(MOD_PRE ": unknown message %u\n", msg->hdr.mt);
+		UMPF_DEBUG("unknown message %u\n", msg->hdr.mt);
 		umpf_set_msg_type(msg, UMPF_MSG_UNK);
 		len = umpf_seria_msg(buf, 0, msg);
 		break;
@@ -371,10 +371,10 @@ handle_data(ud_conn_t c, char *msg, size_t msglen, void *data)
 	umpf_ctx_t p = data;
 	umpf_msg_t umsg;
 
-	UMPF_DEBUG(MOD_PRE "/ctx: %p %zu\n", c, msglen);
+	UMPF_DEBUG("/ctx: %p %zu\n", c, msglen);
 #if defined DEBUG_FLAG
 	/* safely write msg to logerr now */
-	fwrite(msg, msglen, 1, logout);
+	fwrite(msg, msglen, 1, umpf_logout);
 #endif	/* DEBUG_FLAG */
 
 	if ((umsg = umpf_parse_blob_r(&p, msg, msglen)) != NULL) {
@@ -387,7 +387,7 @@ handle_data(ud_conn_t c, char *msg, size_t msglen, void *data)
 		if ((len = interpret_msg(&buf, umsg)) &&
 		    (wr = ud_write_soon(c, buf, len, wr_fin_cb))) {
 			UMPF_DEBUG(
-				MOD_PRE ": installing buf wr'er %p %p\n",
+				"installing buf wr'er %p %p\n",
 				wr, buf);
 			ud_conn_put_data(wr, buf);
 			return 0;
@@ -396,9 +396,9 @@ handle_data(ud_conn_t c, char *msg, size_t msglen, void *data)
 
 	} else if (/* umsg == NULL && */p == NULL) {
 		/* error occurred */
-		UMPF_DEBUG(MOD_PRE ": ERROR\n");
+		UMPF_DEBUG("ERROR\n");
 	} else {
-		UMPF_DEBUG(MOD_PRE ": need more grub\n");
+		UMPF_DEBUG("need more grub\n");
 	}
 	ud_conn_put_data(c, p);
 	return 0;
