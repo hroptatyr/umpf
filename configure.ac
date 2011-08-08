@@ -29,14 +29,14 @@ AM_INIT_AUTOMAKE([foreign])
 ## initialise our cool message nest levels
 SXE_INIT_MSG_LEVEL
 
+if test -z "${CFLAGS}"; then
+	CFLAGS="-g -O3 -Wall -Wunused -Wunused-function"
+fi
+
 ## the build chain
 AC_PROG_CC(["icc -static-intel" icc gcc cc])
 AC_PROG_CC_C99
 LT_INIT
-
-if test -z "${CFLAGS}"; then
-	CFLAGS="-g -O3 -Wall -Wunused -Wunused-function"
-fi
 
 AC_CHECK_HEADERS([stdbool.h])
 AC_CHECK_HEADERS([fcntl.h])
