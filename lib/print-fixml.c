@@ -340,7 +340,29 @@ print_amt(__ctx_t ctx, struct __amt_s *a, size_t indent)
 #endif
 
 static void
-print_pty(__ctx_t ctx, const char *id, unsigned int role, char src, size_t ind)
+print_sub(__ctx_t ctx, long unsigned int *sub, size_t ind)
+{
+	print_indent(ctx, ind);
+	sputs(ctx, "<Sub");
+
+	if (sub) {
+		if (*sub) {
+			csnprintf(ctx, " ID=\"%lu\"", *sub);
+		} else {
+			sputs(ctx, " ID=\"*\"");
+		}
+	}
+
+	/* finalise the tag */
+	sputs(ctx, "/>\n");
+	return;
+}
+
+static void
+print_pty(
+	__ctx_t ctx, const char *id, unsigned int role, char src,
+	long unsigned int *subs, size_t nsubs,
+	size_t ind)
 {
 	print_indent(ctx, ind);
 	sputs(ctx, "<Pty");
@@ -359,23 +381,20 @@ print_pty(__ctx_t ctx, const char *id, unsigned int role, char src, size_t ind)
 		sputc(ctx, '"');
 	}
 
-#if 0
-	/* finalise the tag */
-	sputs(ctx, ">\n");
+	if (nsubs == 0) {
+		/* finalise the tag */
+		sputs(ctx, "/>\n");
+	} else {
+		/* finalise the tag */
+		sputs(ctx, ">\n");
 
-/* not supported */
-	for (size_t j = 0; j < p->nsub; j++) {
-		struct __sub_s *sub = p->sub + j;
-		print_sub(sub, out, indent + 2);
+		for (size_t j = 0; j < nsubs; j++) {
+			print_sub(ctx, subs + j, ind + 2);
+		}
+
+		print_indent(ctx, ind);
+		sputs(ctx, "</Pty>\n");
 	}
-
-	print_indent(ctx, ind);
-	sputs(ctx, "</Pty>\n");
-
-#else
-	/* finalise the tag */
-	sputs(ctx, "/>\n");
-#endif	/* 0 */
 	return;
 }
 
@@ -461,7 +480,16 @@ print_req_for_poss(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 	/* finalise the tag */
 	sputs(ctx, ">\n");
 
-	print_pty(ctx, msg->pf.name, 0, '\0', indent + 2);
+	switch (msg->hdr.mt) {
+	default:
+		print_pty(ctx, msg->pf.name, 0, '\0', NULL, 0, indent + 2);
+		break;
+	case UMPF_MSG_LST_TAG * 2: {
+		long unsigned int zero[] = {0UL};
+		print_pty(ctx, msg->pf.name, 0, '\0', zero, 1, indent + 2);
+		break;
+	}
+	}
 
 	print_indent(ctx, indent);
 	sputs(ctx, "</ReqForPoss>\n");
@@ -508,7 +536,7 @@ print_req_for_poss_ack(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 	/* finalise the tag */
 	sputs(ctx, ">\n");
 
-	print_pty(ctx, msg->pf.name, 0, '\0', indent + 2);
+	print_pty(ctx, msg->pf.name, 0, '\0', NULL, 0, indent + 2);
 
 	print_indent(ctx, indent);
 	sputs(ctx, "</ReqForPossAck>\n");
@@ -599,7 +627,7 @@ print_pos_rpt(__ctx_t ctx, umpf_msg_t msg, size_t idx, size_t indent)
 	/* finalise the tag */
 	sputs(ctx, ">\n");
 
-	print_pty(ctx, msg->pf.name, 0, '\0', indent + 2);
+	print_pty(ctx, msg->pf.name, 0, '\0', NULL, 0, indent + 2);
 
 	print_instrmt(ctx, msg->pf.poss[idx].ins, indent + 2);
 	print_qty(ctx, msg->pf.poss + idx, indent + 2);
@@ -868,6 +896,7 @@ print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 	case UMPF_MSG_SET_PF * 2 + 1:
 		/* answer to SET_PF is a GET_PF */
 	case UMPF_MSG_GET_PF * 2:
+	case UMPF_MSG_LST_TAG * 2:
 		print_req_for_poss(ctx, msg, indent + 2);
 		break;
 
@@ -923,6 +952,7 @@ print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 		sputs(ctx, "</Batch>\n");
 #endif	/* 0 */
 		break;
+
 	case UMPF_MSG_UNK:
 	case UMPF_MSG_UNK + 1: {
 		static const char err_msg[] = "\

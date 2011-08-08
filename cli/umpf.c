@@ -966,6 +966,15 @@ out:
 	return res;
 }
 
+static umpf_msg_t
+make_umpf_ls_tag_msg(const char *mnemo)
+{
+	umpf_msg_t res = make_umpf_msg();
+	umpf_set_msg_type(res, UMPF_MSG_LST_TAG);
+	res->lst_tag.name = strdup(mnemo);
+	return res;
+}
+
 static int
 umpf_process(struct __clo_s *clo)
 {
@@ -1035,7 +1044,17 @@ umpf_process(struct __clo_s *clo)
 		if ((msg = make_umpf_apply_msg(mnemo, stamp, file))) {
 			break;
 		}
-		/* otherwise fall through to default case */
+		return -1;
+	}
+	case UMPF_CMD_CLO_PF: {
+		return -1;
+	}
+	case UMPF_CMD_LIST_TAG: {
+		const char *mnemo = clo->ls_tag->mnemo;
+		if ((msg = make_umpf_ls_tag_msg(mnemo))) {
+			break;
+		}
+		return -1;
 	}
 	default:
 		/* don't even try the connect */
@@ -1357,10 +1376,12 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 		}
 		case 'l':
 			/* list-pf/list-tag */
-			if (strcmp(p, "ist-pf") == 0) {
+			if (strcmp(p, "ist-pf") == 0 ||
+			    strcmp(p, "ist-pfs") == 0) {
 				clo->cmd = UMPF_CMD_LIST_PF;
 				continue;
-			} else if (strcmp(p, "ist-tag") == 0) {
+			} else if (strcmp(p, "ist-tag") == 0 ||
+				   strcmp(p, "ist-tags") == 0) {
 				int new_argc = argc - i - 1;
 				char **new_argv = argv + i + 1;
 				clo->cmd = UMPF_CMD_LIST_TAG;

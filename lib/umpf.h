@@ -157,12 +157,23 @@ struct umpf_msg_pf_s {
 	struct __ins_qty_s poss[];
 };
 
+/* X -> list-tag */
+struct umpf_msg_lst_tag_s {
+	struct umpf_msg_hdr_s hdr;
+
+	char *name;
+
+	size_t ntags;
+	long unsigned int tags[];
+};
+
 union umpf_msg_u {
 	struct umpf_msg_hdr_s hdr;
 	struct umpf_msg_pf_s pf;
 	struct umpf_msg_new_pf_s new_pf;
 	struct umpf_msg_new_sec_s new_sec;
 	struct umpf_msg_lst_pf_s lst_pf;
+	struct umpf_msg_lst_tag_s lst_tag;
 };
 
 
