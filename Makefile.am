@@ -5,8 +5,10 @@ ACLOCAL_AMFLAGS = -I m4
 
 SUBDIRS = lib cli srv
 
+if BUILD_LIBRARY
 pkgconfigdir = @libdir@/pkgconfig
 pkgconfig_DATA = libumpf.pc
+endif
 
 EXTRA_DIST = .version git-version-gen
 EXTRA_DIST += sql/install-mysql.sql sql/uninstall-mysql.sql
