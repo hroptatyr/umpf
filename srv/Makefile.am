@@ -3,17 +3,15 @@
 AM_CPPFLAGS = -D_GNU_SOURCE -D_POSIX_C_SOURCE=201001L -D__USE_XOPEN2K8
 AM_LDFLAGS =
 
-moddir = $(libdir)/unserding
-
 bin_PROGRAMS =
 noinst_PROGRAMS =
 noinst_HEADERS =
-mod_LTLIBRARIES =
 BUILT_SOURCES =
 CLEANFILES = $(BUILT_SOURCES)
 
 if BUILD_SERVER
-mod_LTLIBRARIES += dso-umpf.la
+moddir = $(libdir)/unserding
+mod_LTLIBRARIES = dso-umpf.la
 dso_umpf_la_SOURCES =
 EXTRA_dso_umpf_la_SOURCES =
 dso_umpf_la_LDFLAGS = -module
