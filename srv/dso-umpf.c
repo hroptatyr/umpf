@@ -191,7 +191,7 @@ interpret_msg(char **buf, umpf_msg_t msg)
 			msg->pf.tag_id = tid;
 			/* get the number of positions */
 			npos = be_sql_get_npos(umpf_dbconn, tag);
-			UMPF_DEBUG("found %zu positions\n", npos);
+			UMPF_DEBUG("found %zu positions for %lu\n", npos, tid);
 
 			msg = umpf_msg_add_pos(msg, npos);
 			msg->pf.nposs = 0;

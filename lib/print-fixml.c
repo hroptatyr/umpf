@@ -340,7 +340,7 @@ print_amt(__ctx_t ctx, struct __amt_s *a, size_t indent)
 #endif
 
 static void
-print_sub(__ctx_t ctx, long unsigned int *sub, size_t ind)
+print_sub(__ctx_t ctx, tag_t *sub, size_t ind)
 {
 	print_indent(ctx, ind);
 	sputs(ctx, "<Sub");

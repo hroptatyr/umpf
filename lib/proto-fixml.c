@@ -764,6 +764,27 @@ proc_PTY_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 }
 
 static void
+proc_SUB_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
+{
+	umpf_msg_t msg = get_state_object(ctx);
+
+	switch (aid) {
+	case UMPF_ATTR_ID:
+		/* dont overwrite stuff without free()ing
+		 * actually this is a bit rich, too much knowledge in here */
+		msg->pf.tag_id = strtoul(value, NULL, 10);
+		break;
+	case UMPF_ATTR_TYP:
+		/* ignored */
+		break;
+	default:
+		PFIXML_DEBUG("WARN: unknown attr %u\n", aid);
+		break;
+	}
+	return;
+}
+
+static void
 proc_INSTRMT_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 {
 	switch (aid) {
@@ -1093,7 +1114,29 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 	}
 
 	case UMPF_TAG_SUB: {
-		/* not supported */
+		/* context sensitive node, bummer */
+		umpf_msg_t msg = ctx->msg;
+
+		if (ctx->state == NULL || ctx->state->old_state == NULL) {
+			goto push_trivial;
+		}
+		/* we need to look up our grand-parent because our parent
+		 * is a Pty */
+		switch (ctx->state->old_state->otype) {
+		case UMPF_TAG_REQ_FOR_POSS:
+		case UMPF_TAG_REQ_FOR_POSS_ACK:
+			(void)push_state(ctx, tid, msg);
+
+			for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+				const umpf_aid_t a = check_attr(ctx, attrs[j]);
+				proc_SUB_attr(ctx, a, attrs[j + 1]);
+			}
+			break;
+		default:
+		push_trivial:
+			(void)push_state(ctx, tid, NULL);
+			break;
+		}
 		break;
 	}
 
@@ -1188,6 +1231,7 @@ sax_eo_FIXML_elt(__ctx_t ctx, const char *name)
 	case UMPF_TAG_RGST_INSTRCTNS_RSP:
 	case UMPF_TAG_RG_DTL:
 	case UMPF_TAG_PTY:
+	case UMPF_TAG_SUB:
 	case UMPF_TAG_SEC_DEF:
 	case UMPF_TAG_SEC_DEF_REQ:
 	case UMPF_TAG_SEC_DEF_UPD:
