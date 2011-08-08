@@ -3,8 +3,6 @@
 AM_CPPFLAGS = -D_GNU_SOURCE -D_POSIX_C_SOURCE=201001L -D__USE_XOPEN2K8 -fPIC
 AM_LDFLAGS =
 
-aouhdrdir = $(includedir)/aou
-
 bin_PROGRAMS =
 noinst_PROGRAMS =
 noinst_HEADERS =
@@ -14,6 +12,7 @@ EXTRA_DIST = $(BUILT_SOURCES)
 
 if BUILD_LIBRARY
 lib_LTLIBRARIES += libumpf.la
+aouhdrdir = $(includedir)/aou
 aouhdr_HEADERS = umpf.h
 else
 noinst_LTLIBRARIES = libumpf.la
