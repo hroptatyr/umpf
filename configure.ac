@@ -72,8 +72,11 @@ AM_CONDITIONAL([BUILD_SERVER], [test "${enable_server}" = "yes"])
 AC_ARG_ENABLE([cliapps], [
 AS_HELP_STRING([--enable-client], [Build the client apps, default: yes.])],
 	[enable_cliapps="${enableval}"], [enable_cliapps="yes"])
+AC_ARG_ENABLE([library], [
+AS_HELP_STRING([--enable-library], [Build the library, default: yes.])],
+	[enable_library="${enableval}"], [enable_library="yes"])
 AM_CONDITIONAL([BUILD_CLIAPPS], [test "${enable_cliapps}" = "yes"])
-AM_CONDITIONAL([BUILD_LIBRARY], [test "yes" = "yes"])
+AM_CONDITIONAL([BUILD_LIBRARY], [test "${enable_library}" = "yes"])
 
 AC_CONFIG_FILES([Makefile])
 AC_CONFIG_FILES([cli/Makefile])
@@ -103,9 +106,9 @@ echo
 echo "Build summary"
 echo "============="
 echo
-echo "Build server: ${BUILD_SRV}"
 echo "Build cliapps: ${BUILD_CLI}"
 echo "Build library: ${BUILD_LIB}"
+echo "Build server: ${BUILD_SRV}"
 echo "Scripting engine: ${HAVE_LUA_FALSE:+lua}"
 echo "DBMS:${DBMS}"
 echo "XML: ${USE_LIBXML2_FALSE:+libxml2}"
