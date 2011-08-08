@@ -70,6 +70,23 @@ CREATE TABLE IF NOT EXISTS "aou_umpf_position" (
 		ON DELETE CASCADE ON UPDATE CASCADE
 );
 
+-- portfolio double positions
+-- like aou_umpf_position but for entries with double characteristics
+-- fact table
+CREATE TABLE IF NOT EXISTS "aou_umpf_dposition" (
+	tag_id INTEGER NOT NULL ON CONFLICT ROLLBACK,
+	security_id INTEGER NOT NULL ON CONFLICT ROLLBACK,
+	long_qty REAL,
+	short_qty REAL,
+	PRIMARY KEY ("tag_id", "security_id") ON CONFLICT ROLLBACK,
+	FOREIGN KEY ("tag_id")
+		REFERENCES "aou_umpf_tag" ("tag_id")
+		ON DELETE CASCADE ON UPDATE CASCADE,
+	FOREIGN KEY ("security_id")
+		REFERENCES "aou_umpf_security" ("security_id")
+		ON DELETE CASCADE ON UPDATE CASCADE
+);
+
 -- position groups
 -- this can be used to group a bunch of security positions together
 -- for instance to reflect counter positions and fee positions or

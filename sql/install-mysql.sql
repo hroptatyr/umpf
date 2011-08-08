@@ -72,6 +72,23 @@ CREATE TABLE IF NOT EXISTS `aou_umpf_position` (
 		ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE InnoDB CHARSET ascii COLLATE ascii_bin;
 
+-- portfolio double positions
+-- like aou_umpf_position but for entries with double characteristics
+-- fact table
+CREATE TABLE IF NOT EXISTS `aou_umpf_dposition` (
+	tag_id INTEGER NOT NULL,
+	security_id INTEGER NOT NULL,
+	long_qty DOUBLE,
+	short_qty DOUBLE,
+	PRIMARY KEY (`tag_id`, `security_id`),
+	FOREIGN KEY (`tag_id`)
+		REFERENCES `aou_umpf_tag` (`tag_id`)
+		ON DELETE CASCADE ON UPDATE CASCADE,
+	FOREIGN KEY (`security_id`)
+		REFERENCES `aou_umpf_security` (`security_id`)
+		ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE InnoDB CHARSET ascii COLLATE ascii_bin;
+
 -- position groups
 -- this can be used to group a bunch of security positions together
 -- for instance to reflect counter positions and fee positions or
