@@ -533,6 +533,8 @@ pretty_print(umpf_msg_t msg)
 		fput_zulu(msg->pf.stamp, stdout);
 		fputs(" :clear ", stdout);
 		fput_date(msg->pf.clr_dt, stdout);
+		fputs(" :tag ", stdout);
+		fprintf(stdout, "%lu", msg->pf.tag_id);
 		fputc('\n', stdout);
 
 		for (size_t i = 0; i < msg->pf.nposs; i++) {
