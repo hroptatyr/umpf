@@ -54,6 +54,7 @@ typedef enum {
 	UMPF_MSG_UNK,
 	/* portfolio transactions */
 	UMPF_MSG_LST_PF,
+	UMPF_MSG_CLO_PF,
 	UMPF_MSG_NEW_PF,
 	UMPF_MSG_GET_PF,
 	UMPF_MSG_SET_PF,
@@ -69,6 +70,9 @@ typedef enum {
 	 * patch takes a portfolio and a stream of od/uschi msgs */
 	UMPF_MSG_DIFF,
 	UMPF_MSG_PATCH,
+	/* tag transactions */
+	UMPF_MSG_LST_TAG,
+	UMPF_MSG_DEL_TAG,
 } umpf_msg_type_t;
 
 typedef enum {

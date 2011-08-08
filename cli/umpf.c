@@ -89,6 +89,7 @@ typedef enum {
 	UMPF_CMD_NEW_PF,
 	UMPF_CMD_GET_PF,
 	UMPF_CMD_SET_PF,
+	UMPF_CMD_CLO_PF,
 	UMPF_CMD_NEW_SEC,
 	UMPF_CMD_GET_SEC,
 	UMPF_CMD_SET_SEC,
@@ -96,6 +97,8 @@ typedef enum {
 	UMPF_CMD_SET_POSS,
 	UMPF_CMD_APPLY,
 	UMPF_CMD_DIFF,
+	UMPF_CMD_LIST_TAG,
+	UMPF_CMD_DEL_TAG,
 } umpf_cmd_t;
 
 /* new_pf specific options */
@@ -143,6 +146,20 @@ struct __apply_clo_s {
 	const char *poss;
 };
 
+struct __clo_pf_clo_s {
+	const char *old;
+	const char *new;
+	const char *file;
+	const char *descr;
+	int movep;
+};
+
+struct __del_tag_clo_s {
+	const char *mnemo;
+	const char *tag;
+	long unsigned int tag_id;
+};
+
 /* command line options */
 struct __clo_s {
 	int helpp;
@@ -161,6 +178,8 @@ struct __clo_s {
 		struct __get_poss_clo_s get_poss[1];
 		struct __set_poss_clo_s set_poss[1];
 		struct __apply_clo_s apply[1];
+		struct __clo_pf_clo_s clo_pf[1];
+		struct __
 	};
 };
 
@@ -197,6 +216,12 @@ Supported commands:\n\
     -f, --file=FILE          File with description to pass on\n\
                              Use - for stdin\n\
 \n\
+  clo-pf [OPTIONS] OLD NEW   Copy or rename a portfolio OLD to NEW.\n\
+    -d, --descr=STRING       Set description from STRING\n\
+    -f, --file=FILE          File with description to pass on\n\
+                             Use - for stdin\n\
+    -m, --move               Delete the old portfolio OLD as well.\n\
+\n\
   new-sec [OPTIONS] NAME     Register a new security NAME\n\
     -p, --pf=STRING          Name of the portfolio to register the\n\
                              security with.\n\
@@ -222,6 +247,9 @@ Supported commands:\n\
   apply [OPTIONS] [NAME]     Apply order to portfolio NAME\n\
     -d, --date=DATE          Set the portfolio as of DATE\n\
     -f, --file=FILE          Use positions in FILE, - for stdin\n\
+\n\
+  list-tag NAME              List all tags in portfolio NAME\n\
+  del-tag NAME TAG           Delete TAG from portfolio NAME\n\
 \n\
 ";
 
