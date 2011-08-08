@@ -184,8 +184,11 @@ interpret_msg(char **buf, umpf_msg_t msg)
 
 		tag = be_sql_get_tag(umpf_dbconn, mnemo, stamp);
 		if (LIKELY(tag != NULL)) {
+			tag_t tid = be_sql_tag_get_id(umpf_dbconn, tag);
+
 			/* set correct tag stamp */
 			msg->pf.stamp = be_sql_get_stamp(umpf_dbconn, tag);
+			msg->pf.tag_id = tid;
 			/* get the number of positions */
 			npos = be_sql_get_npos(umpf_dbconn, tag);
 			UMPF_DEBUG("found %zu positions\n", npos);

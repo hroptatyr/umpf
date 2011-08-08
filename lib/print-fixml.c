@@ -361,8 +361,7 @@ print_sub(__ctx_t ctx, long unsigned int *sub, size_t ind)
 static void
 print_pty(
 	__ctx_t ctx, const char *id, unsigned int role, char src,
-	long unsigned int *subs, size_t nsubs,
-	size_t ind)
+	tag_t *subs, size_t nsubs, size_t ind)
 {
 	print_indent(ctx, ind);
 	sputs(ctx, "<Pty");
@@ -485,7 +484,7 @@ print_req_for_poss(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 		print_pty(ctx, msg->pf.name, 0, '\0', NULL, 0, indent + 2);
 		break;
 	case UMPF_MSG_LST_TAG * 2: {
-		long unsigned int zero[] = {0UL};
+		tag_t zero[] = {0UL};
 		print_pty(ctx, msg->pf.name, 0, '\0', zero, 1, indent + 2);
 		break;
 	}
@@ -536,7 +535,7 @@ print_req_for_poss_ack(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 	/* finalise the tag */
 	sputs(ctx, ">\n");
 
-	print_pty(ctx, msg->pf.name, 0, '\0', NULL, 0, indent + 2);
+	print_pty(ctx, msg->pf.name, 0, '\0', &msg->pf.tag_id, 1, indent + 2);
 
 	print_indent(ctx, indent);
 	sputs(ctx, "</ReqForPossAck>\n");

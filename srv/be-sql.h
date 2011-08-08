@@ -95,6 +95,12 @@ DECLF dbobj_t be_sql_get_tag(dbconn_t, const char *mnemo, time_t stamp);
 DECLF void be_sql_free_tag(dbconn_t, dbobj_t tag);
 
 /**
+ * Corresponds to the first part of UMPF_MSG_GET_PF.
+ * \param MNEMO is the mnemonic of the portfolio.
+ * \param STAMP is the time stamp at which positions have been recorded. */
+DECLF tag_t be_sql_tag_get_id(dbconn_t, dbobj_t tag);
+
+/**
  * Corresponds to the iteration part of UMPF_MSG_SET_PF.
  * \param TAG is the portfolio tag as obtained by `be_sql_new_tag()'.
  * \param MNEMO is the mnemonic of the security.

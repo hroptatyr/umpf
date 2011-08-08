@@ -1212,6 +1212,13 @@ be_sql_free_tag(dbconn_t UNUSED(conn), dbobj_t tag)
 	return;
 }
 
+DECLF tag_t
+be_sql_tag_get_id(dbconn_t UNUSED(conn), dbobj_t tag)
+{
+	struct __tag_s *t = (void*)tag;
+	return t->tag_id;
+}
+
 DEFUN void
 be_sql_set_pos(dbconn_t c, dbobj_t tag, const char *mnemo, double l, double s)
 {

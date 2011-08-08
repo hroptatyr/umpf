@@ -48,6 +48,7 @@ extern "C" {
 typedef void *umpf_ctx_t;
 typedef struct __umpf_s *umpf_doc_t;
 typedef union umpf_msg_u *umpf_msg_t;
+typedef long unsigned int tag_t;
 
 /* message types */
 typedef enum {
@@ -152,6 +153,7 @@ struct umpf_msg_pf_s {
 	char *name;
 	time_t stamp;
 	time_t clr_dt;
+	tag_t tag_id;
 
 	size_t nposs;
 	struct __ins_qty_s poss[];
