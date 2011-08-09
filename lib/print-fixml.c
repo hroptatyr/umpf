@@ -872,7 +872,7 @@ print_appl_msg_req(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 
 	switch (umpf_get_msg_type(msg)) {
 	case UMPF_MSG_LST_TAG:
-		sputs(ctx, " RefAppID=\"lst_tag\">\n");
+		sputs(ctx, " RefApplID=\"lst_tag\">\n");
 
 		print_pty_nosubs(ctx, msg->lst_tag.name, 0, '\0', indent + 4);
 
@@ -903,7 +903,7 @@ print_appl_msg_req_ack(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 
 	switch (umpf_get_msg_type(msg)) {
 	case UMPF_MSG_LST_TAG:
-		sputs(ctx, " RefAppID=\"lst_tag\">\n");
+		sputs(ctx, " RefApplID=\"lst_tag\">\n");
 
 		print_pty_subs(
 			ctx, msg->lst_tag.name, 0, '\0',
