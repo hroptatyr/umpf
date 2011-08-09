@@ -1047,7 +1047,7 @@ UPDATE aou_umpf_portfolio SET description = ? WHERE portfolio_id = ?";
 	return (dbobj_t)pf_id;
 }
 
-DECLF struct __satell_s
+DEFUN struct __satell_s
 be_sql_get_descr(dbconn_t conn, const char *pf_mnemo)
 {
 /* this is a get_pf + update */
@@ -1205,14 +1205,14 @@ be_sql_get_tag(dbconn_t conn, const char *mnemo, time_t stamp)
 	return (dbobj_t)tag;
 }
 
-DECLF void
+DEFUN void
 be_sql_free_tag(dbconn_t UNUSED(conn), dbobj_t tag)
 {
 	free((struct __tag_s*)tag);
 	return;
 }
 
-DECLF tag_t
+DEFUN tag_t
 be_sql_tag_get_id(dbconn_t UNUSED(conn), dbobj_t tag)
 {
 	struct __tag_s *t = (void*)tag;
@@ -1365,7 +1365,7 @@ WHERE tag_id = ?";
 	return npos;
 }
 
-DECLF void
+DEFUN void
 be_sql_get_pos(
 	dbconn_t conn, dbobj_t tag,
 	int(*cb)(char*, double, double, void*), void *clo)
@@ -1496,7 +1496,7 @@ UPDATE aou_umpf_security SET description = ? WHERE security_id = ?";
 	return (dbobj_t)sec_id;
 }
 
-DECLF struct __satell_s
+DEFUN struct __satell_s
 be_sql_get_sec(dbconn_t conn, const char *pf_mnemo, const char *sec_mnemo)
 {
 /* this is a get_sec + update */
@@ -1552,7 +1552,7 @@ be_sql_free_sec(dbconn_t UNUSED(conn), dbobj_t UNUSED(pf))
 	return;
 }
 
-DECLF void
+DEFUN void
 be_sql_lst_pf(dbconn_t conn, int(*cb)(char*, void*), void *clo)
 {
 	dbstmt_t stmt;

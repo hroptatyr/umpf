@@ -159,10 +159,17 @@ be_sql_get_sec(dbconn_t, const char *pf_mnemo, const char *sec_mnemo);
 
 /**
  * Frees any resources used by get_sec/set_sec calls. */
-DEFUN void be_sql_free_sec(dbconn_t, dbobj_t sec);
+DECLF void be_sql_free_sec(dbconn_t, dbobj_t sec);
 
 /**
  * Corresponds to UMPF_MSG_LST_PF */
-DEFUN void be_sql_lst_pf(dbconn_t conn, int(*cb)(char*, void*), void *clo);
+DECLF void be_sql_lst_pf(dbconn_t conn, int(*cb)(char*, void*), void *clo);
+
+/**
+ * Corresponds to UMPF_MSG_LST_TAG */
+DECLF void
+be_sql_lst_tag(
+	dbconn_t conn, const char *pf,
+	int(*cb)(uint64_t, time_t, void*), void *clo);
 
 #endif	/* INCLUDED_be_sql_h_ */
