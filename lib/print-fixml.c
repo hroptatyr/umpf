@@ -922,7 +922,7 @@ print_appl_msg_req_ack(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 
 	/* finalise the tag */
 	print_indent(ctx, indent);
-	sputs(ctx, "</ApplMsgReq>\n");
+	sputs(ctx, "</ApplMsgReqAck>\n");
 	return;
 }
 
