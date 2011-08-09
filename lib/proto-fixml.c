@@ -764,27 +764,6 @@ proc_PTY_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 }
 
 static void
-proc_SUB_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
-{
-	umpf_msg_t msg = get_state_object(ctx);
-
-	switch (aid) {
-	case UMPF_ATTR_ID:
-		/* dont overwrite stuff without free()ing
-		 * actually this is a bit rich, too much knowledge in here */
-		msg->pf.tag_id = strtoul(value, NULL, 10);
-		break;
-	case UMPF_ATTR_TYP:
-		/* ignored */
-		break;
-	default:
-		PFIXML_DEBUG("WARN: unknown attr %u\n", aid);
-		break;
-	}
-	return;
-}
-
-static void
 proc_INSTRMT_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 {
 	switch (aid) {
@@ -915,6 +894,18 @@ proc_ALLOC_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 		break;
 	}
 	return;
+}
+
+static tag_t
+get_SUB_ID(__ctx_t ctx, const char **attrs)
+{
+	for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+		const umpf_aid_t a = check_attr(ctx, attrs[j]);
+		if (a == UMPF_ATTR_ID) {
+			return strtoul(attrs[j + 1], NULL, 10);
+		}
+	}
+	return 0UL;
 }
 
 
@@ -1068,6 +1059,27 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 		sax_bo_top_level_elt(ctx, tid, attrs);
 		break;
 
+	case UMPF_TAG_APPL_MSG_REQ:
+	case UMPF_TAG_APPL_MSG_REQ_ACK:
+		/* just a container around the really interesting bit */
+		break;
+
+	case UMPF_TAG_APPL_ID_REQ_GRP:
+	case UMPF_TAG_APPL_ID_REQ_ACK_GRP:
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			/* only listen for RefApplID */
+			if (aid != UMPF_ATTR_REF_APPL_ID) {
+				continue;
+			}
+			PFIXML_DEBUG("found %s\n", attrs[j + 1]);
+			if (strcmp(attrs[j + 1], "lst_tag") == 0) {
+				umpf_set_msg_type(ctx->msg, UMPF_MSG_LST_TAG);
+			}
+		}
+		(void)push_state(ctx, tid, ctx->msg);
+		break;
+
 	case UMPF_TAG_POS_RPT: {
 		/* part of get/set pf */
 		umpf_msg_t msg;
@@ -1099,6 +1111,8 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 			 * as msg_pf's, so just go with it */
 		case UMPF_TAG_REQ_FOR_POSS:
 		case UMPF_TAG_REQ_FOR_POSS_ACK:
+		case UMPF_TAG_APPL_ID_REQ_GRP:
+		case UMPF_TAG_APPL_ID_REQ_ACK_GRP:
 			(void)push_state(ctx, tid, msg);
 
 			for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
@@ -1114,27 +1128,35 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 	}
 
 	case UMPF_TAG_SUB: {
-		/* context sensitive node, bummer */
-		umpf_msg_t msg = ctx->msg;
+		tag_t tid;
 
+		/* context sensitive node, bummer */
 		if (ctx->state == NULL || ctx->state->old_state == NULL) {
-			goto push_trivial;
+			break;
 		}
+
+		tid = get_SUB_ID(ctx, attrs);
+
 		/* we need to look up our grand-parent because our parent
 		 * is a Pty */
 		switch (ctx->state->old_state->otype) {
 		case UMPF_TAG_REQ_FOR_POSS:
 		case UMPF_TAG_REQ_FOR_POSS_ACK:
-			(void)push_state(ctx, tid, msg);
-
-			for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
-				const umpf_aid_t a = check_attr(ctx, attrs[j]);
-				proc_SUB_attr(ctx, a, attrs[j + 1]);
+			ctx->msg->pf.tag_id = tid;
+			break;
+		case UMPF_TAG_APPL_ID_REQ_GRP:
+		case UMPF_TAG_APPL_ID_REQ_ACK_GRP: 
+			/* add tid */
+			if ((ctx->msg->lst_tag.ntags % 512) == 0) {
+				ctx->msg = realloc(
+					ctx->msg,
+					sizeof(*ctx->msg) +
+					(ctx->msg->lst_tag.ntags + 512) *
+					sizeof(*ctx->msg->lst_tag.tags));
 			}
+			ctx->msg->lst_tag.tags[ctx->msg->lst_tag.ntags++] = tid;
 			break;
 		default:
-		push_trivial:
-			(void)push_state(ctx, tid, NULL);
 			break;
 		}
 		break;
@@ -1231,12 +1253,19 @@ sax_eo_FIXML_elt(__ctx_t ctx, const char *name)
 	case UMPF_TAG_RGST_INSTRCTNS_RSP:
 	case UMPF_TAG_RG_DTL:
 	case UMPF_TAG_PTY:
-	case UMPF_TAG_SUB:
 	case UMPF_TAG_SEC_DEF:
 	case UMPF_TAG_SEC_DEF_REQ:
 	case UMPF_TAG_SEC_DEF_UPD:
 	case UMPF_TAG_ALLOC_INSTRCTN:
+	case UMPF_TAG_APPL_ID_REQ_GRP:
+	case UMPF_TAG_APPL_ID_REQ_ACK_GRP:
 		pop_state(ctx);
+		break;
+	case UMPF_TAG_SUB:
+		/* noone dare push this */
+		break;
+	case UMPF_TAG_APPL_MSG_REQ:
+	case UMPF_TAG_APPL_MSG_REQ_ACK:
 		break;
 	case UMPF_TAG_FIXML:
 		/* finalise the document */

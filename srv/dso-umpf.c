@@ -95,7 +95,7 @@ get_cb(char *mnemo, double l, double s, void *clo)
 }
 
 static int
-lst_cb(char *mnemo, void *clo)
+lst_pf_cb(char *mnemo, void *clo)
 {
 	umpf_msg_t *msg = clo;
 
@@ -109,6 +109,24 @@ lst_cb(char *mnemo, void *clo)
 			sizeof(*(*msg)->lst_pf.pfs));
 	}
 	(*msg)->lst_pf.pfs[(*msg)->lst_pf.npfs++] = mnemo;
+	/* don't stop on our kind, request more grub */
+	return 0;
+}
+
+static int
+lst_tag_cb(uint64_t tid, time_t UNUSED(tm), void *clo)
+{
+	umpf_msg_t *msg = clo;
+
+	if (((*msg)->lst_tag.ntags % 512) == 0) {
+		/* resize */
+		*msg = realloc(
+			*msg,
+			sizeof(**msg) +
+			((*msg)->lst_tag.ntags + 512) *
+			sizeof(*(*msg)->lst_tag.tags));
+	}
+	(*msg)->lst_tag.tags[(*msg)->lst_tag.ntags++] = tid;
 	/* don't stop on our kind, request more grub */
 	return 0;
 }
@@ -165,7 +183,7 @@ interpret_msg(char **buf, umpf_msg_t msg)
 	}
 	case UMPF_MSG_LST_PF:
 		UMPF_INFO_LOG("lst_pf();\n");
-		be_sql_lst_pf(umpf_dbconn, lst_cb, &msg);
+		be_sql_lst_pf(umpf_dbconn, lst_pf_cb, &msg);
 
 		/* reuse the message to send the answer */
 		msg->hdr.mt++;
@@ -354,6 +372,15 @@ interpret_msg(char **buf, umpf_msg_t msg)
 		be_sql_free_tag(umpf_dbconn, tag);
 		break;
 	}
+	case UMPF_MSG_LST_TAG:
+		UMPF_INFO_LOG("lst_tag();\n");
+		be_sql_lst_tag(
+			umpf_dbconn, msg->lst_tag.name, lst_tag_cb, &msg);
+
+		/* reuse the message to send the answer */
+		msg->hdr.mt++;
+		len = umpf_seria_msg(buf, 0, msg);
+		break;
 	default:
 		UMPF_DEBUG("unknown message %u\n", msg->hdr.mt);
 		umpf_set_msg_type(msg, UMPF_MSG_UNK);

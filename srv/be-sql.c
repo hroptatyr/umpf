@@ -1575,4 +1575,47 @@ be_sql_lst_pf(dbconn_t conn, int(*cb)(char*, void*), void *clo)
 	return;
 }
 
+DEFUN void
+be_sql_lst_tag(
+	dbconn_t conn, const char *mnemo,
+	int(*cb)(uint64_t, time_t, void*), void *clo)
+{
+	dbstmt_t stmt;
+	size_t mnlen;
+	static const char qry[] = "\
+SELECT tag_id, tag_stamp \
+FROM aou_umpf_tag AS t \
+LEFT JOIN aou_umpf_portfolio AS p USING (portfolio_id) \
+WHERE p.short = ? \
+ORDER BY tag_stamp, tag_id";
+	struct __bind_s b[1];
+
+	if (UNLIKELY(mnemo == NULL)) {
+		return;
+	}
+
+	mnlen = strlen(mnemo);
+	b[0].type = BE_BIND_TYPE_TEXT;
+	b[0].txt = mnemo;
+	b[0].len = mnlen;
+
+	if ((stmt = be_sql_prep(conn, qry, countof_m1(qry))) == NULL) {
+		return;
+	}
+	/* bind+execute */
+	be_sql_bind(conn, stmt, b, countof(b));
+	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
+		struct __bind_s mb[2];
+
+		/* just assign the type wishes for the results */
+		mb[0].type = BE_BIND_TYPE_INT64;
+		mb[1].type = BE_BIND_TYPE_STAMP;
+
+		while (be_sql_fetch(conn, stmt, mb, countof(mb)) == 0 &&
+		       cb(mb[0].i64, mb[1].tm, clo) == 0);
+	}
+	be_sql_fin(conn, stmt);
+	return;
+}
+
 /* be-sql.c ends here */

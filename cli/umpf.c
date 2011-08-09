@@ -553,6 +553,11 @@ pretty_print(umpf_msg_t msg)
 		fput_date(msg->pf.clr_dt, stdout);
 		fputc('\n', stdout);
 		break;
+	case UMPF_MSG_LST_TAG:
+		for (size_t i = 0; i < msg->lst_tag.ntags; i++) {
+			fprintf(stdout, "%lu\n", msg->lst_tag.tags[i]);
+		}
+		break;
 	default:
 		fputs("cannot interpret response\n", stderr);
 		break;
