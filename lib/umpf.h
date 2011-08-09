@@ -166,7 +166,7 @@ struct umpf_msg_lst_tag_s {
 	char *name;
 
 	size_t ntags;
-	long unsigned int tags[];
+	tag_t tags[];
 };
 
 union umpf_msg_u {

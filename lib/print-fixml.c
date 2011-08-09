@@ -340,26 +340,15 @@ print_amt(__ctx_t ctx, struct __amt_s *a, size_t indent)
 #endif
 
 static void
-print_sub(__ctx_t ctx, tag_t *sub, size_t ind)
+print_sub(__ctx_t ctx, tag_t sub, size_t ind)
 {
 	print_indent(ctx, ind);
-	sputs(ctx, "<Sub");
-
-	if (sub) {
-		if (*sub) {
-			csnprintf(ctx, " ID=\"%lu\"", *sub);
-		} else {
-			sputs(ctx, " ID=\"*\"");
-		}
-	}
-
-	/* finalise the tag */
-	sputs(ctx, "/>\n");
+	csnprintf(ctx, "<Sub ID=\"%lu\"/>\n", sub);
 	return;
 }
 
 static void
-print_pty(
+print_pty_subs(
 	__ctx_t ctx, const char *id, unsigned int role, char src,
 	tag_t *subs, size_t nsubs, size_t ind)
 {
@@ -387,13 +376,31 @@ print_pty(
 		/* finalise the tag */
 		sputs(ctx, ">\n");
 
-		for (size_t j = 0; j < nsubs; j++) {
-			print_sub(ctx, subs + j, ind + 2);
+		for (size_t i = 0; i < nsubs; i++) {
+			print_sub(ctx, subs[i], ind + 2);
 		}
 
+		/* finalise Pty */
 		print_indent(ctx, ind);
 		sputs(ctx, "</Pty>\n");
 	}
+	return;
+}
+
+static void
+print_pty_nosubs(
+	__ctx_t ctx, const char *id, unsigned int role, char src, size_t ind)
+{
+	print_pty_subs(ctx, id, role, src, NULL, 0, ind);
+	return;
+}
+
+static void
+print_pty_1sub(
+	__ctx_t ctx, const char *id, unsigned int role, char src,
+	tag_t sub, size_t ind)
+{
+	print_pty_subs(ctx, id, role, src, &sub, 1, ind);
 	return;
 }
 
@@ -479,16 +486,7 @@ print_req_for_poss(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 	/* finalise the tag */
 	sputs(ctx, ">\n");
 
-	switch (msg->hdr.mt) {
-	default:
-		print_pty(ctx, msg->pf.name, 0, '\0', NULL, 0, indent + 2);
-		break;
-	case UMPF_MSG_LST_TAG * 2: {
-		tag_t zero[] = {0UL};
-		print_pty(ctx, msg->pf.name, 0, '\0', zero, 1, indent + 2);
-		break;
-	}
-	}
+	print_pty_nosubs(ctx, msg->pf.name, 0, '\0', indent + 2);
 
 	print_indent(ctx, indent);
 	sputs(ctx, "</ReqForPoss>\n");
@@ -535,7 +533,7 @@ print_req_for_poss_ack(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 	/* finalise the tag */
 	sputs(ctx, ">\n");
 
-	print_pty(ctx, msg->pf.name, 0, '\0', &msg->pf.tag_id, 1, indent + 2);
+	print_pty_1sub(ctx, msg->pf.name, 0, '\0', msg->pf.tag_id, indent + 2);
 
 	print_indent(ctx, indent);
 	sputs(ctx, "</ReqForPossAck>\n");
@@ -626,7 +624,7 @@ print_pos_rpt(__ctx_t ctx, umpf_msg_t msg, size_t idx, size_t indent)
 	/* finalise the tag */
 	sputs(ctx, ">\n");
 
-	print_pty(ctx, msg->pf.name, 0, '\0', NULL, 0, indent + 2);
+	print_pty_nosubs(ctx, msg->pf.name, 0, '\0', indent + 2);
 
 	print_instrmt(ctx, msg->pf.poss[idx].ins, indent + 2);
 	print_qty(ctx, msg->pf.poss + idx, indent + 2);
@@ -864,6 +862,71 @@ print_alloc_instrctn_ack(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 }
 
 static void
+print_appl_msg_req(__ctx_t ctx, umpf_msg_t msg, size_t indent)
+{
+	print_indent(ctx, indent);
+	sputs(ctx, "<ApplMsgReq ApplReqID=\"0\" ApplReqTyp=\"0\">\n");
+
+	print_indent(ctx, indent + 2);
+	sputs(ctx, "<ApplIDReqGrp");
+
+	switch (umpf_get_msg_type(msg)) {
+	case UMPF_MSG_LST_TAG:
+		sputs(ctx, " RefAppID=\"lst_tag\">\n");
+
+		print_pty_nosubs(ctx, msg->lst_tag.name, 0, '\0', indent + 4);
+
+		/* finalise ReqGrp */
+		print_indent(ctx, indent + 2);
+		sputs(ctx, "</ApplIDReqGrp>\n");
+		break;
+	default:
+		/* finalise ReqGrp */
+		sputs(ctx, "/>\n");
+		break;
+	}
+
+	/* finalise the tag */
+	print_indent(ctx, indent);
+	sputs(ctx, "</ApplMsgReq>\n");
+	return;
+}
+
+static void
+print_appl_msg_req_ack(__ctx_t ctx, umpf_msg_t msg, size_t indent)
+{
+	print_indent(ctx, indent);
+	sputs(ctx, "<ApplMsgReqAck ApplRespID=\"0\">\n");
+
+	print_indent(ctx, indent + 2);
+	sputs(ctx, "<ApplIDReqAckGrp");
+
+	switch (umpf_get_msg_type(msg)) {
+	case UMPF_MSG_LST_TAG:
+		sputs(ctx, " RefAppID=\"lst_tag\">\n");
+
+		print_pty_subs(
+			ctx, msg->lst_tag.name, 0, '\0',
+			msg->lst_tag.tags, msg->lst_tag.ntags,
+			indent + 4);
+
+		/* finalise ReqGrp */
+		print_indent(ctx, indent + 2);
+		sputs(ctx, "</ApplIDReqAckGrp>\n");
+		break;
+	default:
+		/* finalise ReqAckGrp */
+		sputs(ctx, "/>\n");
+		break;
+	}
+
+	/* finalise the tag */
+	print_indent(ctx, indent);
+	sputs(ctx, "</ApplMsgReq>\n");
+	return;
+}
+
+static void
 print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 {
 	static const char hdr[] = "\
@@ -895,7 +958,6 @@ print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 	case UMPF_MSG_SET_PF * 2 + 1:
 		/* answer to SET_PF is a GET_PF */
 	case UMPF_MSG_GET_PF * 2:
-	case UMPF_MSG_LST_TAG * 2:
 		print_req_for_poss(ctx, msg, indent + 2);
 		break;
 
@@ -913,6 +975,14 @@ print_msg(__ctx_t ctx, umpf_msg_t msg, size_t indent)
 
 		print_indent(ctx, indent + 2);
 		sputs(ctx, "</Batch>\n");
+		break;
+
+	case UMPF_MSG_LST_TAG * 2:
+		print_appl_msg_req(ctx, msg, indent + 2);
+		break;
+
+	case UMPF_MSG_LST_TAG * 2 + 1:
+		print_appl_msg_req_ack(ctx, msg, indent + 2);
 		break;
 
 	case UMPF_MSG_NEW_SEC * 2:
