@@ -896,8 +896,8 @@ proc_ALLOC_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 	return;
 }
 
-static tag_t
-get_SUB_ID(__ctx_t ctx, const char **attrs)
+static uint64_t
+get_SUB_ID_u64(__ctx_t ctx, const char **attrs)
 {
 	for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
 		const umpf_aid_t a = check_attr(ctx, attrs[j]);
@@ -906,6 +906,27 @@ get_SUB_ID(__ctx_t ctx, const char **attrs)
 		}
 	}
 	return 0UL;
+}
+
+static void
+__lst_tag_add_tag(__ctx_t ctx, tag_t tid)
+{
+	umpf_msg_t msg = ctx->msg;
+
+	if (UNLIKELY(tid == 0)) {
+		return;
+	}
+	/* check if we need to resize */
+	if ((msg->lst_tag.ntags % 512) == 0) {
+		msg = realloc(
+			msg,
+			sizeof(*msg) +
+			(msg->lst_tag.ntags + 512) *
+			sizeof(*msg->lst_tag.tags));
+	}
+	msg->lst_tag.tags[msg->lst_tag.ntags++] = tid;
+	ctx->msg = msg;
+	return;
 }
 
 
@@ -1128,33 +1149,26 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 	}
 
 	case UMPF_TAG_SUB: {
-		tag_t tid;
+		tag_t tag;
 
 		/* context sensitive node, bummer */
 		if (ctx->state == NULL || ctx->state->old_state == NULL) {
 			break;
 		}
 
-		tid = get_SUB_ID(ctx, attrs);
+		tag = get_SUB_ID_u64(ctx, attrs);
 
 		/* we need to look up our grand-parent because our parent
 		 * is a Pty */
 		switch (ctx->state->old_state->otype) {
 		case UMPF_TAG_REQ_FOR_POSS:
 		case UMPF_TAG_REQ_FOR_POSS_ACK:
-			ctx->msg->pf.tag_id = tid;
+			ctx->msg->pf.tag_id = tag;
 			break;
 		case UMPF_TAG_APPL_ID_REQ_GRP:
 		case UMPF_TAG_APPL_ID_REQ_ACK_GRP: 
 			/* add tid */
-			if ((ctx->msg->lst_tag.ntags % 512) == 0) {
-				ctx->msg = realloc(
-					ctx->msg,
-					sizeof(*ctx->msg) +
-					(ctx->msg->lst_tag.ntags + 512) *
-					sizeof(*ctx->msg->lst_tag.tags));
-			}
-			ctx->msg->lst_tag.tags[ctx->msg->lst_tag.ntags++] = tid;
+			__lst_tag_add_tag(ctx, tag);
 			break;
 		default:
 			break;
