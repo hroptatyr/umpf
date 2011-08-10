@@ -40,6 +40,7 @@
 #endif	/* HAVE_CONFIG_H */
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
@@ -392,7 +393,7 @@ epoll_guts(epoll_guts_action_t action)
 static char gbuf[4096];
 
 static umpf_msg_t
-read_reply(void **closure, volatile int fd)
+read_reply(void **closure, volatile int fd, bool rawp)
 {
 	ssize_t nrd;
 	umpf_msg_t rpl = NULL;
@@ -404,7 +405,9 @@ read_reply(void **closure, volatile int fd)
 #if defined DEBUG_FLAG
 		fprintf(stderr, "read %zd\n", nrd);
 #endif	/* DEBUG_FLAG */
-		if ((rpl = umpf_parse_blob(closure, gbuf, nrd)) != NULL) {
+		if (UNLIKELY(rawp)) {
+			fwrite(gbuf, nrd, 1, stdout);
+		} else if ((rpl = umpf_parse_blob(closure, gbuf, nrd)) != NULL) {
 			/* bingo, reset closure */
 			*closure = NULL;
 			break;
@@ -578,9 +581,9 @@ pretty_print(umpf_msg_t msg)
 
 /* main loop */
 static int
-umpf_repl(const char *buf, size_t bsz, volatile int sock)
+umpf_repl(const char *buf, size_t bsz, volatile int sock, bool verbp, bool rawp)
 {
-#define SRV_TIMEOUT	(4000/*millis*/)
+	const int timeout = 2000;
 	ep_ctx_t epg;
 	int nfds;
 	/* track the number of bytes written */
@@ -592,7 +595,7 @@ umpf_repl(const char *buf, size_t bsz, volatile int sock)
 	/* setup event waiter */
 	ep_prep_et_rdwr(epg, sock);
 
-	while ((nfds = ep_wait(epg, SRV_TIMEOUT)) > 0) {
+	while ((nfds = ep_wait(epg, timeout)) > 0) {
 		typeof(epg->ev[0].events) ev = epg->ev[0].events;
 		int fd = epg->ev[0].data.fd;
 
@@ -601,13 +604,13 @@ umpf_repl(const char *buf, size_t bsz, volatile int sock)
 
 		if (LIKELY(ev & EPOLLIN)) {
 			/* read what's on the wire */
-			umpf_msg_t rpl = read_reply(&closure, fd);
+			umpf_msg_t rpl = read_reply(&closure, fd, rawp);
 
 			if (LIKELY(rpl != NULL)) {
 				/* everything's brill */
-#if defined DEBUG_FLAG
-				umpf_print_msg(STDERR_FILENO, rpl);
-#endif	/* DEBUG_FLAG */
+				if (UNLIKELY(verbp)) {
+					umpf_print_msg(STDERR_FILENO, rpl);
+				}
 				pretty_print(rpl);
 				umpf_free_msg(rpl);
 				nfds = 0;
@@ -1081,11 +1084,14 @@ umpf_process(struct __clo_s *clo)
 
 	/* get ourselves a connection */
 	if (LIKELY(!clo->dryp && (sock = umpf_connect(clo)) >= 0)) {
-		if (UNLIKELY(clo->verbosep)) {
+		bool verbp = clo->verbosep;
+		bool rawp = clo->rawp;
+
+		if (UNLIKELY(verbp)) {
 			fwrite(buf, bsz, 1, stderr);
 		}
 		/* main loop */
-		res = umpf_repl(buf, bsz, sock);
+		res = umpf_repl(buf, bsz, sock, verbp, rawp);
 		/* close socket */
 		close(sock);
 	} else if (UNLIKELY(clo->dryp)) {
