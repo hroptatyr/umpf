@@ -11,6 +11,25 @@ CREATE TABLE IF NOT EXISTS `aou_umpf_portfolio` (
 	UNIQUE KEY (`short`)
 ) ENGINE InnoDB CHARSET ascii COLLATE ascii_bin;
 
+-- postbl is the map between a portfolio and its position table
+-- dimen
+CREATE TABLE IF NOT EXISTS `aou_umpf_postbl` (
+	postbl_id INTEGER AUTO_INCREMENT PRIMARY KEY,
+	tbl_name VARCHAR(64) CHARSET ascii COLLATE ascii_general_ci
+) ENGINE InnoDB CHARSET ascii COLLATE ascii_bin;
+
+-- fact
+CREATE TABLE IF NOT EXISTS `aou_umpf_pftable_fact` (
+	portfolio_id INTEGER NOT NULL PRIMARY KEY,
+	postbl_id INTEGER NOT NULL,
+	FOREIGN KEY (`portfolio_id`)
+		REFERENCES `aou_umpf_portfolio` (`portfolio_id`)
+		ON DELETE CASCADE ON UPDATE CASCADE,
+	FOREIGN KEY (`postbl_id`)
+		REFERENCES `aou_umpf_postbl` (`postbl_id`)
+		ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE InnoDB CHARSET ascii COLLATE ascii_bin;
+
 -- portfolio tags
 -- now the idea is to regard portfolios as the git tags of
 -- a chain of orders (commits)
