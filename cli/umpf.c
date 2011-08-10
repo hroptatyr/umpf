@@ -384,21 +384,24 @@ epoll_guts(epoll_guts_action_t action)
 static char gbuf[4096];
 
 static umpf_msg_t
-read_reply(volatile int fd)
+read_reply(void **closure, volatile int fd)
 {
-	static umpf_ctx_t p = NULL;
 	ssize_t nrd;
 	umpf_msg_t rpl = NULL;
 
+	if (UNLIKELY(closure == NULL)) {
+		return NULL;
+	}
 	while ((nrd = recv(fd, gbuf, sizeof(gbuf), 0)) > 0) {
 #if defined DEBUG_FLAG
 		fprintf(stderr, "read %zd\n", nrd);
 #endif	/* DEBUG_FLAG */
-		if ((rpl = umpf_parse_blob(&p, gbuf, nrd)) != NULL) {
-			/* bingo */
+		if ((rpl = umpf_parse_blob(closure, gbuf, nrd)) != NULL) {
+			/* bingo, reset closure */
+			*closure = NULL;
 			break;
 
-		} else if (/* rpl == NULL && */p == NULL) {
+		} else if (/* rpl == NULL && */*closure == NULL) {
 			/* error */
 			break;
 		}
@@ -577,6 +580,7 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 	size_t nsz = umpf_seria_msg(&buf, -countof(gbuf), msg);
 	/* track the number of bytes written */
 	size_t wrt = 0;
+	void *closure = NULL;
 
 	/* also set up our epoll magic */
 	epg = epoll_guts(GUTS_GET);
@@ -592,7 +596,7 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 
 		if (LIKELY(ev & EPOLLIN)) {
 			/* read what's on the wire */
-			umpf_msg_t rpl = read_reply(fd);
+			umpf_msg_t rpl = read_reply(&closure, fd);
 
 			if (LIKELY(rpl != NULL)) {
 				/* everything's brill */
@@ -602,6 +606,7 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 				pretty_print(rpl);
 				umpf_free_msg(rpl);
 				nfds = 0;
+				assert(closure == NULL);
 				break;
 			}
 
