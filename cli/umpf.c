@@ -578,14 +578,11 @@ pretty_print(umpf_msg_t msg)
 
 /* main loop */
 static int
-umpf_repl(umpf_msg_t msg, volatile int sock)
+umpf_repl(const char *buf, size_t bsz, volatile int sock)
 {
 #define SRV_TIMEOUT	(4000/*millis*/)
 	ep_ctx_t epg;
 	int nfds;
-	/* serialise the message */
-	char *buf = gbuf;
-	size_t nsz = umpf_seria_msg(&buf, -countof(gbuf), msg);
 	/* track the number of bytes written */
 	size_t wrt = 0;
 	void *closure = NULL;
@@ -620,9 +617,9 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 
 		} else if (ev & EPOLLOUT) {
 			/* have we got stuff to write out? */
-			if (wrt < nsz) {
+			if (wrt < bsz) {
 				/* write a bit of the message */
-				wrt += write_request(fd, buf + wrt, nsz - wrt);
+				wrt += write_request(fd, buf + wrt, bsz - wrt);
 			}
 
 		} else {
@@ -636,11 +633,6 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 	/* stop waiting for events */
 	ep_fini(epg, sock);
 	(void)epoll_guts(GUTS_FREE);
-
-	/* free serialisation resources */
-	if (buf != gbuf) {
-		free(buf);
-	}
 	return nfds;
 }
 
@@ -1001,6 +993,8 @@ umpf_process(struct __clo_s *clo)
 	int res = -1;
 	umpf_msg_t msg = make_umpf_msg();
 	volatile int sock;
+	char *buf;
+	size_t bsz;
 
 	switch (clo->cmd) {
 	case UMPF_CMD_LIST_PF: {
@@ -1081,12 +1075,25 @@ umpf_process(struct __clo_s *clo)
 		return -1;
 	}
 
+	/* serialise the message */
+	buf = gbuf;
+	bsz = umpf_seria_msg(&buf, -countof(gbuf), msg);
+
 	/* get ourselves a connection */
-	if (LIKELY((sock = umpf_connect(clo)) >= 0)) {
+	if (LIKELY(!clo->dryp && (sock = umpf_connect(clo)) >= 0)) {
+		if (UNLIKELY(clo->verbosep)) {
+			fwrite(buf, bsz, 1, stderr);
+		}
 		/* main loop */
-		res = umpf_repl(msg, sock);
+		res = umpf_repl(buf, bsz, sock);
 		/* close socket */
 		close(sock);
+	} else if (UNLIKELY(clo->dryp)) {
+		fwrite(buf, bsz, 1, stdout);
+	}
+	/* free serialisation resources */
+	if (buf != gbuf) {
+		free(buf);
 	}
 	/* we don't need this message object anymore */
 	umpf_free_msg(msg);
