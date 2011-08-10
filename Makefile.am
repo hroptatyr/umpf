@@ -3,7 +3,7 @@ LC_ALL = C
 
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = lib cli srv
+SUBDIRS = lib cli srv sql
 
 if BUILD_LIBRARY
 pkgconfigdir = @libdir@/pkgconfig
