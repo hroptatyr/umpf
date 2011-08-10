@@ -40,6 +40,7 @@
 #endif	/* HAVE_CONFIG_H */
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
@@ -166,7 +167,10 @@ struct __ls_tag_clo_s {
 
 /* command line options */
 struct __clo_s {
-	int helpp;
+	int helpp:1;
+	int dryp:1;
+	int rawp:1;
+	int verbosep:1;
 
 	conn_meth_t meth;
 	const char *host;
@@ -205,6 +209,11 @@ Options common to all commands:\n\
                         Can also point to a unix domain socket in\n\
                         which case a file name is expected.\n\
                         Also the form `hostname:port' is supported.\n\
+  -n, --dry-run         Textually print the message that would have\n\
+                        been sent to the server.\n\
+  -r, --raw             Print messages received from the server in\n\
+                        raw form, i.e. without interpreting them.\n\
+  -v, --verbose         Print outgoing and incoming messages.\n\
 \n\
 Supported commands:\n\
 \n\
@@ -384,7 +393,7 @@ epoll_guts(epoll_guts_action_t action)
 static char gbuf[4096];
 
 static umpf_msg_t
-read_reply(void **closure, volatile int fd)
+read_reply(void **closure, volatile int fd, bool rawp)
 {
 	ssize_t nrd;
 	umpf_msg_t rpl = NULL;
@@ -396,7 +405,9 @@ read_reply(void **closure, volatile int fd)
 #if defined DEBUG_FLAG
 		fprintf(stderr, "read %zd\n", nrd);
 #endif	/* DEBUG_FLAG */
-		if ((rpl = umpf_parse_blob(closure, gbuf, nrd)) != NULL) {
+		if (UNLIKELY(rawp)) {
+			fwrite(gbuf, nrd, 1, stdout);
+		} else if ((rpl = umpf_parse_blob(closure, gbuf, nrd)) != NULL) {
 			/* bingo, reset closure */
 			*closure = NULL;
 			break;
@@ -570,14 +581,11 @@ pretty_print(umpf_msg_t msg)
 
 /* main loop */
 static int
-umpf_repl(umpf_msg_t msg, volatile int sock)
+umpf_repl(const char *buf, size_t bsz, volatile int sock, bool verbp, bool rawp)
 {
-#define SRV_TIMEOUT	(4000/*millis*/)
+	const int timeout = 2000;
 	ep_ctx_t epg;
 	int nfds;
-	/* serialise the message */
-	char *buf = gbuf;
-	size_t nsz = umpf_seria_msg(&buf, -countof(gbuf), msg);
 	/* track the number of bytes written */
 	size_t wrt = 0;
 	void *closure = NULL;
@@ -587,7 +595,7 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 	/* setup event waiter */
 	ep_prep_et_rdwr(epg, sock);
 
-	while ((nfds = ep_wait(epg, SRV_TIMEOUT)) > 0) {
+	while ((nfds = ep_wait(epg, timeout)) > 0) {
 		typeof(epg->ev[0].events) ev = epg->ev[0].events;
 		int fd = epg->ev[0].data.fd;
 
@@ -596,13 +604,13 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 
 		if (LIKELY(ev & EPOLLIN)) {
 			/* read what's on the wire */
-			umpf_msg_t rpl = read_reply(&closure, fd);
+			umpf_msg_t rpl = read_reply(&closure, fd, rawp);
 
 			if (LIKELY(rpl != NULL)) {
 				/* everything's brill */
-#if defined DEBUG_FLAG
-				umpf_print_msg(STDERR_FILENO, rpl);
-#endif	/* DEBUG_FLAG */
+				if (UNLIKELY(verbp)) {
+					umpf_print_msg(STDERR_FILENO, rpl);
+				}
 				pretty_print(rpl);
 				umpf_free_msg(rpl);
 				nfds = 0;
@@ -612,9 +620,9 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 
 		} else if (ev & EPOLLOUT) {
 			/* have we got stuff to write out? */
-			if (wrt < nsz) {
+			if (wrt < bsz) {
 				/* write a bit of the message */
-				wrt += write_request(fd, buf + wrt, nsz - wrt);
+				wrt += write_request(fd, buf + wrt, bsz - wrt);
 			}
 
 		} else {
@@ -628,11 +636,6 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 	/* stop waiting for events */
 	ep_fini(epg, sock);
 	(void)epoll_guts(GUTS_FREE);
-
-	/* free serialisation resources */
-	if (buf != gbuf) {
-		free(buf);
-	}
 	return nfds;
 }
 
@@ -993,6 +996,8 @@ umpf_process(struct __clo_s *clo)
 	int res = -1;
 	umpf_msg_t msg = make_umpf_msg();
 	volatile int sock;
+	char *buf;
+	size_t bsz;
 
 	switch (clo->cmd) {
 	case UMPF_CMD_LIST_PF: {
@@ -1073,12 +1078,28 @@ umpf_process(struct __clo_s *clo)
 		return -1;
 	}
 
+	/* serialise the message */
+	buf = gbuf;
+	bsz = umpf_seria_msg(&buf, -countof(gbuf), msg);
+
 	/* get ourselves a connection */
-	if (LIKELY((sock = umpf_connect(clo)) >= 0)) {
+	if (LIKELY(!clo->dryp && (sock = umpf_connect(clo)) >= 0)) {
+		bool verbp = clo->verbosep;
+		bool rawp = clo->rawp;
+
+		if (UNLIKELY(verbp)) {
+			fwrite(buf, bsz, 1, stderr);
+		}
 		/* main loop */
-		res = umpf_repl(msg, sock);
+		res = umpf_repl(buf, bsz, sock, verbp, rawp);
 		/* close socket */
 		close(sock);
+	} else if (UNLIKELY(clo->dryp)) {
+		fwrite(buf, bsz, 1, stdout);
+	}
+	/* free serialisation resources */
+	if (buf != gbuf) {
+		free(buf);
 	}
 	/* we don't need this message object anymore */
 	umpf_free_msg(msg);
@@ -1307,6 +1328,15 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 				} else if (strcmp(p, "version") == 0) {
 					clo->cmd = UMPF_CMD_VERSION;
 					return;
+				} else if (strcmp(p, "dry-run") == 0) {
+					clo->dryp = 1;
+					return;
+				} else if (strcmp(p, "raw") == 0) {
+					clo->rawp = 1;
+					return;
+				} else if (strcmp(p, "verbose") == 0) {
+					clo->verbosep = 1;
+					return;
 				}
 				break;
 			case 'V':
@@ -1320,6 +1350,27 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 				if (*p == '\0') {
 					/* it's -h */
 					clo->helpp = 1;
+					continue;
+				}
+				break;
+			case 'n':
+				if (*p == '\0') {
+					/* it's -n */
+					clo->dryp = 1;
+					continue;
+				}
+				break;
+			case 'r':
+				if (*p == '\0') {
+					/* it's -r */
+					clo->rawp = 1;
+					continue;
+				}
+				break;
+			case 'v':
+				if (*p == '\0') {
+					/* it's -v */
+					clo->verbosep = 1;
 					continue;
 				}
 				break;
