@@ -10,6 +10,10 @@ DROP TABLE IF EXISTS N(aou_umpf_posgrp);
 DROP TABLE IF EXISTS N(aou_umpf_postbl_fact);
 DROP TABLE IF EXISTS N(aou_umpf_postbl);
 
+-- user table facts
+DROP TABLE IF EXISTS N(aou_umpf_user_fact);
+DROP TABLE IF EXISTS N(aou_umpf_user);
+
 DROP TABLE IF EXISTS N(aou_umpf_position);
 DROP TABLE IF EXISTS N(aou_umpf_dposition);
 DROP TABLE IF EXISTS N(aou_umpf_security);
