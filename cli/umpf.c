@@ -166,7 +166,10 @@ struct __ls_tag_clo_s {
 
 /* command line options */
 struct __clo_s {
-	int helpp;
+	int helpp:1;
+	int dryp:1;
+	int rawp:1;
+	int verbosep:1;
 
 	conn_meth_t meth;
 	const char *host;
@@ -205,6 +208,11 @@ Options common to all commands:\n\
                         Can also point to a unix domain socket in\n\
                         which case a file name is expected.\n\
                         Also the form `hostname:port' is supported.\n\
+  -n, --dry-run         Textually print the message that would have\n\
+                        been sent to the server.\n\
+  -r, --raw             Print messages received from the server in\n\
+                        raw form, i.e. without interpreting them.\n\
+  -v, --verbose         Print outgoing and incoming messages.\n\
 \n\
 Supported commands:\n\
 \n\
@@ -1307,6 +1315,15 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 				} else if (strcmp(p, "version") == 0) {
 					clo->cmd = UMPF_CMD_VERSION;
 					return;
+				} else if (strcmp(p, "dry-run") == 0) {
+					clo->dryp = 1;
+					return;
+				} else if (strcmp(p, "raw") == 0) {
+					clo->rawp = 1;
+					return;
+				} else if (strcmp(p, "verbose") == 0) {
+					clo->verbosep = 1;
+					return;
 				}
 				break;
 			case 'V':
@@ -1320,6 +1337,27 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 				if (*p == '\0') {
 					/* it's -h */
 					clo->helpp = 1;
+					continue;
+				}
+				break;
+			case 'n':
+				if (*p == '\0') {
+					/* it's -n */
+					clo->dryp = 1;
+					continue;
+				}
+				break;
+			case 'r':
+				if (*p == '\0') {
+					/* it's -r */
+					clo->rawp = 1;
+					continue;
+				}
+				break;
+			case 'v':
+				if (*p == '\0') {
+					/* it's -v */
+					clo->verbosep = 1;
 					continue;
 				}
 				break;
