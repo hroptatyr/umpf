@@ -35,6 +35,28 @@ CREATE TABLE IF NOT EXISTS N(aou_umpf_postbl_fact) (
 		ON DELETE CASCADE ON UPDATE CASCADE
 ) POST;
 
+-- user is the map between a portfolio and its users
+-- dimen
+CREATE TABLE IF NOT EXISTS N(aou_umpf_user) (
+	user_id INTEGER PRIMARY KEY ASC ON_CONFLICT ROLLBACK AUTOINCREMENT,
+	-- unix user id
+	short TEXT(64),
+	UNIQUE (N(short)) ON_CONFLICT ROLLBACK
+) POST;
+
+-- fact
+CREATE TABLE IF NOT EXISTS N(aou_umpf_user_fact) (
+	portfolio_id INTEGER NOT NULL,
+	user_id INTEGER NOT NULL,
+	PRIMARY KEY (N(portfolio_id), N(user_id)),
+	FOREIGN KEY (N(portfolio_id))
+		REFERENCES N(aou_umpf_portfolio) (N(portfolio_id))
+		ON DELETE CASCADE ON UPDATE CASCADE,
+	FOREIGN KEY (N(user_id))
+		REFERENCES N(aou_umpf_user) (N(user_id))
+		ON DELETE CASCADE ON UPDATE CASCADE
+) POST;
+
 -- portfolio tags
 -- now the idea is to regard portfolios as the git tags of
 -- a chain of orders (commits)
