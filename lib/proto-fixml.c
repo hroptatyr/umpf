@@ -896,6 +896,18 @@ proc_ALLOC_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 	return;
 }
 
+static tag_t
+get_SUB_ID(__ctx_t ctx, const char **attrs)
+{
+	for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+		const umpf_aid_t a = check_attr(ctx, attrs[j]);
+		if (a == UMPF_ATTR_ID) {
+			return strtoul(attrs[j + 1], NULL, 10);
+		}
+	}
+	return 0UL;
+}
+
 
 static void
 sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
@@ -1047,6 +1059,27 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 		sax_bo_top_level_elt(ctx, tid, attrs);
 		break;
 
+	case UMPF_TAG_APPL_MSG_REQ:
+	case UMPF_TAG_APPL_MSG_REQ_ACK:
+		/* just a container around the really interesting bit */
+		break;
+
+	case UMPF_TAG_APPL_ID_REQ_GRP:
+	case UMPF_TAG_APPL_ID_REQ_ACK_GRP:
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			/* only listen for RefApplID */
+			if (aid != UMPF_ATTR_REF_APPL_ID) {
+				continue;
+			}
+			PFIXML_DEBUG("found %s\n", attrs[j + 1]);
+			if (strcmp(attrs[j + 1], "lst_tag") == 0) {
+				umpf_set_msg_type(ctx->msg, UMPF_MSG_LST_TAG);
+			}
+		}
+		(void)push_state(ctx, tid, ctx->msg);
+		break;
+
 	case UMPF_TAG_POS_RPT: {
 		/* part of get/set pf */
 		umpf_msg_t msg;
@@ -1078,6 +1111,8 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 			 * as msg_pf's, so just go with it */
 		case UMPF_TAG_REQ_FOR_POSS:
 		case UMPF_TAG_REQ_FOR_POSS_ACK:
+		case UMPF_TAG_APPL_ID_REQ_GRP:
+		case UMPF_TAG_APPL_ID_REQ_ACK_GRP:
 			(void)push_state(ctx, tid, msg);
 
 			for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
@@ -1093,7 +1128,37 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 	}
 
 	case UMPF_TAG_SUB: {
-		/* not supported */
+		tag_t tid;
+
+		/* context sensitive node, bummer */
+		if (ctx->state == NULL || ctx->state->old_state == NULL) {
+			break;
+		}
+
+		tid = get_SUB_ID(ctx, attrs);
+
+		/* we need to look up our grand-parent because our parent
+		 * is a Pty */
+		switch (ctx->state->old_state->otype) {
+		case UMPF_TAG_REQ_FOR_POSS:
+		case UMPF_TAG_REQ_FOR_POSS_ACK:
+			ctx->msg->pf.tag_id = tid;
+			break;
+		case UMPF_TAG_APPL_ID_REQ_GRP:
+		case UMPF_TAG_APPL_ID_REQ_ACK_GRP: 
+			/* add tid */
+			if ((ctx->msg->lst_tag.ntags % 512) == 0) {
+				ctx->msg = realloc(
+					ctx->msg,
+					sizeof(*ctx->msg) +
+					(ctx->msg->lst_tag.ntags + 512) *
+					sizeof(*ctx->msg->lst_tag.tags));
+			}
+			ctx->msg->lst_tag.tags[ctx->msg->lst_tag.ntags++] = tid;
+			break;
+		default:
+			break;
+		}
 		break;
 	}
 
@@ -1192,7 +1257,15 @@ sax_eo_FIXML_elt(__ctx_t ctx, const char *name)
 	case UMPF_TAG_SEC_DEF_REQ:
 	case UMPF_TAG_SEC_DEF_UPD:
 	case UMPF_TAG_ALLOC_INSTRCTN:
+	case UMPF_TAG_APPL_ID_REQ_GRP:
+	case UMPF_TAG_APPL_ID_REQ_ACK_GRP:
 		pop_state(ctx);
+		break;
+	case UMPF_TAG_SUB:
+		/* noone dare push this */
+		break;
+	case UMPF_TAG_APPL_MSG_REQ:
+	case UMPF_TAG_APPL_MSG_REQ_ACK:
 		break;
 	case UMPF_TAG_FIXML:
 		/* finalise the document */

@@ -89,6 +89,7 @@ typedef enum {
 	UMPF_CMD_NEW_PF,
 	UMPF_CMD_GET_PF,
 	UMPF_CMD_SET_PF,
+	UMPF_CMD_CLO_PF,
 	UMPF_CMD_NEW_SEC,
 	UMPF_CMD_GET_SEC,
 	UMPF_CMD_SET_SEC,
@@ -96,6 +97,8 @@ typedef enum {
 	UMPF_CMD_SET_POSS,
 	UMPF_CMD_APPLY,
 	UMPF_CMD_DIFF,
+	UMPF_CMD_LIST_TAG,
+	UMPF_CMD_DEL_TAG,
 } umpf_cmd_t;
 
 /* new_pf specific options */
@@ -143,6 +146,24 @@ struct __apply_clo_s {
 	const char *poss;
 };
 
+struct __clo_pf_clo_s {
+	const char *old;
+	const char *new;
+	const char *file;
+	const char *descr;
+	int movep;
+};
+
+struct __del_tag_clo_s {
+	const char *mnemo;
+	const char *tag;
+	long unsigned int tag_id;
+};
+
+struct __ls_tag_clo_s {
+	const char *mnemo;
+};
+
 /* command line options */
 struct __clo_s {
 	int helpp;
@@ -161,6 +182,9 @@ struct __clo_s {
 		struct __get_poss_clo_s get_poss[1];
 		struct __set_poss_clo_s set_poss[1];
 		struct __apply_clo_s apply[1];
+		struct __clo_pf_clo_s clo_pf[1];
+		struct __del_tag_clo_s del_tag[1];
+		struct __ls_tag_clo_s ls_tag[1];
 	};
 };
 
@@ -197,6 +221,12 @@ Supported commands:\n\
     -f, --file=FILE          File with description to pass on\n\
                              Use - for stdin\n\
 \n\
+  clo-pf [OPTIONS] OLD NEW   Copy or rename a portfolio OLD to NEW.\n\
+    -d, --descr=STRING       Set description from STRING\n\
+    -f, --file=FILE          File with description to pass on\n\
+                             Use - for stdin\n\
+    -m, --move               Delete the old portfolio OLD as well.\n\
+\n\
   new-sec [OPTIONS] NAME     Register a new security NAME\n\
     -p, --pf=STRING          Name of the portfolio to register the\n\
                              security with.\n\
@@ -222,6 +252,9 @@ Supported commands:\n\
   apply [OPTIONS] [NAME]     Apply order to portfolio NAME\n\
     -d, --date=DATE          Set the portfolio as of DATE\n\
     -f, --file=FILE          Use positions in FILE, - for stdin\n\
+\n\
+  list-tag NAME              List all tags in portfolio NAME\n\
+  del-tag NAME TAG           Delete TAG from portfolio NAME\n\
 \n\
 ";
 
@@ -500,6 +533,8 @@ pretty_print(umpf_msg_t msg)
 		fput_zulu(msg->pf.stamp, stdout);
 		fputs(" :clear ", stdout);
 		fput_date(msg->pf.clr_dt, stdout);
+		fputs(" :tag ", stdout);
+		fprintf(stdout, "%lu", msg->pf.tag_id);
 		fputc('\n', stdout);
 
 		for (size_t i = 0; i < msg->pf.nposs; i++) {
@@ -517,6 +552,11 @@ pretty_print(umpf_msg_t msg)
 		fputs(" :clear ", stdout);
 		fput_date(msg->pf.clr_dt, stdout);
 		fputc('\n', stdout);
+		break;
+	case UMPF_MSG_LST_TAG:
+		for (size_t i = 0; i < msg->lst_tag.ntags; i++) {
+			fprintf(stdout, "%lu\n", msg->lst_tag.tags[i]);
+		}
 		break;
 	default:
 		fputs("cannot interpret response\n", stderr);
@@ -933,6 +973,15 @@ out:
 	return res;
 }
 
+static umpf_msg_t
+make_umpf_ls_tag_msg(const char *mnemo)
+{
+	umpf_msg_t res = make_umpf_msg();
+	umpf_set_msg_type(res, UMPF_MSG_LST_TAG);
+	res->lst_tag.name = strdup(mnemo);
+	return res;
+}
+
 static int
 umpf_process(struct __clo_s *clo)
 {
@@ -1002,7 +1051,17 @@ umpf_process(struct __clo_s *clo)
 		if ((msg = make_umpf_apply_msg(mnemo, stamp, file))) {
 			break;
 		}
-		/* otherwise fall through to default case */
+		return -1;
+	}
+	case UMPF_CMD_CLO_PF: {
+		return -1;
+	}
+	case UMPF_CMD_LIST_TAG: {
+		const char *mnemo = clo->ls_tag->mnemo;
+		if ((msg = make_umpf_ls_tag_msg(mnemo))) {
+			break;
+		}
+		return -1;
 	}
 	default:
 		/* don't even try the connect */
@@ -1158,6 +1217,66 @@ parse_set_poss_args(struct __clo_s *clo, int argc, char *argv[])
 }
 
 static void
+parse_clo_pf_args(struct __clo_s *clo, int argc, char *argv[])
+{
+	for (int i = 0; i < argc; i++) {
+		char *p = argv[i];
+
+		if (*p++ == '-') {
+			/* could be -d/--descr, -f/--file or -m/--move */
+			if (*p == 'd') {
+				clo->clo_pf->descr = __get_val(&i, 2, argv);
+			} else if (strncmp(p, "-descr", 6) == 0) {
+				clo->clo_pf->descr = __get_val(&i, 7, argv);
+			} else if (*p == 'f') {
+				clo->clo_pf->file = __get_val(&i, 2, argv);
+			} else if (strncmp(p, "-file", 5) == 0) {
+				clo->clo_pf->file = __get_val(&i, 6, argv);
+			}
+		} else if (clo->clo_pf->old == NULL) {
+			/* must be the old name then */
+			clo->clo_pf->old = argv[i];
+			argv[i] = NULL;
+		} else if (clo->clo_pf->new == NULL) {
+			/* must be the new name then */
+			clo->clo_pf->new = argv[i];
+			argv[i] = NULL;
+		}
+	}
+	return;
+}
+
+static void
+parse_ls_tag_args(struct __clo_s *clo, int argc, char *argv[])
+{
+	for (int i = 0; i < argc; i++) {
+		if (clo->ls_tag->mnemo == NULL) {
+			/* must be name then */
+			clo->ls_tag->mnemo = argv[i];
+			argv[i] = NULL;
+		}
+	}
+	return;
+}
+
+static void
+parse_del_tag_args(struct __clo_s *clo, int argc, char *argv[])
+{
+	for (int i = 0; i < argc; i++) {
+		if (clo->del_tag->mnemo == NULL) {
+			/* must be the name then */
+			clo->del_tag->mnemo = argv[i];
+			argv[i] = NULL;
+		} else if (clo->del_tag->tag == NULL) {
+			/* must be the tag identifier then */
+			clo->del_tag->tag = argv[i];
+			argv[i] = NULL;
+		}
+	}
+	return;
+}
+
+static void
 parse_args(struct __clo_s *clo, int argc, char *argv[])
 {
 	for (int i = 0; i < argc; i++) {
@@ -1263,12 +1382,40 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 			break;
 		}
 		case 'l':
-			/* list-pf */
-			if (strcmp(p, "ist-pf") == 0) {
+			/* list-pf/list-tag */
+			if (strcmp(p, "ist-pf") == 0 ||
+			    strcmp(p, "ist-pfs") == 0) {
 				clo->cmd = UMPF_CMD_LIST_PF;
+				continue;
+			} else if (strcmp(p, "ist-tag") == 0 ||
+				   strcmp(p, "ist-tags") == 0) {
+				int new_argc = argc - i - 1;
+				char **new_argv = argv + i + 1;
+				clo->cmd = UMPF_CMD_LIST_TAG;
+				parse_ls_tag_args(clo, new_argc, new_argv);
 				continue;
 			}
 			break;
+		case 'c':
+			/* clo-pf */
+			if (strcmp(p, "lo-pf") == 0) {
+				int new_argc = argc - i - 1;
+				char **new_argv = argv + i + 1;
+				clo->cmd = UMPF_CMD_CLO_PF;
+				parse_clo_pf_args(clo, new_argc, new_argv);
+				continue;
+			}
+			break;
+		case 'd':
+			/* del-tag */
+			if (strcmp(p, "el-tag") == 0) {
+				int new_argc = argc - i - 1;
+				char **new_argv = argv + i + 1;
+				clo->cmd = UMPF_CMD_DEL_TAG;
+				parse_del_tag_args(clo, new_argc, new_argv);
+				continue;
+			}
+			break;			
 		default:
 			break;
 		}
@@ -1347,6 +1494,44 @@ check__poss_args(struct __clo_s *clo)
 	return 0;
 }
 
+static int
+check__clo_pf_args(struct __clo_s *clo)
+{
+	if (clo->clo_pf->old == NULL || clo->clo_pf->new == NULL) {
+		fputs("portfolio mnemonic must not be NULL\n", stderr);
+		return -1;
+	}
+	return 0;
+}
+
+
+static int
+check__ls_tag_args(struct __clo_s *clo)
+{
+	if (clo->ls_tag->mnemo == NULL) {
+		fputs("portfolio mnemonic must not be NULL\n", stderr);
+		return -1;
+	}
+	return 0;
+}
+
+static int
+check__del_tag_args(struct __clo_s *clo)
+{
+	if (clo->del_tag->mnemo == NULL) {
+		fputs("portfolio mnemonic must not be NULL\n", stderr);
+		return -1;
+	} else if (clo->del_tag->tag == NULL) {
+		fputs("tag identifier must not be NULL\n", stderr);
+		return -1;
+	} else if ((clo->del_tag->tag_id =
+		    strtoul(clo->del_tag->tag, NULL, 10)) == 0) {
+		fputs("tag identifier must be numeric\n", stderr);
+		return -1;
+	}
+	return 0;
+}
+
 
 int
 main(int argc, char *argv[])
@@ -1375,32 +1560,43 @@ main(int argc, char *argv[])
 		return 0;
 	case UMPF_CMD_LIST_PF:
 		if (check__ls_pf_args(&argi)) {
-			print_usage(argi.cmd);
-			return 1;
+			goto usage_out;
 		}
 		break;
 	case UMPF_CMD_NEW_PF:
 	case UMPF_CMD_GET_PF:
 	case UMPF_CMD_SET_PF:
 		if (check__pf_args(&argi)) {
-			print_usage(argi.cmd);
-			return 1;
+			goto usage_out;
 		}
 		break;
 	case UMPF_CMD_NEW_SEC:
 	case UMPF_CMD_GET_SEC:
 	case UMPF_CMD_SET_SEC:
 		if (check__sec_args(&argi)) {
-			print_usage(argi.cmd);
-			return 1;
+			goto usage_out;
 		}
 		break;
 	case UMPF_CMD_GET_POSS:
 	case UMPF_CMD_SET_POSS:
 	case UMPF_CMD_APPLY:
 		if (check__poss_args(&argi)) {
-			print_usage(argi.cmd);
-			return 1;
+			goto usage_out;
+		}
+		break;
+	case UMPF_CMD_CLO_PF:
+		if (check__clo_pf_args(&argi)) {
+			goto usage_out;
+		}
+		break;
+	case UMPF_CMD_LIST_TAG:
+		if (check__ls_tag_args(&argi)) {
+			goto usage_out;
+		}
+		break;
+	case UMPF_CMD_DEL_TAG:
+		if (check__del_tag_args(&argi)) {
+			goto usage_out;
 		}
 		break;
 	}
@@ -1410,6 +1606,9 @@ main(int argc, char *argv[])
 		return 1;
 	}
 	return 0;
+usage_out:
+	print_usage(argi.cmd);
+	return 1;
 }
 
 /* umpf.c ends here */

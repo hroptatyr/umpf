@@ -48,12 +48,14 @@ extern "C" {
 typedef void *umpf_ctx_t;
 typedef struct __umpf_s *umpf_doc_t;
 typedef union umpf_msg_u *umpf_msg_t;
+typedef long unsigned int tag_t;
 
 /* message types */
 typedef enum {
 	UMPF_MSG_UNK,
 	/* portfolio transactions */
 	UMPF_MSG_LST_PF,
+	UMPF_MSG_CLO_PF,
 	UMPF_MSG_NEW_PF,
 	UMPF_MSG_GET_PF,
 	UMPF_MSG_SET_PF,
@@ -69,6 +71,9 @@ typedef enum {
 	 * patch takes a portfolio and a stream of od/uschi msgs */
 	UMPF_MSG_DIFF,
 	UMPF_MSG_PATCH,
+	/* tag transactions */
+	UMPF_MSG_LST_TAG,
+	UMPF_MSG_DEL_TAG,
 } umpf_msg_type_t;
 
 typedef enum {
@@ -148,9 +153,20 @@ struct umpf_msg_pf_s {
 	char *name;
 	time_t stamp;
 	time_t clr_dt;
+	tag_t tag_id;
 
 	size_t nposs;
 	struct __ins_qty_s poss[];
+};
+
+/* X -> list-tag */
+struct umpf_msg_lst_tag_s {
+	struct umpf_msg_hdr_s hdr;
+
+	char *name;
+
+	size_t ntags;
+	tag_t tags[];
 };
 
 union umpf_msg_u {
@@ -159,6 +175,7 @@ union umpf_msg_u {
 	struct umpf_msg_new_pf_s new_pf;
 	struct umpf_msg_new_sec_s new_sec;
 	struct umpf_msg_lst_pf_s lst_pf;
+	struct umpf_msg_lst_tag_s lst_tag;
 };
 
 

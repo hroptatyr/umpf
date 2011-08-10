@@ -1047,7 +1047,7 @@ UPDATE aou_umpf_portfolio SET description = ? WHERE portfolio_id = ?";
 	return (dbobj_t)pf_id;
 }
 
-DECLF struct __satell_s
+DEFUN struct __satell_s
 be_sql_get_descr(dbconn_t conn, const char *pf_mnemo)
 {
 /* this is a get_pf + update */
@@ -1205,11 +1205,18 @@ be_sql_get_tag(dbconn_t conn, const char *mnemo, time_t stamp)
 	return (dbobj_t)tag;
 }
 
-DECLF void
+DEFUN void
 be_sql_free_tag(dbconn_t UNUSED(conn), dbobj_t tag)
 {
 	free((struct __tag_s*)tag);
 	return;
+}
+
+DEFUN tag_t
+be_sql_tag_get_id(dbconn_t UNUSED(conn), dbobj_t tag)
+{
+	struct __tag_s *t = (void*)tag;
+	return t->tag_id;
 }
 
 DEFUN void
@@ -1358,7 +1365,7 @@ WHERE tag_id = ?";
 	return npos;
 }
 
-DECLF void
+DEFUN void
 be_sql_get_pos(
 	dbconn_t conn, dbobj_t tag,
 	int(*cb)(char*, double, double, void*), void *clo)
@@ -1489,7 +1496,7 @@ UPDATE aou_umpf_security SET description = ? WHERE security_id = ?";
 	return (dbobj_t)sec_id;
 }
 
-DECLF struct __satell_s
+DEFUN struct __satell_s
 be_sql_get_sec(dbconn_t conn, const char *pf_mnemo, const char *sec_mnemo)
 {
 /* this is a get_sec + update */
@@ -1545,7 +1552,7 @@ be_sql_free_sec(dbconn_t UNUSED(conn), dbobj_t UNUSED(pf))
 	return;
 }
 
-DECLF void
+DEFUN void
 be_sql_lst_pf(dbconn_t conn, int(*cb)(char*, void*), void *clo)
 {
 	dbstmt_t stmt;
@@ -1563,6 +1570,49 @@ be_sql_lst_pf(dbconn_t conn, int(*cb)(char*, void*), void *clo)
 
 		while (be_sql_fetch(conn, stmt, mb, countof(mb)) == 0 &&
 		       cb(mb[0].ptr, clo) == 0);
+	}
+	be_sql_fin(conn, stmt);
+	return;
+}
+
+DEFUN void
+be_sql_lst_tag(
+	dbconn_t conn, const char *mnemo,
+	int(*cb)(uint64_t, time_t, void*), void *clo)
+{
+	dbstmt_t stmt;
+	size_t mnlen;
+	static const char qry[] = "\
+SELECT tag_id, tag_stamp \
+FROM aou_umpf_tag AS t \
+LEFT JOIN aou_umpf_portfolio AS p USING (portfolio_id) \
+WHERE p.short = ? \
+ORDER BY tag_stamp, tag_id";
+	struct __bind_s b[1];
+
+	if (UNLIKELY(mnemo == NULL)) {
+		return;
+	}
+
+	mnlen = strlen(mnemo);
+	b[0].type = BE_BIND_TYPE_TEXT;
+	b[0].txt = mnemo;
+	b[0].len = mnlen;
+
+	if ((stmt = be_sql_prep(conn, qry, countof_m1(qry))) == NULL) {
+		return;
+	}
+	/* bind+execute */
+	be_sql_bind(conn, stmt, b, countof(b));
+	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
+		struct __bind_s mb[2];
+
+		/* just assign the type wishes for the results */
+		mb[0].type = BE_BIND_TYPE_INT64;
+		mb[1].type = BE_BIND_TYPE_STAMP;
+
+		while (be_sql_fetch(conn, stmt, mb, countof(mb)) == 0 &&
+		       cb(mb[0].i64, mb[1].tm, clo) == 0);
 	}
 	be_sql_fin(conn, stmt);
 	return;
