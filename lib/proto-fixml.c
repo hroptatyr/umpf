@@ -50,6 +50,7 @@
 #include <math.h>
 #include "nifty.h"
 #include "umpf.h"
+#include "proto-fixml.h"
 #include "umpf-private.h"
 
 /* gperf goodness */
