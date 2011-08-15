@@ -48,6 +48,7 @@ extern "C" {
 
 /* to store 2001-12-31T12:34:56+0000 as 200112311234560000 */
 typedef uint64_t idttz_t;
+typedef uint32_t idate_t;
 /* not happy about this but its easier for mysql */
 typedef double qty_t;
 /* defined as umpf_tid_t in proto-fixml-tag.c */
@@ -75,15 +76,21 @@ struct pfix_instrmt_s {
 };
 
 /* top level elements */
-struct pfix_req_for_poss_ack_s {
+struct pfix_req_for_poss_s {
 	int req_typ;
-	int tot_rpts;
 	int rslt;
 	int stat;
 	idttz_t txn_tm;
+	idate_t biz_dt;
 
 	size_t npty;
 	struct pfix_pty_s *pty;
+};
+
+struct pfix_req_for_poss_ack_s {
+	struct pfix_req_for_poss_s rfp;
+
+	int tot_rpts;
 };
 
 struct pfix_pos_rpt_s {
@@ -100,11 +107,35 @@ struct pfix_pos_rpt_s {
 	struct pfix_qty_s *qty;
 };
 
+struct pfix_rg_dtl_s {
+	size_t npty;
+	struct pfix_pty_s *pty;
+};
+
+struct pfix_rgst_instrctns_s {
+	int trans_typ;
+
+	size_t nrg_dtl;
+	struct pfix_rg_dtl_s *rg_dtl;
+};
+
+struct pfix_rgst_instrctns_rsp_s {
+	char *id;
+
+	int trans_typ;
+
+	size_t nrg_dtl;
+	struct pfix_rg_dtl_s *rg_dtl;
+};
+
 struct pfix_batch_s {
 	pfix_tid_t tag;
 	union {
-		struct pfix_req_for_poss_ack_s *req_for_poss_ack;
-		struct pfix_pos_rpt_s *pos_rpt;
+		struct pfix_req_for_poss_s req_for_poss;
+		struct pfix_req_for_poss_ack_s req_for_poss_ack;
+		struct pfix_pos_rpt_s pos_rpt;
+		struct pfix_rgst_instrctns_s rgst_instrctns;
+		struct pfix_rgst_instrctns_rsp_s rgst_instrctns_rsp;
 	};
 };
 

@@ -32,8 +32,9 @@ EXTRA_libumpf_la_SOURCES += proto-fixml-tag.gperf proto-fixml-attr.gperf
 EXTRA_libumpf_la_SOURCES += proto-fixml-ns.gperf
 EXTRA_libumpf_la_SOURCES += $(BUILT_SOURCES)
 
-noinst_PROGRAMS += testlib
-testlib_LDFLAGS = libumpf.la
+noinst_PROGRAMS += testlib testprint
+testlib_LDADD = libumpf.la
+testprint_LDADD = libumpf.la
 
 ## serves documentation purposes
 EXTRA_DIST += example-msg-01.xml
