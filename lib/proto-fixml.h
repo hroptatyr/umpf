@@ -54,10 +54,15 @@ typedef double qty_t;
 /* defined as umpf_tid_t in proto-fixml-tag.c */
 typedef unsigned int pfix_tid_t;
 
-struct pfix_pty_s {
+struct pfix_sub_s {
 	char *id;
 	char src;
 	int r;
+};
+
+struct pfix_pty_s {
+	/* first sub is like the primary thing */
+	struct pfix_sub_s prim;
 
 	size_t nsub;
 	struct pfix_sub_s *sub;

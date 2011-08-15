@@ -703,6 +703,34 @@ print_date(__ctx_t ctx, time_t stamp)
 	return;
 }
 
+static void
+sputc_encq(__ctx_t ctx, char s)
+{
+	/* inspect the character */
+	switch (s) {
+	default:
+		sputc(ctx, s);
+	case '0':
+		break;
+	case '<':
+		snputs(ctx, "&lt;", 4);
+		break;
+	case '>':
+		snputs(ctx, "&gt;", 4);
+		break;
+	case '&':
+		snputs(ctx, "&amp;", 5);
+		break;
+	case '\'':
+		snputs(ctx, "&apos;", 6);
+		break;
+	case '"':
+		snputs(ctx, "&quot;", 6);
+		break;
+	}
+	return;
+}
+
 static void __attribute__((unused))
 sputs_enc(__ctx_t ctx, const char *s)
 {
@@ -919,20 +947,31 @@ proc_RGST_INSTRCTNS_RSP_attr(
 }
 
 static void
-proc_PTY_attr(struct pfix_pty_s *pty, const umpf_aid_t aid, const char *value)
+proc_SUB_attr(struct pfix_sub_s *sub, const umpf_aid_t aid, const char *value)
 {
 	switch (aid) {
 	case UMPF_ATTR_ID:
-		pty->id = unquot(value);
+		sub->id = unquot(value);
 		break;
 	case UMPF_ATTR_SRC:
-		pty->src = value[0];
+		sub->src = value[0];
 		break;
 	case UMPF_ATTR_R:
-		pty->r = strtol(value, NULL, 10);
+		sub->r = strtol(value, NULL, 10);
 		break;
 	default:
 		PFIXML_DEBUG("WARN: unknown attr %u\n", aid);
+		break;
+	}
+	return;
+}
+
+static void
+proc_PTY_attr(struct pfix_pty_s *pty, const umpf_aid_t aid, const char *value)
+{
+	switch (aid) {
+	default:
+		proc_SUB_attr(&pty->prim, aid, value);
 		break;
 	}
 	return;
@@ -1753,17 +1792,96 @@ sax_get_ent(void *UNUSED(user_data), const xmlChar *name)
 
 /* printers */
 static void
-pfix_print_pty(
-	__ctx_t ctx, struct pfix_pty_s *pty, size_t indent)
+pfix_print_instrmt(__ctx_t ctx, struct pfix_instrmt_s *ins, size_t indent)
 {
-	static const char hdr[] = "<Pty";
-	static const char ftr[] = "</Pty>\n";
+	print_indent(ctx, indent);
+	csnprintf(ctx, "<Instrmt Sym=\"%s\"/>\n", ins->sym);
+	return;
+}
+
+static void
+pfix_print_qty(__ctx_t ctx, struct pfix_qty_s *qty, size_t indent)
+{
+	print_indent(ctx, indent);
+	static const char hdr[] = "<Qty";
+	static const char ftr[] = "/>\n";
 
 	print_indent(ctx, indent);
 	snputs(ctx, hdr, countof_m1(hdr));
 
-	if (pty->id) {
-		csnprintf(ctx, " ID=\"%s\"", pty->id);
+	if (qty->typ) {
+		sputs(ctx, " Typ=\"");
+		sputs_encq(ctx, qty->typ);
+		sputc(ctx, '"');
+	}
+
+	if (qty->qty_dt) {
+		sputs(ctx, " QtyDt=\"");
+		print_zulu(ctx, qty->qty_dt);
+	}
+
+	csnprintf(ctx, " Long=\"%.8g\"", qty->long_);
+	csnprintf(ctx, " Short=\"%.8g\"", qty->short_);
+	csnprintf(ctx, " Stat=\"%d\"", qty->stat);
+
+	snputs(ctx, ftr, countof_m1(ftr));
+	return;
+}
+
+static void
+__print_sub(__ctx_t ctx, struct pfix_sub_s *sub)
+{
+	if (sub->id) {
+		sputs(ctx, " ID=\"");
+		sputs_encq(ctx, sub->id);
+		sputc(ctx, '"');
+	}
+
+	if (sub->src) {
+		sputs(ctx, " Sub=\"");
+		sputc_encq(ctx, sub->src);
+		sputc(ctx, '"');
+	}
+
+	csnprintf(ctx, " R=\"%d\"", sub->r);
+	return;
+}
+
+static void
+pfix_print_sub(__ctx_t ctx, struct pfix_sub_s *sub, size_t indent)
+{
+	static const char hdr[] = "<Sub";
+	static const char ftr[] = "/>\n";
+
+	print_indent(ctx, indent);
+	snputs(ctx, hdr, countof_m1(hdr));
+
+	__print_sub(ctx, sub);
+
+	/* just finish the tag */
+	snputs(ctx, ftr, countof_m1(ftr));
+	return;
+}
+
+static void
+pfix_print_pty(__ctx_t ctx, struct pfix_pty_s *pty, size_t indent)
+{
+	static const char hdr[] = "<Pty";
+	static const char ftr[] = "</Pty>\n";
+	static const char altftr[] = "/>\n";
+
+	print_indent(ctx, indent);
+	snputs(ctx, hdr, countof_m1(hdr));
+
+	__print_sub(ctx, &pty->prim);
+
+	/* finish the tag preliminarily */
+	if (pty->nsub > 0) {
+		snputs(ctx, ">\n", 2);
+	}
+
+	for (size_t i = 0; i < pty->nsub; i++) {
+		pfix_print_sub(ctx, pty->sub + i, indent + 2);
 	}
 
 	if (pty->nsub > 0) {
@@ -1771,7 +1889,7 @@ pfix_print_pty(
 		snputs(ctx, ftr, countof_m1(ftr));
 	} else {
 		/* just finish the tag */
-		snputs(ctx, "/>\n", 3);
+		snputs(ctx, altftr, countof_m1(altftr));
 	}
 	return;
 }
@@ -1875,7 +1993,6 @@ pfix_print_pos_rpt(
 		pfix_print_pty(ctx, pr->pty + i, indent + 2);
 	}
 
-#if 0
 	for (size_t i = 0; i < pr->ninstrmt; i++) {
 		pfix_print_instrmt(ctx, pr->instrmt + i, indent + 2);
 	}
@@ -1883,7 +2000,7 @@ pfix_print_pos_rpt(
 	for (size_t i = 0; i < pr->nqty; i++) {
 		pfix_print_qty(ctx, pr->qty + i, indent + 2);
 	}
-#endif
+
 	/* finalise the tag */
 	sputs(ctx, ">\n");
 

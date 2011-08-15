@@ -9,8 +9,9 @@ int
 main(void)
 {
 	struct pfix_pty_s pty = {
-		.id = "mf70_test_freundt",
-		.r = 0,
+		.prim.id = "mf70_test_freundt",
+		.prim.src = '\'',
+		.prim.r = 0,
 
 		.nsub = 0,
 		.sub = NULL,
@@ -24,12 +25,13 @@ main(void)
 			.req_for_poss.npty = 1,
 			.req_for_poss.pty = &pty,
 		}, {
-			.tag = UMPF_TAG_REQ_FOR_POSS,
-			.req_for_poss.req_typ = 0,
-			.req_for_poss.txn_tm = 1234567890,
-			.req_for_poss.biz_dt = 1234567890,
-			.req_for_poss.npty = 1,
-			.req_for_poss.pty = &pty,
+			.tag = UMPF_TAG_REQ_FOR_POSS_ACK,
+			.req_for_poss_ack.rfp.req_typ = 0,
+			.req_for_poss_ack.rfp.txn_tm = 1234567890,
+			.req_for_poss_ack.rfp.biz_dt = 1234567890,
+			.req_for_poss_ack.rfp.npty = 1,
+			.req_for_poss_ack.rfp.pty = &pty,
+			.req_for_poss_ack.tot_rpts = 0,
 		}
 	};
 	struct pfix_fixml_s fix = {
@@ -41,7 +43,7 @@ main(void)
 		.nattr = 0,
 		.attr = NULL,
 
-		.nbatch = 1,
+		.nbatch = 2,
 		.batch = batch,
 	};
 	char *outb = NULL;
