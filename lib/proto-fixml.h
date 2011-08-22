@@ -54,10 +54,20 @@ typedef double qty_t;
 /* defined as umpf_tid_t in proto-fixml-tag.c */
 typedef unsigned int pfix_tid_t;
 
+typedef void *pfix_ctx_t;
+typedef void *umpf_fix_t;
+
+struct pfix_glu_s {
+	size_t dlen;
+	char *data;
+};
+
 struct pfix_sub_s {
 	char *id;
 	char src;
 	int r;
+
+	struct pfix_glu_s glu;
 };
 
 struct pfix_pty_s {
@@ -112,6 +122,33 @@ struct pfix_pos_rpt_s {
 	struct pfix_qty_s *qty;
 };
 
+struct pfix_appl_id_req_grp_s {
+	char *ref_appl_id;
+	char *ref_id;
+
+	size_t npty;
+	struct pfix_pty_s *pty;
+};
+
+struct pfix_appl_msg_attr_s {
+	char *appl_req_id;
+	int appl_req_typ;
+};
+
+struct pfix_appl_msg_req_s {
+	struct pfix_appl_msg_attr_s attr;
+
+	size_t nair_grp;
+	struct pfix_appl_id_req_grp_s *air_grp;
+};
+
+struct pfix_appl_msg_req_ack_s {
+	struct pfix_appl_msg_attr_s attr;
+
+	size_t naira_grp;
+	struct pfix_appl_id_req_grp_s *aira_grp;
+};
+
 struct pfix_rg_dtl_s {
 	size_t npty;
 	struct pfix_pty_s *pty;
@@ -119,18 +156,45 @@ struct pfix_rg_dtl_s {
 
 struct pfix_rgst_instrctns_s {
 	int trans_typ;
+	char *id;
+	char *ref_id;
 
 	size_t nrg_dtl;
 	struct pfix_rg_dtl_s *rg_dtl;
 };
 
 struct pfix_rgst_instrctns_rsp_s {
-	char *id;
+	struct pfix_rgst_instrctns_s ri;
+	char reg_stat;
+};
 
-	int trans_typ;
+struct pfix_sec_xml_s {
+	struct pfix_glu_s glu;
+};
 
-	size_t nrg_dtl;
-	struct pfix_rg_dtl_s *rg_dtl;
+struct pfix_sec_def_s {
+	char *txt;
+	idttz_t txn_tm;
+	idate_t biz_dt;
+
+	char *rpt_id;
+	char *req_id;
+	char *rsp_id;
+	int req_typ;
+	int rsp_typ;
+
+	struct pfix_sec_xml_s sec_xml[1];
+
+	size_t ninstrmt;
+	struct pfix_instrmt_s *instrmt;
+};
+
+struct pfix_sec_def_req_s {
+	struct pfix_sec_def_s sec_def;
+};
+
+struct pfix_sec_def_upd_s {
+	struct pfix_sec_def_s sec_def;
 };
 
 struct pfix_batch_s {
@@ -138,9 +202,14 @@ struct pfix_batch_s {
 	union {
 		struct pfix_req_for_poss_s req_for_poss;
 		struct pfix_req_for_poss_ack_s req_for_poss_ack;
+		struct pfix_sec_def_req_s sec_def_req;
+		struct pfix_sec_def_s sec_def;
+		struct pfix_sec_def_upd_s sec_def_upd;
 		struct pfix_pos_rpt_s pos_rpt;
 		struct pfix_rgst_instrctns_s rgst_instrctns;
 		struct pfix_rgst_instrctns_rsp_s rgst_instrctns_rsp;
+		struct pfix_appl_msg_req_s appl_msg_req;
+		struct pfix_appl_msg_req_ack_s appl_msg_req_ack;
 	};
 };
 
@@ -169,6 +238,85 @@ struct pfix_fixml_s {
 	size_t nbatch;
 	struct pfix_batch_s *batch;
 };
+
+
+/* not-so public functions */
+/**
+ * Free resources associated with FIX. */
+extern void pfix_free_fix(umpf_fix_t fix);
+
+/**
+ * much like umpf_parse_file() */
+extern umpf_fix_t
+pfix_parse_file(const char *file);
+
+/**
+ * much like umpf_parse_file_r() */
+extern umpf_fix_t
+pfix_parse_file_r(const char *file);
+
+/**
+ * much like umpf_parse_blob() */
+extern umpf_fix_t
+pfix_parse_blob(pfix_ctx_t *ctx, const char *buf, size_t bsz);
+
+/**
+ * much like umpf_parse_blob_r() */
+extern umpf_fix_t
+pfix_parse_blob_r(pfix_ctx_t *ctx, const char *buf, size_t bsz);
+
+/**
+ * much like umpf_seria_msg() */
+extern size_t
+pfix_seria_fix(char **tgt, size_t tsz, umpf_fix_t);
+
+
+/* private stuff */
+/* structure aware helpers, move to lib? */
+#if !defined UNLIKELY
+# define UNLIKELY(_x)	__builtin_expect((_x), 0)
+#endif
+#define ADDF(__sup, __str, __slot, __inc)		\
+static __str*						\
+__sup##_add_##__slot(struct pfix_##__sup##_s *o)	\
+{							\
+	size_t idx = (o)->n##__slot++;			\
+	__str *res;					\
+	if (UNLIKELY(idx % (__inc) == 0)) {		\
+		(o)->__slot = realloc(			\
+			(o)->__slot,			\
+			(idx + (__inc)) *		\
+			sizeof(*(o)->__slot));		\
+		/* rinse */				\
+		res = (o)->__slot + idx;		\
+		memset(					\
+			res, 0,				\
+			(__inc) *			\
+			sizeof(*(o)->__slot));		\
+	} else {					\
+		res = (o)->__slot + idx;		\
+	}						\
+	return res;					\
+}							\
+struct pfix_##__sup##_##__slot##_meth_s {		\
+	__str*(*add_f)(struct pfix_##__sup##_s *o);	\
+}
+
+/* adder for batches, step is 16 */
+ADDF(fixml, struct pfix_batch_s, batch, 16);
+ADDF(rgst_instrctns, struct pfix_rg_dtl_s, rg_dtl, 4);
+ADDF(rg_dtl, struct pfix_pty_s, pty, 4);
+ADDF(req_for_poss, struct pfix_pty_s, pty, 4);
+ADDF(appl_msg_req, struct pfix_appl_id_req_grp_s, air_grp, 4);
+ADDF(appl_msg_req_ack, struct pfix_appl_id_req_grp_s, aira_grp, 4);
+ADDF(appl_id_req_grp, struct pfix_pty_s, pty, 4);
+
+ADDF(pos_rpt, struct pfix_pty_s, pty, 4);
+ADDF(pos_rpt, struct pfix_instrmt_s, instrmt, 4);
+ADDF(pos_rpt, struct pfix_qty_s, qty, 4);
+
+ADDF(pty, struct pfix_sub_s, sub, 4);
+ADDF(sec_def, struct pfix_instrmt_s, instrmt, 4);
 
 #if defined __cplusplus
 }

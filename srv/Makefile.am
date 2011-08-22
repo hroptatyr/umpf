@@ -22,7 +22,6 @@ dso_umpf_la_CPPFLAGS += -I$(top_srcdir)/lib
 dso_umpf_la_CPPFLAGS += $(LIBXML2_CFLAGS)
 dso_umpf_la_SOURCES += dso-umpf.c
 EXTRA_dso_umpf_la_SOURCES += be-sql.c be-sql.h
-noinst_HEADERS += nifty.h
 ## database goodness
 if USE_MYSQL
 dso_umpf_la_LDFLAGS += $(MYSQL_LDFLAGS)

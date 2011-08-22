@@ -17,24 +17,22 @@ aouhdr_HEADERS = umpf.h
 else
 noinst_LTLIBRARIES = libumpf.la
 endif
+noinst_HEADERS += nifty.h
 noinst_HEADERS += umpf-private.h
 noinst_HEADERS += epoll-helpers.h
 noinst_HEADERS += ud-sock.h
 libumpf_la_SOURCES =
 EXTRA_libumpf_la_SOURCES =
-libumpf_la_SOURCES += proto-fixml.c
-libumpf_la_SOURCES += print-fixml.c
-libumpf_la_CPPFLAGS = $(AM_CPPFLAGS) $(LIBXML2_CFLAGS) -I$(top_srcdir)/srv
+libumpf_la_SOURCES += umpf.c umpf.h
+libumpf_la_SOURCES += proto-fixml.c proto-fixml.h proto-fixml-tag.h
+libumpf_la_SOURCES += umpf-msg-glue-fixml.c
+libumpf_la_CPPFLAGS = $(AM_CPPFLAGS) $(LIBXML2_CFLAGS)
 libumpf_la_LDFLAGS = $(AM_LDFLAGS) $(LIBXML2_LIBS)
 BUILT_SOURCES += proto-fixml-tag.c proto-fixml-attr.c
 BUILT_SOURCES += proto-fixml-ns.c
 EXTRA_libumpf_la_SOURCES += proto-fixml-tag.gperf proto-fixml-attr.gperf
 EXTRA_libumpf_la_SOURCES += proto-fixml-ns.gperf
 EXTRA_libumpf_la_SOURCES += $(BUILT_SOURCES)
-
-noinst_PROGRAMS += testlib testprint
-testlib_LDADD = libumpf.la
-testprint_LDADD = libumpf.la
 
 ## serves documentation purposes
 EXTRA_DIST += example-msg-01.xml

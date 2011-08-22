@@ -488,16 +488,29 @@ from_zulu(const char *buf)
 }
 
 static void
+__prpr_pf(const char *mnemo, FILE *whither)
+{
+	fputs(":portfolio \"", whither);
+	fputs(mnemo, whither);
+	fputs("\"\n", whither);
+	return;
+}
+
+static void
 pretty_print(umpf_msg_t msg)
 {
 	switch (umpf_get_msg_type(msg)) {
+	case UMPF_MSG_LST_PF: {
+		for (size_t i = 0; i < msg->lst_pf.npfs; i++) {
+			__prpr_pf(msg->lst_pf.pfs[i], stdout);
+		}
+		break;
+	}
 	case UMPF_MSG_NEW_PF:
 	case UMPF_MSG_SET_DESCR: {
 		const char *data;
 
-		fputs(":portfolio \"", stdout);
-		fputs(msg->new_pf.name, stdout);
-		fputs("\"\n", stdout);
+		__prpr_pf(msg->new_pf.name, stdout);
 
 		if (LIKELY((data = msg->new_pf.satellite->data) != NULL)) {
 			const size_t size = msg->new_pf.satellite->size;
@@ -565,6 +578,7 @@ pretty_print(umpf_msg_t msg)
 		fput_zulu(msg->pf.stamp, stdout);
 		fputs(" :clear ", stdout);
 		fput_date(msg->pf.clr_dt, stdout);
+		fprintf(stdout, " :tag %lu", msg->pf.tag_id);
 		fputc('\n', stdout);
 		break;
 	case UMPF_MSG_LST_TAG:
@@ -573,7 +587,8 @@ pretty_print(umpf_msg_t msg)
 		}
 		break;
 	default:
-		fputs("cannot interpret response\n", stderr);
+		fprintf(stderr, "cannot interpret response (%u)\n",
+			umpf_get_msg_type(msg));
 		break;
 	}
 	return;

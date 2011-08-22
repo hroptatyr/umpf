@@ -49,7 +49,6 @@
 #endif	/* HAVE_LIBXML2 */
 #include <math.h>
 #include "nifty.h"
-#include "umpf.h"
 #include "proto-fixml.h"
 #include "umpf-private.h"
 
@@ -90,6 +89,11 @@ struct umpf_ns_s {
 	umpf_nsid_t nsid;
 };
 
+struct __satell_s {
+	char *data;
+	size_t size;
+};
+
 /* contextual callbacks */
 struct umpf_ctxcb_s {
 	/* for a linked list */
@@ -105,8 +109,6 @@ struct umpf_ctxcb_s {
 };
 
 struct __ctx_s {
-	/* the main message we're building */
-	umpf_msg_t msg;
 	struct umpf_ns_s ns[16];
 	size_t nns;
 	/* stuff buf */
@@ -235,16 +237,6 @@ set_state_objint(__ctx_t ctx, long int z)
 {
 	ctx->state->objint = z;
 	return;
-}
-
-static void*
-get_state_object_if(__ctx_t ctx, umpf_tid_t otype)
-{
-/* like get_state_object() but return NULL if types do not match */
-	if (LIKELY(get_state_otype(ctx) == otype)) {
-		return get_state_object(ctx);
-	}
-	return NULL;
 }
 
 
@@ -436,36 +428,40 @@ dec_digit_to_val(char c)
 	}
 }
 
-static char*
-unquot(const char *src)
+static size_t
+unquotn(char **tgt, const char *src, size_t len)
 {
 /* return a copy of SRC with all entities replaced */
-	size_t len = strlen(src);
-	char *res = malloc(len);
 	const char *sp = src;
-	char *rp = res;
+	char *rp;
 
-	while (1) {
+	*tgt = rp = malloc(len + 1);
+
+	do {
 		size_t tmp;
 
 		/* find next occurrence of stop set characters */
-		sp = strchrnul(src, '&');
+		if ((sp = memchr(src, '&', len)) == NULL) {
+			sp = src + len;
+		}
 		/* write what we've got so far */
 		tmp = sp - src;
 		memcpy(rp, src, tmp);
 		rp += tmp;
+		len -= tmp;
 
 		if (LIKELY(*sp == '\0')) {
-			*rp = '\0';
-			return res;
+			break;
 		}
 
 		/* check if it's an entity */
-		tmp = (len - tmp < 8 ? len - tmp - 1 : 7);
+		tmp = (len < 8 ? len - 1 : 7);
 		if (UNLIKELY(memchr(sp + 1, ';', tmp) == NULL)) {
 			/* just copy the next TMP bytes */
 			memcpy(rp, sp, tmp + 1);
 			rp += tmp + 1;
+			len -= tmp + 1;
+			src = sp + tmp + 1;
 			continue;
 		}
 
@@ -524,53 +520,113 @@ unquot(const char *src)
 				*rp++ = '>';
 				src = sp + 4;
 			}
+			break;
 		case 'q':
 			if (sp[2] == 'u' && sp[3] == 'o' &&
 			    sp[4] == 't' && sp[5] == ';') {
 				*rp++ = '"';
 				src = sp + 6;
 			}
+			break;
 		default:
 			/* um */
 			*rp++ = *sp++;
 			src = sp;
+			len--;
 			break;
 		}
+		len -= (src - sp);
+	} while (len > 0);
+	*rp = '\0';
+	return rp - *tgt;
+}
+
+static char*
+unquot(const char *src)
+{
+/* return a copy of SRC with all entities replaced */
+	size_t len = strlen(src);
+	char *res;
+
+	(void)unquotn(&res, src, len);
+	return res;
+}
+
+static char
+unquotc(const char *src)
+{
+/* return a copy of SRC with all entities replaced */
+	const char *sp = src;
+
+	/* find next occurrence of stop set characters */
+	if (LIKELY(sp[0] != '&')) {
+		return sp[0];
+	} else if (LIKELY(*sp == '\0')) {
+		return '\0';
+	} else if (UNLIKELY(strchr(sp + 1, ';') == NULL)) {
+		/* not an entity */
+		return sp[0];
 	}
-	/* not reached */
+
+	/* inspect the entity */
+	switch (sp[1]) {
+	case '#': {
+		/* hex or dec representation */
+		uint16_t a = 0;
+
+		if (sp[2] == 'x') {
+			/* hex */
+			sp += 2;
+			while (*sp != ';') {
+				a *= 16;
+				a += hex_digit_to_val(*sp++);
+			}
+		} else {
+			/* dec */
+			sp += 2;
+			while (*sp != ';') {
+				a *= 10;
+				a += dec_digit_to_val(*sp++);
+			}
+		}
+		/* prefer smaller chars */
+		return (char)(a & 0xff);
+	}
+	case 'a':
+		/* could be &amp; or &apos; */
+		if (sp[2] == 'm' && sp[3] == 'p' && sp[4] == ';') {
+			return '&';
+		} else if (sp[2] == 'p' && sp[3] == 'o' &&
+			   sp[4] == 's' && sp[5] == ';') {
+			return '\'';
+		}
+		break;
+	case 'l':
+		if (sp[2] == 't' && sp[3] == ';') {
+			return '<';
+		}
+		break;
+	case 'g':
+		if (sp[2] == 't' && sp[3] == ';') {
+			return '>';
+		}
+		break;
+	case 'q':
+		if (sp[2] == 'u' && sp[3] == 'o' &&
+		    sp[4] == 't' && sp[5] == ';') {
+			return '"';
+		}
+		break;
+	default:
+		break;
+	}
+	return '\0';
 }
 
 
-/* structure aware helpers, move to lib? */
-#define ADDF(__sup, __str, __slot, __inc)		\
-static __str*						\
-__sup##_add_##__slot(struct pfix_##__sup##_s *o)	\
-{							\
-	size_t idx = (o)->n##__slot;			\
-	__str *res;					\
-	if (UNLIKELY(idx % (__inc) == 0)) {		\
-		(o)->__slot = realloc(			\
-			(o)->__slot,			\
-			(idx + (__inc)) *		\
-			sizeof(*(o)->__slot));		\
-		/* rinse */				\
-		res = (o)->__slot + idx;		\
-		memset(					\
-			res, 0,				\
-			(__inc) *			\
-			sizeof(*(o)->__slot));		\
-	} else {					\
-		res = (o)->__slot + idx;		\
-	}						\
-	return res;					\
-}							\
-struct pfix_##__sup##_meth_s {				\
-	__str*(*add_f)(struct pfix_##__sup##_s *o);	\
-}
-
-
+/* xml deserialiser */
 static void
-__eat_ws_ass(struct __satell_s *sat, const char *d, size_t l)
+__eat_ws_ass(struct pfix_glu_s *g, const char *d, size_t l)
 {
 	const char *p = d;
 
@@ -588,12 +644,11 @@ __eat_ws_ass(struct __satell_s *sat, const char *d, size_t l)
 # pragma warning (default:981)
 #endif	/* __INTEL_COMPILER */
 
-	sat->data = malloc((sat->size = l) + 1);
-	memcpy(sat->data, p, l);
+	g->dlen = unquotn(&g->data, p, l);
+	g->data[g->dlen] = '\0';
 	return;
 }
 
-
 #define INITIAL_GBUF_SIZE	(4096UL)
 
 static void
@@ -731,21 +786,28 @@ sputc_encq(__ctx_t ctx, char s)
 	return;
 }
 
-static void __attribute__((unused))
-sputs_enc(__ctx_t ctx, const char *s)
+static void
+snputs_enc(__ctx_t ctx, const char *s, size_t z)
 {
 	static const char stpset[] = "<>&";
+	const char *sp = s;
 	size_t idx;
 
 	while (1) {
 		/* find next occurrence of stop set characters */
-		idx = strcspn(s, stpset);
+		if ((idx = strcspn(sp, stpset)) >= z) {
+			snputs(ctx, sp, z - (sp - s));
+			return;
+		}
 		/* write what we've got */
-		snputs(ctx, s, idx);
+		snputs(ctx, sp, idx);
+		/* advance our buffer */
+		sp += idx;
 		/* inspect the character */
-		switch (s[idx]) {
-		default:
+		switch (*sp++) {
 		case '\0':
+		default:
+			PFIXML_DEBUG("unknown character in stop set\n");
 			return;
 		case '<':
 			snputs(ctx, "&lt;", 4);
@@ -757,8 +819,6 @@ sputs_enc(__ctx_t ctx, const char *s)
 			snputs(ctx, "&amp;", 5);
 			break;
 		}
-		/* advance our buffer */
-		s += idx + sizeof(*s);
 	}
 	/* not reached */
 }
@@ -925,22 +985,38 @@ proc_REQ_FOR_POSS_ACK_attr(
 }
 
 static void
+proc_RGST_INSTRCTNS_attr(
+	struct pfix_rgst_instrctns_s *ri,
+	const umpf_aid_t aid, const char *value)
+{
+	switch (aid) {
+	case UMPF_ATTR_ID:
+		ri->id = unquot(value);
+		break;
+	case UMPF_ATTR_REF_ID:
+		ri->ref_id = unquot(value);
+		break;
+	case UMPF_ATTR_TRANS_TYP:
+		ri->trans_typ = strtol(value, NULL, 10);
+		break;
+	default:
+		PFIXML_DEBUG("WARN: unknown attr %u\n", aid);
+		break;
+	}
+	return;
+}
+
+static void
 proc_RGST_INSTRCTNS_RSP_attr(
 	struct pfix_rgst_instrctns_rsp_s *rsp,
 	const umpf_aid_t aid, const char *value)
 {
 	switch (aid) {
-	case UMPF_ATTR_ID:
-		rsp->id = unquot(value);
-		break;
-	case UMPF_ATTR_TRANS_TYP:
-		rsp->trans_typ = strtol(value, NULL, 10);
-		break;
 	case UMPF_ATTR_REG_STAT:
-		/* ignored */
+		rsp->reg_stat = unquotc(value);
 		break;
 	default:
-		PFIXML_DEBUG("WARN: unknown attr %u\n", aid);
+		proc_RGST_INSTRCTNS_attr(&rsp->ri, aid, value);
 		break;
 	}
 	return;
@@ -978,11 +1054,11 @@ proc_PTY_attr(struct pfix_pty_s *pty, const umpf_aid_t aid, const char *value)
 }
 
 static void
-proc_INSTRMT_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
+proc_INSTRMT_attr(
+	struct pfix_instrmt_s *ins, const umpf_aid_t aid, const char *value)
 {
 	switch (aid) {
 	case UMPF_ATTR_SYM: {
-		struct __ins_s *ins = get_state_object(ctx);
 		ins->sym = unquot(value);
 		break;
 	}
@@ -994,22 +1070,23 @@ proc_INSTRMT_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 }
 
 static void
-proc_QTY_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
+proc_QTY_attr(struct pfix_qty_s *qty, const umpf_aid_t aid, const char *value)
 {
-	struct __ins_qty_s *iq = get_state_object(ctx);
-
 	switch (aid) {
 	case UMPF_ATTR_TYP:
-		/* ignored */
+		qty->typ = unquot(value);
 		break;
 	case UMPF_ATTR_LONG:
-		iq->qty->_long = strtod(value, NULL);
+		qty->long_ = strtod(value, NULL);
 		break;
 	case UMPF_ATTR_SHORT:
-		iq->qty->_shrt = strtod(value, NULL);
+		qty->short_ = strtod(value, NULL);
 		break;
 	case UMPF_ATTR_QTY_DT:
-		/* ignored */
+		qty->qty_dt = get_zulu(value);
+		break;
+	case UMPF_ATTR_STAT:
+		qty->stat = strtol(value, NULL, 10);
 		break;
 	default:
 		PFIXML_DEBUG("WARN: unknown attr %u\n", aid);
@@ -1019,16 +1096,15 @@ proc_QTY_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 }
 
 static void
-proc_SEC_DEF_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
+proc_POS_RPT_attr(
+	struct pfix_pos_rpt_s *pr, const umpf_aid_t aid, const char *value)
 {
-	umpf_msg_t msg = ctx->msg;
-
 	switch (aid) {
-	case UMPF_ATTR_TXT:
-		msg->new_sec.pf_mnemo = unquot(value);
+	case UMPF_ATTR_RSLT:
+		pr->rslt = strtol(value, NULL, 10);
 		break;
-	case UMPF_ATTR_TXN_TM:
-		/* ignored */
+	case UMPF_ATTR_REQ_TYP:
+		pr->req_typ = strtol(value, NULL, 10);
 		break;
 	default:
 		PFIXML_DEBUG("WARN: unknown attr %u\n", aid);
@@ -1037,6 +1113,28 @@ proc_SEC_DEF_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 	return;
 }
 
+static void
+proc_SEC_DEF_all_attr(
+	struct pfix_sec_def_s *sd, const umpf_aid_t aid, const char *value)
+{
+	switch (aid) {
+	case UMPF_ATTR_TXT:
+		sd->txt = unquot(value);
+		break;
+	case UMPF_ATTR_TXN_TM:
+		sd->txn_tm = get_zulu(value);
+		break;
+	case UMPF_ATTR_BIZ_DT:
+		sd->biz_dt = get_zulu(value);
+		break;
+	default:
+		PFIXML_DEBUG("WARN: unknown attr %u\n", aid);
+		break;
+	}
+	return;
+}
+
+#if 0
 static void
 proc_ALLOC_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 {
@@ -1109,7 +1207,29 @@ proc_ALLOC_all_attr(__ctx_t ctx, const umpf_aid_t aid, const char *value)
 	}
 	return;
 }
+#endif
 
+static void
+proc_APPL_MSG_REQ_all_attr(
+	struct pfix_appl_msg_attr_s *ama,
+	const umpf_aid_t aid, const char *value)
+{
+	switch (aid) {
+	case UMPF_ATTR_APPL_REQ_ID:
+		ama->appl_req_id = unquot(value);
+		break;
+	case UMPF_ATTR_APPL_REQ_TYP:
+		ama->appl_req_typ = strtol(value, NULL, 10);
+		break;
+	default:
+		PFIXML_DEBUG("WARN: unknown attr %u\n", aid);
+		break;
+	}
+	return;
+}
+
+#if 0
+/* belongs somewhere else */
 static uint64_t
 get_SUB_ID_u64(__ctx_t ctx, const char **attrs)
 {
@@ -1122,6 +1242,7 @@ get_SUB_ID_u64(__ctx_t ctx, const char **attrs)
 	return 0UL;
 }
 
+/* belongs somewhere else */
 static void
 __lst_tag_add_tag(__ctx_t ctx, tag_t tid)
 {
@@ -1142,20 +1263,15 @@ __lst_tag_add_tag(__ctx_t ctx, tag_t tid)
 	ctx->msg = msg;
 	return;
 }
-
-/* adder for batches, step is 16 */
-ADDF(fixml, struct pfix_batch_s, batch, 16);
-ADDF(rgst_instrctns, struct pfix_rg_dtl_s, rg_dtl, 4);
-ADDF(rg_dtl, struct pfix_pty_s, pty, 4);
+#endif
 
 
 static void
 sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 {
-	umpf_msg_t msg = ctx->msg;
 	struct pfix_fixml_s *fix = ctx->fix;
 
-	assert(ctx->msg != NULL);
+	PFIXML_DEBUG("otype %u tid %u\n", get_state_otype(ctx), tid);
 	assert(get_state_otype(ctx) == UMPF_TAG_FIXML);
 
 	/* sigh, subtle differences */
@@ -1189,6 +1305,10 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 		struct pfix_rgst_instrctns_s *ri = &b->rgst_instrctns;
 
 		b->tag = tid;
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_RGST_INSTRCTNS_attr(ri, aid, attrs[j + 1]);
+		}
 		(void)push_state(ctx, tid, ri);
 		break;
 	}
@@ -1204,33 +1324,34 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 		(void)push_state(ctx, tid, rir);
 		break;
 	}
+	case UMPF_TAG_POS_RPT: {
+		struct pfix_batch_s *b = fixml_add_batch(fix);
+		struct pfix_pos_rpt_s *pr = &b->pos_rpt;
+
+		b->tag = tid;
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_POS_RPT_attr(pr, aid, attrs[j + 1]);
+		}
+		(void)push_state(ctx, tid, pr);
+		break;
+	}
 	case UMPF_TAG_SEC_DEF_REQ:
-		umpf_set_msg_type(msg, UMPF_MSG_GET_SEC);
-		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
-			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
-			proc_SEC_DEF_all_attr(ctx, aid, attrs[j + 1]);
-		}
-		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
-		break;
-
 	case UMPF_TAG_SEC_DEF_UPD:
-		umpf_set_msg_type(msg, UMPF_MSG_SET_SEC);
+	case UMPF_TAG_SEC_DEF: {
+		struct pfix_batch_s *b = fixml_add_batch(fix);
+		struct pfix_sec_def_s *sd = &b->sec_def;
+
+		b->tag = tid;
 		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
 			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
-			proc_SEC_DEF_all_attr(ctx, aid, attrs[j + 1]);
+			proc_SEC_DEF_all_attr(sd, aid, attrs[j + 1]);
 		}
-		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
+		(void)push_state(ctx, tid, sd);
 		break;
+	}
 
-	case UMPF_TAG_SEC_DEF:
-		umpf_set_msg_type(msg, UMPF_MSG_NEW_SEC);
-		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
-			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
-			proc_SEC_DEF_all_attr(ctx, aid, attrs[j + 1]);
-		}
-		(void)push_state(ctx, tid, ctx->msg->new_sec.ins);
-		break;
-
+#if 0
 	case UMPF_TAG_ALLOC_INSTRCTN: {
 		/* for the instrument guy and the attr code */
 		struct __ins_qty_s *iq = NULL;
@@ -1243,6 +1364,33 @@ sax_bo_top_level_elt(__ctx_t ctx, const umpf_tid_t tid, const char **attrs)
 			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
 			proc_ALLOC_all_attr(ctx, aid, attrs[j + 1]);
 		}
+		break;
+	}
+#endif
+	case UMPF_TAG_APPL_MSG_REQ: {
+		struct pfix_batch_s *b = fixml_add_batch(fix);
+		struct pfix_appl_msg_req_s *amr = &b->appl_msg_req;
+
+		b->tag = tid;
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_APPL_MSG_REQ_all_attr(
+				&amr->attr, aid, attrs[j + 1]);
+		}
+		(void)push_state(ctx, tid, amr);
+		break;
+	}
+	case UMPF_TAG_APPL_MSG_REQ_ACK: {
+		struct pfix_batch_s *b = fixml_add_batch(fix);
+		struct pfix_appl_msg_req_ack_s *amra = &b->appl_msg_req_ack;
+
+		b->tag = tid;
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			proc_APPL_MSG_REQ_all_attr(
+				&amra->attr, aid, attrs[j + 1]);
+		}
+		(void)push_state(ctx, tid, amra);
 		break;
 	}
 	default:
@@ -1267,8 +1415,6 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 			break;
 		}
 
-		/* generate a massage */
-		ctx->msg = calloc(1, sizeof(*ctx->msg));
 		/* generate a fix obj */
 		ctx->fix = calloc(1, sizeof(*ctx->fix));
 		push_state(ctx, tid, ctx->fix);
@@ -1285,6 +1431,7 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 	case UMPF_TAG_REQ_FOR_POSS:
 		/* translate to get_pf/get_descr */
 	case UMPF_TAG_REQ_FOR_POSS_ACK:
+	case UMPF_TAG_POS_RPT:
 		/* translate to set_pf */
 	case UMPF_TAG_RGST_INSTRCTNS:
 		/* translate to new_pf/set_descr */
@@ -1300,43 +1447,46 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 		/* translate to apply */
 	case UMPF_TAG_ALLOC_INSTRCTN_ACK:
 		/* translate to apply */
+	case UMPF_TAG_APPL_MSG_REQ:
+	case UMPF_TAG_APPL_MSG_REQ_ACK:
+		/* translate to various user messages */
 		sax_bo_top_level_elt(ctx, tid, attrs);
 		break;
 
-	case UMPF_TAG_APPL_MSG_REQ:
-	case UMPF_TAG_APPL_MSG_REQ_ACK:
-		/* just a container around the really interesting bit */
-		break;
+	case UMPF_TAG_APPL_ID_REQ_GRP: {
+		struct pfix_appl_msg_req_s *amr = get_state_object(ctx);
+		struct pfix_appl_id_req_grp_s *rg =
+			appl_msg_req_add_air_grp(amr);
 
-	case UMPF_TAG_APPL_ID_REQ_GRP:
-	case UMPF_TAG_APPL_ID_REQ_ACK_GRP:
 		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
 			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+
 			/* only listen for RefApplID */
 			if (aid != UMPF_ATTR_REF_APPL_ID) {
 				continue;
 			}
 			PFIXML_DEBUG("found %s\n", attrs[j + 1]);
-			if (strcmp(attrs[j + 1], "lst_tag") == 0) {
-				umpf_set_msg_type(ctx->msg, UMPF_MSG_LST_TAG);
-			}
+			rg->ref_appl_id = unquot(attrs[j + 1]);
 		}
-		(void)push_state(ctx, tid, ctx->msg);
+		(void)push_state(ctx, tid, rg);
 		break;
+	}
+	case UMPF_TAG_APPL_ID_REQ_ACK_GRP: {
+		struct pfix_appl_msg_req_ack_s *amra = get_state_object(ctx);
+		struct pfix_appl_id_req_grp_s *rag =
+			appl_msg_req_ack_add_aira_grp(amra);
 
-	case UMPF_TAG_POS_RPT: {
-		/* part of get/set pf */
-		umpf_msg_t msg;
-		struct __ins_qty_s *iq = NULL;
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
 
-		if (UNLIKELY((msg = ctx->msg) == NULL)) {
-			;
-		} else if (UNLIKELY(get_state_otype(ctx) != UMPF_TAG_FIXML)) {
-			;
-		} else if ((size_t)get_state_objint(ctx) < msg->pf.nposs) {
-			iq = msg->pf.poss + get_state_objint(ctx);
+			/* only listen for RefApplID */
+			if (aid != UMPF_ATTR_REF_APPL_ID) {
+				continue;
+			}
+			PFIXML_DEBUG("found %s\n", attrs[j + 1]);
+			rag->ref_appl_id = unquot(attrs[j + 1]);
 		}
-		(void)push_state(ctx, tid, iq);
+		(void)push_state(ctx, tid, rag);
 		break;
 	}
 
@@ -1358,11 +1508,30 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 			pty = rg_dtl_add_pty(rd);
 			break;
 		}
-
-		case UMPF_TAG_REQ_FOR_POSS:
-		case UMPF_TAG_REQ_FOR_POSS_ACK:
+		case UMPF_TAG_REQ_FOR_POSS: {
+			struct pfix_req_for_poss_s *rfp =
+				get_state_object(ctx);
+			pty = req_for_poss_add_pty(rfp);
+			break;
+		}
+		case UMPF_TAG_REQ_FOR_POSS_ACK: {
+			struct pfix_req_for_poss_ack_s *rfpa =
+				get_state_object(ctx);
+			pty = req_for_poss_add_pty(&rfpa->rfp);
+			break;
+		}
+		case UMPF_TAG_POS_RPT: {
+			struct pfix_pos_rpt_s *pr = get_state_object(ctx);
+			pty = pos_rpt_add_pty(pr);
+			break;
+		}
 		case UMPF_TAG_APPL_ID_REQ_GRP:
-		case UMPF_TAG_APPL_ID_REQ_ACK_GRP:
+		case UMPF_TAG_APPL_ID_REQ_ACK_GRP: {
+			struct pfix_appl_id_req_grp_s *rg =
+				get_state_object(ctx);
+			pty = appl_id_req_grp_add_pty(rg);
+			break;
+		}
 		default:
 			pty = NULL;
 			break;
@@ -1379,72 +1548,87 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 	}
 
 	case UMPF_TAG_SUB: {
-		tag_t tag;
+		struct pfix_sub_s *sub;
 
-		/* context sensitive node, bummer */
-		if (ctx->state == NULL || ctx->state->old_state == NULL) {
-			break;
+		if (get_state_otype(ctx) == UMPF_TAG_PTY) {
+			struct pfix_pty_s *pty = get_state_object(ctx);
+			sub = pty_add_sub(pty);
+		} else {
+			/* sub as a child of something else? :O */
+			sub = NULL;
 		}
 
-		tag = get_SUB_ID_u64(ctx, attrs);
-
-		/* we need to look up our grand-parent because our parent
-		 * is a Pty */
-		switch (ctx->state->old_state->otype) {
-		case UMPF_TAG_REQ_FOR_POSS:
-		case UMPF_TAG_REQ_FOR_POSS_ACK:
-			ctx->msg->pf.tag_id = tag;
+		if (UNLIKELY(sub == NULL)) {
 			break;
-		case UMPF_TAG_APPL_ID_REQ_GRP:
-		case UMPF_TAG_APPL_ID_REQ_ACK_GRP: 
-			/* add tid */
-			__lst_tag_add_tag(ctx, tag);
-			break;
-		default:
-			break;
+		}
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+			const umpf_aid_t a = check_attr(ctx, attrs[j]);
+			proc_SUB_attr(sub, a, attrs[j + 1]);
 		}
 		break;
 	}
 
-	case UMPF_TAG_INSTRMT: 
+	case UMPF_TAG_INSTRMT: {
+		struct pfix_instrmt_s *ins;
 
 		if (UNLIKELY(attrs == NULL)) {
 			break;
 		}
 
 		switch (get_state_otype(ctx)) {
-		case UMPF_TAG_POS_RPT:
-		case UMPF_TAG_SEC_DEF:
-		case UMPF_TAG_SEC_DEF_REQ:
+		case UMPF_TAG_POS_RPT: {
+			struct pfix_pos_rpt_s *pr = get_state_object(ctx);
+			ins = pos_rpt_add_instrmt(pr);
+			break;
+		}
 		case UMPF_TAG_SEC_DEF_UPD:
-		case UMPF_TAG_ALLOC_INSTRCTN:
-			/* we use the fact that __ins_qty_s == __ins_s
-			 * in posrpt mode and in sec-def mode we rely
-			 * on the right push there */
-			for (int j = 0; attrs && attrs[j] != NULL; j += 2) {
-				const umpf_aid_t a = check_attr(ctx, attrs[j]);
-				proc_INSTRMT_attr(ctx, a, attrs[j + 1]);
-			}
+		case UMPF_TAG_SEC_DEF_REQ:
+		case UMPF_TAG_SEC_DEF: {
+			struct pfix_sec_def_s *sd = get_state_object(ctx);
+			ins = sec_def_add_instrmt(sd);
 			break;
+		}
 		default:
-			PFIXML_DEBUG("WARN: Instrmt in unknown context\n");
+			/* add more here if need be */
+			ins = NULL;
 			break;
+		}
+
+		if (UNLIKELY(ins == NULL)) {
+			break;
+		}
+		for (int j = 0; attrs && attrs[j] != NULL; j += 2) {
+			const umpf_aid_t a = check_attr(ctx, attrs[j]);
+			proc_INSTRMT_attr(ins, a, attrs[j + 1]);
 		}
 		break;
+	}
 
 	case UMPF_TAG_QTY: {
-		/* check that we're inside a PosRpt context */
-		struct __ins_qty_s *iq =
-			get_state_object_if(ctx, UMPF_TAG_POS_RPT);
+		struct pfix_qty_s *qty;
 
-		if (UNLIKELY(iq == NULL)) {
-			PFIXML_DEBUG("WARN: Qty outside of PosRpt\n");
+		if (UNLIKELY(attrs == NULL)) {
 			break;
 		}
 
+		switch (get_state_otype(ctx)) {
+		case UMPF_TAG_POS_RPT: {
+			struct pfix_pos_rpt_s *pr = get_state_object(ctx);
+			qty = pos_rpt_add_qty(pr);
+			break;
+		}
+		default:
+			/* add more here if need be */
+			qty = NULL;
+			break;
+		}
+
+		if (UNLIKELY(qty == NULL)) {
+			break;
+		}
 		for (int j = 0; attrs && attrs[j] != NULL; j += 2) {
-			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
-			proc_QTY_attr(ctx, aid, attrs[j + 1]);
+			const umpf_aid_t a = check_attr(ctx, attrs[j]);
+			proc_QTY_attr(qty, a, attrs[j + 1]);
 		}
 		break;
 	}
@@ -1454,10 +1638,25 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 		PFIXML_DEBUG("Amt tags are currently unsupported\n");
 		break;
 
-	case UMPF_TAG_SEC_XML:
-		/* it's just a no-op */
-		break;
+	case UMPF_TAG_SEC_XML: {
+		struct pfix_sec_xml_s *sx;
 
+		switch (get_state_otype(ctx)) {
+		case UMPF_TAG_SEC_DEF_UPD:
+		case UMPF_TAG_SEC_DEF_REQ:
+		case UMPF_TAG_SEC_DEF: {
+			struct pfix_sec_def_s *sd = get_state_object(ctx);
+			sx = sd->sec_xml;
+			break;
+		}
+		default:
+			sx = NULL;
+			break;
+		}
+		(void)push_state(ctx, tid, sx);
+		break;
+	}
+#if 0
 	case UMPF_TAG_ALLOC:
 		/* just go through the attrs again */
 		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
@@ -1465,6 +1664,7 @@ sax_bo_FIXML_elt(__ctx_t ctx, const char *name, const char **attrs)
 			proc_ALLOC_all_attr(ctx, aid, attrs[j + 1]);
 		}
 		break;
+#endif
 
 	default:
 		PFIXML_DEBUG("WARN: unknown tag %s\n", name);
@@ -1482,35 +1682,37 @@ sax_eo_FIXML_elt(__ctx_t ctx, const char *name)
 
 	/* stuff that needed to be done, fix up state etc. */
 	switch (tid) {
+		/* top-leverls */
 	case UMPF_TAG_REQ_FOR_POSS_ACK:
-		/* need to zilch out the objid as PosRpt relies on it */
-		pop_state(ctx);
-		set_state_objint(ctx, 0);
-		break;
 	case UMPF_TAG_POS_RPT:
-		/* need to zilch out the objid as PosRpt relies on it */
-		pop_state(ctx);
-		set_state_objint(ctx, get_state_objint(ctx) + 1);
-		break;
 	case UMPF_TAG_REQ_FOR_POSS:
 	case UMPF_TAG_RGST_INSTRCTNS:
 	case UMPF_TAG_RGST_INSTRCTNS_RSP:
 	case UMPF_TAG_RG_DTL:
-	case UMPF_TAG_PTY:
 	case UMPF_TAG_SEC_DEF:
 	case UMPF_TAG_SEC_DEF_REQ:
 	case UMPF_TAG_SEC_DEF_UPD:
 	case UMPF_TAG_ALLOC_INSTRCTN:
-	case UMPF_TAG_APPL_ID_REQ_GRP:
-	case UMPF_TAG_APPL_ID_REQ_ACK_GRP:
+	case UMPF_TAG_APPL_MSG_REQ:
+	case UMPF_TAG_APPL_MSG_REQ_ACK:
 		pop_state(ctx);
 		break;
+
+		/* non top-levels */
+	case UMPF_TAG_PTY:
+	case UMPF_TAG_APPL_ID_REQ_GRP:
+	case UMPF_TAG_APPL_ID_REQ_ACK_GRP:
+	case UMPF_TAG_SEC_XML:
+		pop_state(ctx);
+		break;
+
+		/* non top-levels without children */
+	case UMPF_TAG_INSTRMT:
+	case UMPF_TAG_QTY:
 	case UMPF_TAG_SUB:
 		/* noone dare push this */
 		break;
-	case UMPF_TAG_APPL_MSG_REQ:
-	case UMPF_TAG_APPL_MSG_REQ_ACK:
-		break;
+
 	case UMPF_TAG_FIXML:
 		/* finalise the document */
 		assert(ctx->state != NULL);
@@ -1599,51 +1801,51 @@ sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int len)
 
 static void
 sax_bo_AOU_elt(
-	__ctx_t ctx, umpf_ns_t ns, const char *name, const char **UNUSED(attrs))
+	__ctx_t ctx, umpf_ns_t UNUSED(ns),
+	const char *name, const char **UNUSED(attrs))
 {
 	const umpf_tid_t tid = sax_tid_from_tag(name);
 
 	switch (tid) {
 	case UMPF_TAG_GLUE: {
-		umpf_msg_t msg = ctx->msg;
+		struct pfix_fixml_s *fix = ctx->fix;
 
 		/* actually this is the only one we support */
 		PFIXML_DEBUG("GLUE\n");
 
-		if (UNLIKELY(msg == NULL)) {
-			PFIXML_DEBUG("msg NULL, glue is meaningless\n");
+		if (UNLIKELY(fix == NULL)) {
+			PFIXML_DEBUG("fix NULL, glue is meaningless\n");
 			break;
 		}
+		switch (get_state_otype(ctx)) {
+			/* all the nodes that have the glue */
+		case UMPF_TAG_PTY:
+		case UMPF_TAG_SUB: {
+			struct pfix_sub_s *s = get_state_object(ctx);
+			struct pfix_glu_s *g = &s->glu;
 
-		switch (umpf_get_msg_type(msg)) {
-		case UMPF_MSG_NEW_PF: {
-			/* ah, finally, glue indeed is supported here */
-			void *ptr;
-
-			if (UNLIKELY(msg->new_pf.satellite->data != NULL)) {
+			if (UNLIKELY(g->data != NULL)) {
 				/* someone else, prob us, was faster */
 				break;
 			}
 			/* the glue code wants a pointer to the satellite */
-			ptr = msg->new_pf.satellite;
-			(void)push_state(ctx, UMPF_TAG_GLUE, ptr);
+			(void)push_state(ctx, UMPF_TAG_GLUE, g);
 			goto glue_setup;
 		}
-		case UMPF_MSG_NEW_SEC:
-		case UMPF_MSG_SET_SEC: {
-			/* ah, finally, glue indeed is supported here */
-			void *ptr;
+		case UMPF_TAG_SEC_XML: {
+			struct pfix_sec_xml_s *sx = get_state_object(ctx);
+			struct pfix_glu_s *g;
 
-			if (UNLIKELY(msg->new_sec.satellite->data != NULL)) {
-				/* someone else, prob us, was faster */
+			if (UNLIKELY(sx == NULL ||
+				     (g = &sx->glu)->data != NULL)) {
 				break;
 			}
 			/* the glue code wants a pointer to the satellite */
-			ptr = msg->new_sec.satellite;
-			(void)push_state(ctx, UMPF_TAG_GLUE, ptr);
+			(void)push_state(ctx, UMPF_TAG_GLUE, g);
 			goto glue_setup;
 		}
 		default:
+			PFIXML_DEBUG("no glue slot, glue is meaningless\n");
 			break;
 		}
 		break;
@@ -1687,7 +1889,7 @@ sax_eo_AOU_elt(__ctx_t ctx, const char *name)
 
 	switch (tid) {
 	case UMPF_TAG_GLUE: {
-		struct __satell_s *ptr;
+		struct pfix_glu_s *ptr;
 		size_t len = ctx->sbix - AOU_CONT_OFFS;
 
 		PFIXML_DEBUG("/GLUE\n");
@@ -1789,278 +1991,6 @@ sax_get_ent(void *UNUSED(user_data), const xmlChar *name)
 	return xmlGetPredefinedEntity(name);
 }
 
-
-/* printers */
-static void
-pfix_print_instrmt(__ctx_t ctx, struct pfix_instrmt_s *ins, size_t indent)
-{
-	print_indent(ctx, indent);
-	csnprintf(ctx, "<Instrmt Sym=\"%s\"/>\n", ins->sym);
-	return;
-}
-
-static void
-pfix_print_qty(__ctx_t ctx, struct pfix_qty_s *qty, size_t indent)
-{
-	print_indent(ctx, indent);
-	static const char hdr[] = "<Qty";
-	static const char ftr[] = "/>\n";
-
-	print_indent(ctx, indent);
-	snputs(ctx, hdr, countof_m1(hdr));
-
-	if (qty->typ) {
-		sputs(ctx, " Typ=\"");
-		sputs_encq(ctx, qty->typ);
-		sputc(ctx, '"');
-	}
-
-	if (qty->qty_dt) {
-		sputs(ctx, " QtyDt=\"");
-		print_zulu(ctx, qty->qty_dt);
-	}
-
-	csnprintf(ctx, " Long=\"%.8g\"", qty->long_);
-	csnprintf(ctx, " Short=\"%.8g\"", qty->short_);
-	csnprintf(ctx, " Stat=\"%d\"", qty->stat);
-
-	snputs(ctx, ftr, countof_m1(ftr));
-	return;
-}
-
-static void
-__print_sub(__ctx_t ctx, struct pfix_sub_s *sub)
-{
-	if (sub->id) {
-		sputs(ctx, " ID=\"");
-		sputs_encq(ctx, sub->id);
-		sputc(ctx, '"');
-	}
-
-	if (sub->src) {
-		sputs(ctx, " Sub=\"");
-		sputc_encq(ctx, sub->src);
-		sputc(ctx, '"');
-	}
-
-	csnprintf(ctx, " R=\"%d\"", sub->r);
-	return;
-}
-
-static void
-pfix_print_sub(__ctx_t ctx, struct pfix_sub_s *sub, size_t indent)
-{
-	static const char hdr[] = "<Sub";
-	static const char ftr[] = "/>\n";
-
-	print_indent(ctx, indent);
-	snputs(ctx, hdr, countof_m1(hdr));
-
-	__print_sub(ctx, sub);
-
-	/* just finish the tag */
-	snputs(ctx, ftr, countof_m1(ftr));
-	return;
-}
-
-static void
-pfix_print_pty(__ctx_t ctx, struct pfix_pty_s *pty, size_t indent)
-{
-	static const char hdr[] = "<Pty";
-	static const char ftr[] = "</Pty>\n";
-	static const char altftr[] = "/>\n";
-
-	print_indent(ctx, indent);
-	snputs(ctx, hdr, countof_m1(hdr));
-
-	__print_sub(ctx, &pty->prim);
-
-	/* finish the tag preliminarily */
-	if (pty->nsub > 0) {
-		snputs(ctx, ">\n", 2);
-	}
-
-	for (size_t i = 0; i < pty->nsub; i++) {
-		pfix_print_sub(ctx, pty->sub + i, indent + 2);
-	}
-
-	if (pty->nsub > 0) {
-		print_indent(ctx, indent);
-		snputs(ctx, ftr, countof_m1(ftr));
-	} else {
-		/* just finish the tag */
-		snputs(ctx, altftr, countof_m1(altftr));
-	}
-	return;
-}
-
-static void
-pfix_print_req_for_poss(
-	__ctx_t ctx, struct pfix_req_for_poss_s *rfp, size_t indent)
-{
-	static const char hdr[] = "<ReqForPoss";
-	static const char ftr[] = "</ReqForPoss>\n";
-
-	print_indent(ctx, indent);
-	snputs(ctx, hdr, countof_m1(hdr));
-
-	if (rfp->req_typ) {
-		csnprintf(ctx, " ReqTyp=\"%d\"", rfp->req_typ);
-	}
-
-	if (rfp->biz_dt > 0) {
-		sputs(ctx, " BizDt=\"");
-		print_date(ctx, rfp->biz_dt);
-		sputc(ctx, '"');
-	}
-
-	if (rfp->txn_tm > 0) {
-		sputs(ctx, " TxnTm=\"");
-		print_zulu(ctx, rfp->txn_tm);
-		sputc(ctx, '"');
-	}
-
-	/* finalise the tag */
-	sputs(ctx, ">\n");
-
-	for (size_t i = 0; i < rfp->npty; i++) {
-		pfix_print_pty(ctx, rfp->pty + i, indent + 2);
-	}
-
-	print_indent(ctx, indent);
-	snputs(ctx, ftr, countof_m1(ftr));
-	return;
-}
-
-static void
-pfix_print_req_for_poss_ack(
-	__ctx_t ctx, struct pfix_req_for_poss_ack_s *rfpa, size_t indent)
-{
-	static const char hdr[] = "<ReqForPossAck";
-	static const char ftr[] = "</ReqForPossAck>\n";
-
-	print_indent(ctx, indent);
-	snputs(ctx, hdr, countof_m1(hdr));
-
-	if (rfpa->rfp.req_typ) {
-		csnprintf(ctx, " ReqTyp=\"%d\"", rfpa->rfp.req_typ);
-	}
-	csnprintf(ctx, " TotRpts=\"%d\"", rfpa->tot_rpts);
-
-	if (rfpa->rfp.biz_dt > 0) {
-		sputs(ctx, " BizDt=\"");
-		print_date(ctx, rfpa->rfp.biz_dt);
-		sputc(ctx, '"');
-	}
-
-	if (rfpa->rfp.txn_tm > 0) {
-		sputs(ctx, " TxnTm=\"");
-		print_zulu(ctx, rfpa->rfp.txn_tm);
-		sputc(ctx, '"');
-	}
-
-	/* finalise the tag */
-	sputs(ctx, ">\n");
-
-	for (size_t i = 0; i < rfpa->rfp.npty; i++) {
-		pfix_print_pty(ctx, rfpa->rfp.pty + i, indent + 2);
-	}
-
-	print_indent(ctx, indent);
-	snputs(ctx, ftr, countof_m1(ftr));
-	return;
-}
-
-static void
-pfix_print_pos_rpt(
-	__ctx_t ctx, struct pfix_pos_rpt_s *pr, size_t indent)
-{
-	static const char hdr[] = "<ReqForPoss";
-	static const char ftr[] = "</ReqForPoss>\n";
-
-	print_indent(ctx, indent);
-	snputs(ctx, hdr, countof_m1(hdr));
-
-	if (pr->rslt) {
-		csnprintf(ctx, " Rslt=\"%d\"", pr->rslt);
-	}
-
-	if (pr->req_typ) {
-		csnprintf(ctx, " ReqTyp=\"%d\"", pr->req_typ);
-	}
-
-	for (size_t i = 0; i < pr->npty; i++) {
-		pfix_print_pty(ctx, pr->pty + i, indent + 2);
-	}
-
-	for (size_t i = 0; i < pr->ninstrmt; i++) {
-		pfix_print_instrmt(ctx, pr->instrmt + i, indent + 2);
-	}
-
-	for (size_t i = 0; i < pr->nqty; i++) {
-		pfix_print_qty(ctx, pr->qty + i, indent + 2);
-	}
-
-	/* finalise the tag */
-	sputs(ctx, ">\n");
-
-	print_indent(ctx, indent);
-	snputs(ctx, ftr, countof_m1(ftr));
-	return;
-}
-
-static void
-pfix_print_fixml(__ctx_t ctx, struct pfix_fixml_s *f, size_t indent)
-{
-	static const char hdr[] = "\
-<FIXML xmlns=\"http://www.fixprotocol.org/FIXML-5-0\"\n\
-  xmlns:aou=\"http://www.ga-group.nl/aou-0.1\"\n\
-  v=\"5.0\" aou:version=\"0.1\">\n";
-	static const char ftr[] = "\
-</FIXML>\n";
-	static const char batch_hdr[] = "<Batch>\n";
-	static const char batch_ftr[] = "</Batch>\n";
-
-	print_indent(ctx, indent);
-	snputs(ctx, hdr, countof_m1(hdr));
-
-	if (f->nbatch > 1) {
-		print_indent(ctx, indent + 2);
-		snputs(ctx, batch_hdr, countof_m1(batch_hdr));
-		indent += 2;
-	}
-		
-	for (size_t i = 0; i < f->nbatch; i++) {
-		switch (f->batch[i].tag) {
-		case UMPF_TAG_REQ_FOR_POSS:
-			pfix_print_req_for_poss(
-				ctx, &f->batch[i].req_for_poss, indent + 2);
-			break;
-		case UMPF_TAG_REQ_FOR_POSS_ACK:
-			pfix_print_req_for_poss_ack(
-				ctx, &f->batch[i].req_for_poss_ack, indent + 2);
-			break;
-		case UMPF_TAG_POS_RPT:
-			pfix_print_pos_rpt(
-				ctx, &f->batch[i].pos_rpt, indent + 2);
-			break;
-		default:
-			break;
-		}
-	}
-
-	if (f->nbatch > 1) {
-		print_indent(ctx, indent);
-		snputs(ctx, batch_ftr, countof_m1(batch_ftr));
-		indent -= 2;
-	}
-
-	print_indent(ctx, indent);
-	snputs(ctx, ftr, countof_m1(ftr));
-	return;
-}
-
-
 /* the actual parser */
 static int
 parse_file(__ctx_t ctx, const char *file)
@@ -2086,12 +2016,12 @@ static int
 final_blob_p(__ctx_t ctx)
 {
 /* return 1 if we need more blobs, 0 if this was the final blob, -1 on error */
-	if (ctx->msg != NULL && ctx->state == NULL) {
+	if (ctx->fix != NULL && ctx->state == NULL) {
 		/* we're ready */
 		PFIXML_DEBUG("seems ready\n");
 		return xmlParseChunk(ctx->pp, ctx->sbuf, 0, 1);
 	}
-	PFIXML_DEBUG("%p %u\n", ctx->msg, get_state_otype(ctx));
+	PFIXML_DEBUG("%p %u\n", ctx->fix, get_state_otype(ctx));
 	/* request more data */
 	return BLOB_M_PLZ;
 }
@@ -2129,18 +2059,898 @@ parse_blob(__ctx_t ctx, const char *buf, size_t bsz)
 }
 
 
+/* printers */
+static void
+pfix_print_txn_tm(__ctx_t ctx, idttz_t txn_tm)
+{
+	if (txn_tm > 0) {
+		sputs(ctx, " TxnTm=\"");
+		print_zulu(ctx, txn_tm);
+		sputc(ctx, '"');
+	}
+	return;
+}
+
+static void
+pfix_print_biz_dt(__ctx_t ctx, idate_t biz_dt)
+{
+	if (biz_dt > 0) {
+		sputs(ctx, " BizDt=\"");
+		print_date(ctx, biz_dt);
+		sputc(ctx, '"');
+	}
+	return;
+}
+
+static void
+pfix_print_glu(__ctx_t ctx, struct pfix_glu_s *g, size_t indent)
+{
+	static const char hdr[] = "<aou:glue content-type=\"text/plain\">\n";
+	static const char ftr[] = "</aou:glue>\n";
+
+	print_indent(ctx, indent);
+	snputs(ctx, hdr, countof_m1(hdr));
+
+	snputs_enc(ctx, g->data, g->dlen);
+
+	if (g->data[g->dlen - 1] != '\n') {
+		sputc(ctx, '\n');
+	}
+
+	print_indent(ctx, indent);
+	snputs(ctx, ftr, countof_m1(ftr));
+	return;
+}
+
+static void
+pfix_print_instrmt(__ctx_t ctx, struct pfix_instrmt_s *ins, size_t indent)
+{
+	print_indent(ctx, indent);
+	csnprintf(ctx, "<Instrmt Sym=\"%s\"/>\n", ins->sym);
+	return;
+}
+
+static void
+pfix_print_qty(__ctx_t ctx, struct pfix_qty_s *qty, size_t indent)
+{
+	static const char hdr[] = "<Qty";
+	static const char ftr[] = "/>\n";
+
+	print_indent(ctx, indent);
+	snputs(ctx, hdr, countof_m1(hdr));
+
+	if (qty->typ) {
+		sputs(ctx, " Typ=\"");
+		sputs_encq(ctx, qty->typ);
+		sputc(ctx, '"');
+	}
+
+	if (qty->qty_dt) {
+		sputs(ctx, " QtyDt=\"");
+		print_zulu(ctx, qty->qty_dt);
+	}
+
+	csnprintf(ctx, " Long=\"%a\"", qty->long_);
+	csnprintf(ctx, " Short=\"%a\"", qty->short_);
+	csnprintf(ctx, " Stat=\"%d\"", qty->stat);
+
+	snputs(ctx, ftr, countof_m1(ftr));
+	return;
+}
+
+static void
+__print_sub_attr(__ctx_t ctx, struct pfix_sub_s *sub)
+{
+	if (sub->id) {
+		sputs(ctx, " ID=\"");
+		sputs_encq(ctx, sub->id);
+		sputc(ctx, '"');
+	}
+
+	if (sub->src) {
+		sputs(ctx, " Sub=\"");
+		sputc_encq(ctx, sub->src);
+		sputc(ctx, '"');
+	}
+
+	csnprintf(ctx, " R=\"%d\"", sub->r);
+	return;
+}
+
+static void
+pfix_print_sub(__ctx_t ctx, struct pfix_sub_s *sub, size_t indent)
+{
+	static const char hdr[] = "<Sub";
+	static const char ftr[] = "</Sub>\n";
+
+	print_indent(ctx, indent);
+	snputs(ctx, hdr, countof_m1(hdr));
+
+	__print_sub_attr(ctx, sub);
+
+	/* just finish the tag */
+	if (LIKELY(sub->glu.data == NULL)) {
+		sputs(ctx, "/>\n");
+	} else {
+		sputs(ctx, ">\n");
+		pfix_print_glu(ctx, &sub->glu, indent + 2);
+		snputs(ctx, ftr, countof_m1(ftr));
+	}
+	return;
+}
+
+static void
+pfix_print_pty(__ctx_t ctx, struct pfix_pty_s *pty, size_t indent)
+{
+	static const char hdr[] = "<Pty";
+	static const char ftr[] = "</Pty>\n";
+	static const char altftr[] = "/>\n";
+	bool big_ftr_p = pty->nsub > 0 || pty->prim.glu.data != NULL;
+
+	print_indent(ctx, indent);
+	snputs(ctx, hdr, countof_m1(hdr));
+
+	__print_sub_attr(ctx, &pty->prim);
+
+	/* finish the tag preliminarily */
+	if (big_ftr_p) {
+		snputs(ctx, ">\n", 2);
+	}
+
+	for (size_t i = 0; i < pty->nsub; i++) {
+		pfix_print_sub(ctx, pty->sub + i, indent + 2);
+	}
+
+	if (UNLIKELY(pty->prim.glu.data != NULL)) {
+		pfix_print_glu(ctx, &pty->prim.glu, indent + 2);
+	}
+
+	if (big_ftr_p) {
+		print_indent(ctx, indent);
+		snputs(ctx, ftr, countof_m1(ftr));
+	} else {
+		/* just finish the tag */
+		snputs(ctx, altftr, countof_m1(altftr));
+	}
+	return;
+}
+
+static void
+pfix_print_rg_dtl(__ctx_t ctx, struct pfix_rg_dtl_s *rd, size_t indent)
+{
+	static const char hdr[] = "<RgDtl>\n";
+	static const char ftr[] = "</RgDtl>\n";
+
+	print_indent(ctx, indent);
+	snputs(ctx, hdr, countof_m1(hdr));
+
+	for (size_t i = 0; i < rd->npty; i++) {
+		pfix_print_pty(ctx, rd->pty + i, indent + 2);
+	}
+
+	print_indent(ctx, indent);
+	snputs(ctx, ftr, countof_m1(ftr));
+	return;
+}
+
+static void
+pfix_print_sec_xml(__ctx_t ctx, struct pfix_sec_xml_s *sx, size_t indent)
+{
+	static const char hdr[] = "<SecXML>\n";
+	static const char ftr[] = "</SecXML>\n";
+
+	if (sx->glu.dlen > 0) {
+		print_indent(ctx, indent);
+		snputs(ctx, hdr, countof_m1(hdr));
+
+		pfix_print_glu(ctx, &sx->glu, indent + 2);
+
+		print_indent(ctx, indent);
+		snputs(ctx, ftr, countof_m1(ftr));
+	}
+	return;
+}
+
+static void
+pfix_print_appl_id_req_grp(
+	__ctx_t ctx, struct pfix_appl_id_req_grp_s *air, size_t indent)
+{
+	static const char hdr[] = "<ApplIDReqGrp";
+	static const char ftr[] = "</ApplIDReqGrp>\n";
+
+	print_indent(ctx, indent);
+	snputs(ctx, hdr, countof_m1(hdr));
+
+	if (air->ref_appl_id) {
+		sputs(ctx, " RefApplID=\"");
+		sputs(ctx, air->ref_appl_id);
+		sputc(ctx, '"');
+	}
+
+	if (air->ref_id) {
+		sputs(ctx, " RefID=\"");
+		sputs(ctx, air->ref_id);
+		sputc(ctx, '"');
+	}
+
+	/* finalise the tag */
+	snputs(ctx, ">\n", 2);
+
+	for (size_t i = 0; i < air->npty; i++) {
+		pfix_print_pty(ctx, air->pty + i, indent + 2);
+	}
+
+	print_indent(ctx, indent);
+	snputs(ctx, ftr, countof_m1(ftr));
+	return;
+}
+
+static void
+pfix_print_appl_id_req_ack_grp(
+	__ctx_t ctx, struct pfix_appl_id_req_grp_s *aira, size_t indent)
+{
+	static const char hdr[] = "<ApplIDReqAckGrp";
+	static const char ftr[] = "</ApplIDReqAckGrp>\n";
+
+	print_indent(ctx, indent);
+	snputs(ctx, hdr, countof_m1(hdr));
+
+	if (aira->ref_appl_id) {
+		sputs(ctx, " RefApplID=\"");
+		sputs(ctx, aira->ref_appl_id);
+		sputc(ctx, '"');
+	}
+
+	if (aira->ref_id) {
+		sputs(ctx, " RefID=\"");
+		sputs(ctx, aira->ref_id);
+		sputc(ctx, '"');
+	}
+
+	/* finalise the tag */
+	snputs(ctx, ">\n", 2);
+
+	for (size_t i = 0; i < aira->npty; i++) {
+		pfix_print_pty(ctx, aira->pty + i, indent + 2);
+	}
+
+	print_indent(ctx, indent);
+	snputs(ctx, ftr, countof_m1(ftr));
+	return;
+}
+
+/* top-level */
+static void
+pfix_print_req_for_poss(
+	__ctx_t ctx, struct pfix_req_for_poss_s *rfp, size_t indent)
+{
+	static const char hdr[] = "<ReqForPoss";
+	static const char ftr[] = "</ReqForPoss>\n";
+
+	print_indent(ctx, indent);
+	snputs(ctx, hdr, countof_m1(hdr));
+
+	csnprintf(ctx, " ReqTyp=\"%d\"", rfp->req_typ);
+
+	pfix_print_biz_dt(ctx, rfp->biz_dt);
+	pfix_print_txn_tm(ctx, rfp->txn_tm);
+
+	/* finalise the tag */
+	sputs(ctx, ">\n");
+
+	for (size_t i = 0; i < rfp->npty; i++) {
+		pfix_print_pty(ctx, rfp->pty + i, indent + 2);
+	}
+
+	print_indent(ctx, indent);
+	snputs(ctx, ftr, countof_m1(ftr));
+	return;
+}
+
+static void
+pfix_print_req_for_poss_ack(
+	__ctx_t ctx, struct pfix_req_for_poss_ack_s *rfpa, size_t indent)
+{
+	static const char hdr[] = "<ReqForPossAck";
+	static const char ftr[] = "</ReqForPossAck>\n";
+
+	print_indent(ctx, indent);
+	snputs(ctx, hdr, countof_m1(hdr));
+
+	csnprintf(ctx, " ReqTyp=\"%d\"", rfpa->rfp.req_typ);
+	csnprintf(ctx, " TotRpts=\"%d\"", rfpa->tot_rpts);
+
+	pfix_print_biz_dt(ctx, rfpa->rfp.biz_dt);
+	pfix_print_txn_tm(ctx, rfpa->rfp.txn_tm);
+
+	/* finalise the tag */
+	sputs(ctx, ">\n");
+
+	for (size_t i = 0; i < rfpa->rfp.npty; i++) {
+		pfix_print_pty(ctx, rfpa->rfp.pty + i, indent + 2);
+	}
+
+	print_indent(ctx, indent);
+	snputs(ctx, ftr, countof_m1(ftr));
+	return;
+}
+
+static void
+pfix_print_pos_rpt(
+	__ctx_t ctx, struct pfix_pos_rpt_s *pr, size_t indent)
+{
+	static const char hdr[] = "<PosRpt";
+	static const char ftr[] = "</PosRpt>\n";
+
+	print_indent(ctx, indent);
+	snputs(ctx, hdr, countof_m1(hdr));
+
+	csnprintf(ctx, " Rslt=\"%d\"", pr->rslt);
+	csnprintf(ctx, " ReqTyp=\"%d\"", pr->req_typ);
+
+	/* finalise the tag */
+	snputs(ctx, ">\n", 2);
+
+	for (size_t i = 0; i < pr->npty; i++) {
+		pfix_print_pty(ctx, pr->pty + i, indent + 2);
+	}
+
+	for (size_t i = 0; i < pr->ninstrmt; i++) {
+		pfix_print_instrmt(ctx, pr->instrmt + i, indent + 2);
+	}
+
+	for (size_t i = 0; i < pr->nqty; i++) {
+		pfix_print_qty(ctx, pr->qty + i, indent + 2);
+	}
+
+	print_indent(ctx, indent);
+	snputs(ctx, ftr, countof_m1(ftr));
+	return;
+}
+
+static void
+pfix_print_rgst_instrctns(
+	__ctx_t ctx, struct pfix_rgst_instrctns_s *ri, size_t indent)
+{
+	static const char hdr[] = "<RgstInstrctns";
+	static const char ftr[] = "</RgstInstrctns>\n";
+
+	print_indent(ctx, indent);
+	snputs(ctx, hdr, countof_m1(hdr));
+
+	csnprintf(ctx, " TransTyp=\"%d\"", ri->trans_typ);
+
+	if (ri->ref_id) {
+		sputs(ctx, " RefID=\"");
+		sputs_encq(ctx, ri->ref_id);
+		sputc(ctx, '"');
+	}
+
+	/* finalise the tag */
+	snputs(ctx, ">\n", 2);
+
+	for (size_t i = 0; i < ri->nrg_dtl; i++) {
+		pfix_print_rg_dtl(ctx, ri->rg_dtl + i, indent + 2);
+	}
+
+	print_indent(ctx, indent);
+	snputs(ctx, ftr, countof_m1(ftr));
+	return;
+}
+
+static void
+pfix_print_rgst_instrctns_rsp(
+	__ctx_t ctx, struct pfix_rgst_instrctns_rsp_s *rir, size_t indent)
+{
+	static const char hdr[] = "<RgstInstrctnsRsp";
+	static const char ftr[] = "</RgstInstrctnsRsp>\n";
+
+	print_indent(ctx, indent);
+	snputs(ctx, hdr, countof_m1(hdr));
+
+	csnprintf(ctx, " TransTyp=\"%d\"", rir->ri.trans_typ);
+
+	if (rir->ri.id) {
+		sputs(ctx, " ID=\"");
+		sputs_encq(ctx, rir->ri.id);
+		sputc(ctx, '"');
+	}
+
+	if (rir->reg_stat) {
+		sputs(ctx, " RegStat=\"");
+		sputc_encq(ctx, rir->reg_stat);
+		sputc(ctx, '"');
+	}
+
+	if (rir->ri.ref_id) {
+		sputs(ctx, " RefID=\"");
+		sputs_encq(ctx, rir->ri.ref_id);
+		sputc(ctx, '"');
+	}
+
+	if (rir->ri.nrg_dtl > 0) {
+		/* finalise the tag */
+		snputs(ctx, ">\n", 2);
+	}
+	for (size_t i = 0; i < rir->ri.nrg_dtl; i++) {
+		pfix_print_rg_dtl(ctx, rir->ri.rg_dtl + i, indent + 2);
+	}
+
+	if (rir->ri.nrg_dtl > 0) {
+		print_indent(ctx, indent);
+		snputs(ctx, ftr, countof_m1(ftr));
+	} else {
+		snputs(ctx, "/>\n", 3);
+	}
+	return;
+}
+
+static void
+__print_sec_def_all(
+	__ctx_t ctx, struct pfix_sec_def_s *sd,
+	const char *hdr, size_t nhdr, const char *ftr, size_t nftr,
+	size_t indent)
+{
+	print_indent(ctx, indent);
+	snputs(ctx, hdr, nhdr);
+
+	if (sd->rpt_id) {
+		sputs(ctx, " RptID=\"");
+		sputs(ctx, sd->rpt_id);
+		sputc(ctx, '"');
+	}
+
+	if (sd->req_id) {
+		sputs(ctx, " ReqID=\"");
+		sputs(ctx, sd->req_id);
+		sputc(ctx, '"');
+	}
+
+	if (sd->rsp_id) {
+		sputs(ctx, " RspID=\"");
+		sputs(ctx, sd->rsp_id);
+		sputc(ctx, '"');
+	}
+
+	csnprintf(ctx, " ReqTyp=\"%d\"", sd->req_typ);
+	csnprintf(ctx, " RspTyp=\"%d\"", sd->rsp_typ);
+
+	if (sd->txt) {
+		sputs(ctx, " Txt=\"");
+		sputs(ctx, sd->txt);
+		sputc(ctx, '"');
+	}
+
+	pfix_print_biz_dt(ctx, sd->biz_dt);
+	pfix_print_txn_tm(ctx, sd->txn_tm);
+
+	if (sd->ninstrmt != 0 || sd->sec_xml->glu.dlen > 0) {
+		/* finalise the tag */
+		snputs(ctx, ">\n", 2);
+
+		pfix_print_sec_xml(ctx, sd->sec_xml, indent + 2);
+
+		for (size_t i = 0; i < sd->ninstrmt; i++) {
+			pfix_print_instrmt(ctx, sd->instrmt + i, indent + 2);
+		}
+
+		print_indent(ctx, indent);
+		snputs(ctx, ftr, nftr);
+	} else {
+		/* finalise the tag */
+		snputs(ctx, "/>\n", 3);
+	}
+	return;
+}
+
+static void
+pfix_print_sec_def(__ctx_t ctx, struct pfix_sec_def_s *sd, size_t indent)
+{
+	static const char hdr[] = "<SecDef";
+	static const char ftr[] = "</SecDef>\n";
+
+	__print_sec_def_all(
+		ctx, sd, hdr, countof_m1(hdr), ftr, countof_m1(ftr), indent);
+	return;
+}
+
+static void
+pfix_print_sec_def_req(__ctx_t ctx, struct pfix_sec_def_req_s *sdr, size_t ind)
+{
+	static const char hdr[] = "<SecDefReq";
+	static const char ftr[] = "</SecDefReq>\n";
+
+	__print_sec_def_all(
+		ctx, &sdr->sec_def,
+		hdr, countof_m1(hdr), ftr, countof_m1(ftr), ind);
+	return;
+}
+
+static void
+pfix_print_sec_def_upd(__ctx_t ctx, struct pfix_sec_def_upd_s *sdu, size_t ind)
+{
+	static const char hdr[] = "<SecDefUpd";
+	static const char ftr[] = "</SecDefUpd>\n";
+
+	__print_sec_def_all(
+		ctx, &sdu->sec_def,
+		hdr, countof_m1(hdr), ftr, countof_m1(ftr), ind);
+	return;
+}
+
+static void
+pfix_print_appl_msg_req(
+	__ctx_t ctx, struct pfix_appl_msg_req_s *amr, size_t indent)
+{
+	static const char hdr[] = "<ApplMsgReq";
+	static const char ftr[] = "</ApplMsgReq>\n";
+
+	print_indent(ctx, indent);
+	snputs(ctx, hdr, countof_m1(hdr));
+
+	if (amr->attr.appl_req_id) {
+		sputs(ctx, " ApplReqID=\"");
+		sputs(ctx, amr->attr.appl_req_id);
+		sputc(ctx, '"');
+	}
+
+	csnprintf(ctx, " ApplReqTyp=\"%d\"", amr->attr.appl_req_typ);
+
+	/* finalise the tag */
+	snputs(ctx, ">\n", 2);
+
+	for (size_t i = 0; i < amr->nair_grp; i++) {
+		pfix_print_appl_id_req_grp(
+			ctx, amr->air_grp + i, indent + 2);
+	}
+
+	print_indent(ctx, indent);
+	snputs(ctx, ftr, countof_m1(ftr));
+	return;
+}
+
+static void
+pfix_print_appl_msg_req_ack(
+	__ctx_t ctx, struct pfix_appl_msg_req_ack_s *amra, size_t indent)
+{
+	static const char hdr[] = "<ApplMsgReqAck";
+	static const char ftr[] = "</ApplMsgReqAck>\n";
+
+	print_indent(ctx, indent);
+	snputs(ctx, hdr, countof_m1(hdr));
+
+	if (amra->attr.appl_req_id) {
+		sputs(ctx, " ApplReqID=\"");
+		sputs(ctx, amra->attr.appl_req_id);
+		sputc(ctx, '"');
+	}
+
+	csnprintf(ctx, " ApplReqTyp=\"%d\"", amra->attr.appl_req_typ);
+
+	/* finalise the tag */
+	snputs(ctx, ">\n", 2);
+
+	for (size_t i = 0; i < amra->naira_grp; i++) {
+		pfix_print_appl_id_req_ack_grp(
+			ctx, amra->aira_grp + i, indent + 2);
+	}
+
+	print_indent(ctx, indent);
+	snputs(ctx, ftr, countof_m1(ftr));
+	return;
+}
+
+static void
+pfix_print_batch(__ctx_t ctx, struct pfix_batch_s *b, size_t ind)
+{
+	switch (b->tag) {
+	case UMPF_TAG_REQ_FOR_POSS:
+		pfix_print_req_for_poss(ctx, &b->req_for_poss, ind);
+		break;
+	case UMPF_TAG_REQ_FOR_POSS_ACK:
+		pfix_print_req_for_poss_ack(ctx, &b->req_for_poss_ack, ind);
+		break;
+	case UMPF_TAG_POS_RPT:
+		pfix_print_pos_rpt(ctx, &b->pos_rpt, ind);
+		break;
+	case UMPF_TAG_RGST_INSTRCTNS:
+		pfix_print_rgst_instrctns(ctx, &b->rgst_instrctns, ind);
+		break;
+	case UMPF_TAG_RGST_INSTRCTNS_RSP:
+		pfix_print_rgst_instrctns_rsp(ctx, &b->rgst_instrctns_rsp, ind);
+		break;
+	case UMPF_TAG_SEC_DEF:
+		pfix_print_sec_def(ctx, &b->sec_def, ind);
+		break;
+	case UMPF_TAG_SEC_DEF_REQ:
+		pfix_print_sec_def_req(ctx, &b->sec_def_req, ind);
+		break;
+	case UMPF_TAG_SEC_DEF_UPD:
+		pfix_print_sec_def_upd(ctx, &b->sec_def_upd, ind);
+		break;
+	case UMPF_TAG_APPL_MSG_REQ:
+		pfix_print_appl_msg_req(ctx, &b->appl_msg_req, ind);
+		break;
+	case UMPF_TAG_APPL_MSG_REQ_ACK:
+		pfix_print_appl_msg_req_ack(ctx, &b->appl_msg_req_ack, ind);
+		break;
+	default:
+		PFIXML_DEBUG("cannot print tag %u\n", b->tag);
+		break;
+	}
+	return;
+}
+
+static void
+pfix_print_fixml(pfix_ctx_t ctx, struct pfix_fixml_s *f, size_t indent)
+{
+	static const char hdr[] = "\
+<FIXML xmlns=\"http://www.fixprotocol.org/FIXML-5-0\"\n\
+  xmlns:aou=\"http://www.ga-group.nl/aou-0.1\"\n\
+  v=\"5.0\" aou:version=\"0.1\">\n";
+	static const char ftr[] = "\
+</FIXML>\n";
+	static const char batch_hdr[] = "<Batch>\n";
+	static const char batch_ftr[] = "</Batch>\n";
+
+	print_indent(ctx, indent);
+	snputs(ctx, hdr, countof_m1(hdr));
+
+	PFIXML_DEBUG("%zu\n", f->nbatch);
+
+	if (f->nbatch > 1) {
+		print_indent(ctx, indent + 2);
+		snputs(ctx, batch_hdr, countof_m1(batch_hdr));
+		indent += 2;
+	}
+		
+	for (size_t i = 0; i < f->nbatch; i++) {
+		pfix_print_batch(ctx, f->batch + i, indent + 2);
+	}
+
+	if (f->nbatch > 1) {
+		print_indent(ctx, indent);
+		snputs(ctx, batch_ftr, countof_m1(batch_ftr));
+		indent -= 2;
+	}
+
+	print_indent(ctx, indent);
+	snputs(ctx, ftr, countof_m1(ftr));
+	return;
+}
+
+
+/* dtors */
+static void
+pfix_free_glu(struct pfix_glu_s *g)
+{
+	safe_xfree(g->data);
+	g->dlen = 0UL;
+	return;
+}
+
+static void
+pfix_free_sub(struct pfix_sub_s *s)
+{
+	safe_xfree(s->id);
+	pfix_free_glu(&s->glu);
+	return;
+}
+
+static void
+pfix_free_pty(struct pfix_pty_s *p)
+{
+	pfix_free_sub(&p->prim);
+	for (size_t i = 0; i < p->nsub; i++) {
+		pfix_free_sub(p->sub + i);
+	}
+	safe_xfree(p->sub);
+	return;
+}
+
+static void
+pfix_free_instrmt(struct pfix_instrmt_s *ins)
+{
+	safe_xfree(ins->sym);
+	return;
+}
+
+static void
+pfix_free_qty(struct pfix_qty_s *qty)
+{
+	safe_xfree(qty->typ);
+	return;
+}
+
+static void
+pfix_free_rg_dtl(struct pfix_rg_dtl_s *rd)
+{
+	for (size_t i = 0; i < rd->npty; i++) {
+		pfix_free_pty(rd->pty + i);
+	}
+	safe_xfree(rd->pty);
+	return;
+}
+
+static void
+pfix_free_appl_id_req_grp(struct pfix_appl_id_req_grp_s *air)
+{
+	safe_xfree(air->ref_appl_id);
+	safe_xfree(air->ref_id);
+	for (size_t i = 0; i < air->npty; i++) {
+		pfix_free_pty(air->pty + i);
+	}
+	safe_xfree(air->pty);
+	return;
+}
+
+/* top levels */
+static void
+pfix_free_rgst_instrctns(struct pfix_rgst_instrctns_s *ri)
+{
+	safe_xfree(ri->ref_id);
+	safe_xfree(ri->id);
+	for (size_t i = 0; i < ri->nrg_dtl; i++) {
+		pfix_free_rg_dtl(ri->rg_dtl + i);
+	}
+	safe_xfree(ri->rg_dtl);
+	return;
+}
+
+static void
+pfix_free_rgst_instrctns_rsp(struct pfix_rgst_instrctns_rsp_s *rir)
+{
+	pfix_free_rgst_instrctns(&rir->ri);
+	return;
+}
+
+static void
+pfix_free_sec_def(struct pfix_sec_def_s *sd)
+{
+	safe_xfree(sd->txt);
+	safe_xfree(sd->rpt_id);
+	safe_xfree(sd->req_id);
+	safe_xfree(sd->rsp_id);
+	pfix_free_glu(&sd->sec_xml->glu);
+	for (size_t i = 0; i < sd->ninstrmt; i++) {
+		pfix_free_instrmt(sd->instrmt + i);
+	}
+	safe_xfree(sd->instrmt);
+	return;
+}
+
+static void
+pfix_free_sec_def_upd(struct pfix_sec_def_upd_s *sdu)
+{
+	pfix_free_sec_def(&sdu->sec_def);
+	return;
+}
+
+static void
+pfix_free_sec_def_req(struct pfix_sec_def_req_s *sdr)
+{
+	pfix_free_sec_def(&sdr->sec_def);
+	return;
+}
+
+static void
+pfix_free_pos_rpt(struct pfix_pos_rpt_s *pr)
+{
+	for (size_t i = 0; i < pr->npty; i++) {
+		pfix_free_pty(pr->pty + i);
+	}
+	safe_xfree(pr->pty);
+	for (size_t i = 0; i < pr->ninstrmt; i++) {
+		pfix_free_instrmt(pr->instrmt + i);
+	}
+	safe_xfree(pr->instrmt);
+	for (size_t i = 0; i < pr->nqty; i++) {
+		pfix_free_qty(pr->qty + i);
+	}
+	safe_xfree(pr->qty);
+	return;
+}
+
+static void
+pfix_free_req_for_poss(struct pfix_req_for_poss_s *rfp)
+{
+	for (size_t i = 0; i < rfp->npty; i++) {
+		pfix_free_pty(rfp->pty + i);
+	}
+	safe_xfree(rfp->pty);
+	return;
+}
+
+static void
+pfix_free_req_for_poss_ack(struct pfix_req_for_poss_ack_s *rfpa)
+{
+	pfix_free_req_for_poss(&rfpa->rfp);
+	return;
+}
+
+static void
+pfix_free_appl_msg_req(struct pfix_appl_msg_req_s *amr)
+{
+	safe_xfree(amr->attr.appl_req_id);
+	for (size_t i = 0; i < amr->nair_grp; i++) {
+		pfix_free_appl_id_req_grp(amr->air_grp + i);
+	}
+	safe_xfree(amr->air_grp);
+	return;
+}
+
+static void
+pfix_free_appl_msg_req_ack(struct pfix_appl_msg_req_ack_s *amra)
+{
+	safe_xfree(amra->attr.appl_req_id);
+	for (size_t i = 0; i < amra->naira_grp; i++) {
+		pfix_free_appl_id_req_grp(amra->aira_grp + i);
+	}
+	safe_xfree(amra->aira_grp);
+	return;
+}
+
+static void
+pfix_free_batch(struct pfix_batch_s *b)
+{
+	switch (b->tag) {
+	case UMPF_TAG_REQ_FOR_POSS:
+		pfix_free_req_for_poss(&b->req_for_poss);
+		break;
+	case UMPF_TAG_REQ_FOR_POSS_ACK:
+		pfix_free_req_for_poss_ack(&b->req_for_poss_ack);
+		break;
+	case UMPF_TAG_RGST_INSTRCTNS:
+		pfix_free_rgst_instrctns(&b->rgst_instrctns);
+		break;
+	case UMPF_TAG_RGST_INSTRCTNS_RSP:
+		pfix_free_rgst_instrctns_rsp(&b->rgst_instrctns_rsp);
+		break;
+	case UMPF_TAG_SEC_DEF:
+		pfix_free_sec_def(&b->sec_def);
+		break;
+	case UMPF_TAG_SEC_DEF_REQ:
+		pfix_free_sec_def_req(&b->sec_def_req);
+		break;
+	case UMPF_TAG_SEC_DEF_UPD:
+		pfix_free_sec_def_upd(&b->sec_def_upd);
+		break;
+	case UMPF_TAG_POS_RPT:
+		pfix_free_pos_rpt(&b->pos_rpt);
+		break;
+	case UMPF_TAG_APPL_MSG_REQ:
+		pfix_free_appl_msg_req(&b->appl_msg_req);
+		break;
+	case UMPF_TAG_APPL_MSG_REQ_ACK:
+		pfix_free_appl_msg_req_ack(&b->appl_msg_req_ack);
+		break;
+	default:
+		break;
+	}
+	return;
+}
+
+static void
+pfix_free_fixml(struct pfix_fixml_s *f)
+{
+	/* loads of leaks, do me properly */
+	safe_xfree(f->ns);
+	safe_xfree(f->attr);
+
+	for (size_t i = 0; i < f->nbatch; i++) {
+		pfix_free_batch(f->batch + i);
+	}
+	safe_xfree(f->batch);
+	return;
+}
+
+
 /* external stuff and helpers */
 static void
 init(__ctx_t ctx)
 {
-#if 0
-/* total wipeout would be daft if this is meant to be a singleton */
-	/* total wipeout */
-	memset(ctx, 0, sizeof(*ctx));
-#else
 	/* wipe some slots */
-	ctx->msg = NULL;
-#endif	/* 0 */
+	ctx->fix = NULL;
 
 	/* initialise the stuff buffer */
 	ctx->sbuf = realloc(ctx->sbuf, ctx->sbsz = INITIAL_STUFF_BUF_SIZE);
@@ -2159,9 +2969,9 @@ init(__ctx_t ctx)
 static void
 deinit(__ctx_t ctx)
 {
-	if (ctx->msg) {
+	if (ctx->fix) {
 		/* reset the document, leak if not free()'d */
-		ctx->msg = NULL;
+		ctx->fix = NULL;
 	}
 
 	for (size_t i = 0; i < ctx->nns; i++) {
@@ -2196,16 +3006,16 @@ free_ctx(__ctx_t ctx)
 	return;
 }
 
-static umpf_msg_t
-__umpf_parse_file(__ctx_t ctx, const char *file)
+static umpf_fix_t
+__pfix_parse_file(__ctx_t ctx, const char *file)
 {
-	umpf_msg_t res;
+	umpf_fix_t res;
 
 	init(ctx);
 	PFIXML_DEBUG("parsing %s\n", file);
 	if (LIKELY(parse_file(ctx, file) == 0)) {
 		PFIXML_DEBUG("done\n");
-		res = ctx->msg;
+		res = ctx->fix;
 	} else {
 		PFIXML_DEBUG("failed\n");
 		res = NULL;
@@ -2214,18 +3024,18 @@ __umpf_parse_file(__ctx_t ctx, const char *file)
 	return res;
 }
 
-umpf_msg_t
-umpf_parse_file(const char *file)
+umpf_fix_t
+pfix_parse_file(const char *file)
 {
 	static struct __ctx_s ctx[1] = {{0}};
-	return __umpf_parse_file(ctx, file);
+	return __pfix_parse_file(ctx, file);
 }
 
-umpf_msg_t
-umpf_parse_file_r(const char *file)
+umpf_fix_t
+pfix_parse_file_r(const char *file)
 {
 	__ctx_t ctx = calloc(1, sizeof(*ctx));
-	umpf_msg_t res = __umpf_parse_file(ctx, file);
+	umpf_fix_t res = __pfix_parse_file(ctx, file);
 	free_ctx(ctx);
 	return res;
 }
@@ -2237,10 +3047,10 @@ ctx_deinitted_p(__ctx_t ctx)
 	return ctx->pp == NULL;
 }
 
-static umpf_msg_t
+static umpf_fix_t
 check_ret(__ctx_t ctx, int ret)
 {
-	umpf_msg_t res;
+	umpf_fix_t res;
 
 	if (ret == 0) {
 		ret = final_blob_p(ctx);
@@ -2251,7 +3061,7 @@ check_ret(__ctx_t ctx, int ret)
 	switch (ret) {
 	case BLOB_READY:
 		PFIXML_DEBUG("done\n");
-		res = ctx->msg;
+		res = ctx->fix;
 		break;
 	case BLOB_M_PLZ:
 		PFIXML_DEBUG("more\n");
@@ -2267,32 +3077,32 @@ check_ret(__ctx_t ctx, int ret)
 	return res;
 }
 
-static umpf_msg_t
-__umpf_parse_blob(__ctx_t ctx, const char *buf, size_t bsz)
+static umpf_fix_t
+__pfix_parse_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
 	init(ctx);
 	PFIXML_DEBUG("parsing blob of size %zu\n", bsz);
 	return check_ret(ctx, parse_blob(ctx, buf, bsz));
 }
 
-static umpf_msg_t
-__umpf_parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
+static umpf_fix_t
+__pfix_parse_more_blob(__ctx_t ctx, const char *buf, size_t bsz)
 {
 	PFIXML_DEBUG("parsing more blob of size %zu\n", bsz);
 	return check_ret(ctx, parse_more_blob(ctx, buf, bsz));
 }
 
-umpf_msg_t
-umpf_parse_blob(umpf_ctx_t *ctx, const char *buf, size_t bsz)
+umpf_fix_t
+pfix_parse_blob(pfix_ctx_t *ctx, const char *buf, size_t bsz)
 {
 	static struct __ctx_s __ctx[1] = {{0}};
-	umpf_msg_t res;
+	umpf_fix_t res;
 
 	if (UNLIKELY(*ctx == NULL)) {
 		*ctx = __ctx;
-		res = __umpf_parse_blob(*ctx, buf, bsz);
+		res = __pfix_parse_blob(*ctx, buf, bsz);
 	} else {
-		res = __umpf_parse_more_blob(*ctx, buf, bsz);
+		res = __pfix_parse_more_blob(*ctx, buf, bsz);
 	}
 
 	if (ctx_deinitted_p(*ctx)) {
@@ -2301,16 +3111,16 @@ umpf_parse_blob(umpf_ctx_t *ctx, const char *buf, size_t bsz)
 	return res;
 }
 
-umpf_msg_t
-umpf_parse_blob_r(umpf_ctx_t *ctx, const char *buf, size_t bsz)
+umpf_fix_t
+pfix_parse_blob_r(pfix_ctx_t *ctx, const char *buf, size_t bsz)
 {
-	umpf_msg_t res;
+	umpf_fix_t res;
 
 	if (UNLIKELY(*ctx == NULL)) {
 		*ctx = calloc(1, sizeof(struct __ctx_s));
-		res = __umpf_parse_blob(*ctx, buf, bsz);
+		res = __pfix_parse_blob(*ctx, buf, bsz);
 	} else {
-		res = __umpf_parse_more_blob(*ctx, buf, bsz);
+		res = __pfix_parse_more_blob(*ctx, buf, bsz);
 	}
 
 	if (ctx_deinitted_p(*ctx)) {
@@ -2320,91 +3130,37 @@ umpf_parse_blob_r(umpf_ctx_t *ctx, const char *buf, size_t bsz)
 	return res;
 }
 
-void
-umpf_free_msg(umpf_msg_t msg)
-{
-	switch (umpf_get_msg_type(msg)) {
-	case UMPF_MSG_NEW_PF:
-		/* satellite only occurs in new pf */
-		if (msg->new_pf.satellite->data) {
-			xfree(msg->new_pf.satellite->data);
-		}
-		goto common;
-
-	case UMPF_MSG_NEW_SEC:
-	case UMPF_MSG_GET_SEC:
-	case UMPF_MSG_SET_SEC:
-		/* satellite and portfolio mnemo must be freed */
-		if (msg->new_sec.satellite->data) {
-			xfree(msg->new_sec.satellite->data);
-		}
-		if (msg->new_sec.pf_mnemo) {
-			xfree(msg->new_sec.pf_mnemo);
-		}
-		goto common;
-
-	case UMPF_MSG_GET_PF:
-	case UMPF_MSG_SET_PF:
-#if 0
-		/* the ins_qty's must be freed too */
-		/* wrong, the ins_qty's are contiguous and stem
-		 * from realloc'ing */
-		for (size_t j = 0; j < msg->pf.nposs; j++) {
-			struct __ins_qty_s *iq = msg->pf.poss + j;
-			if (iq->instr) {
-				xfree(iq->instr);
-			}
-		}
-#endif	/* 0 */
-	common:
-		/* common to all messages */
-		if (msg->pf.name) {
-			xfree(msg->pf.name);
-		}
-	default:
-		break;
-	}
-	xfree(msg);
-	return;
-}
-
-umpf_msg_t
-umpf_msg_add_pos(umpf_msg_t msg, size_t npos)
-{
-	size_t cur_nposs = msg->pf.nposs;
-	size_t new_nposs = cur_nposs + npos;
-
-	msg = realloc(msg, sizeof(*msg) + new_nposs * sizeof(*msg->pf.poss));
-	msg->pf.nposs = new_nposs;
-	/* rinse */
-	memset(msg->pf.poss + cur_nposs, 0, npos * sizeof(*msg->pf.poss));
-	return msg;
-}
+
+/* serialiser (printer) */
+static const char xml_hdr[] = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
 
 size_t
-umpf_seria_fix(char **tgt, size_t tsz, void *fix)
+pfix_seria_fix(char **tgt, size_t tsz, umpf_fix_t fix)
 {
-	static struct __ctx_s __ctx[1] = {{0}};
+	struct __ctx_s ctx[1];
 
-	if (UNLIKELY(tgt == NULL)) {
-		return 0U;
-	}
+	ctx->sbuf = *tgt;
+	ctx->sbsz = tsz;
+	ctx->sbix = 0;
 
-	memset(__ctx, 0, sizeof(*__ctx));
-	if (*tgt) {
-		__ctx->sbuf = *tgt;
-		__ctx->sbsz = tsz;
-	} else {
-		__ctx->sbuf = calloc(1, __ctx->sbsz = INITIAL_STUFF_BUF_SIZE);
-	}
-	__ctx->sbix = 0;
-	__ctx->fix = fix;
+	snputs(ctx, xml_hdr, countof_m1(xml_hdr));
+	pfix_print_fixml(ctx, fix, 0);
 
-	/* the actual printing */
-	pfix_print_fixml(__ctx, fix, 0);
+	/* finish off with a \nul byte */
+	check_realloc(ctx, 1);
+	ctx->sbuf[ctx->sbix] = '\0';
+	*tgt = ctx->sbuf;
+	return ctx->sbix;
+}
 
-	*tgt = __ctx->sbuf;
-	return __ctx->sbix;
+
+/* dtors */
+void
+pfix_free_fix(umpf_fix_t fix)
+{
+	pfix_free_fixml(fix);
+	xfree(fix);
+	return;
 }
 
 /* proto-xml.c ends here */
