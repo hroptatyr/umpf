@@ -237,6 +237,7 @@ interpret_msg(char **buf, umpf_msg_t msg)
 #else  /* !UMPF_AUTO_SPARSE */
 		tag = be_sql_new_tag(umpf_dbconn, mnemo, stamp);
 #endif	/* UMPF_AUTO_SPARSE */
+		msg->pf.tag_id = be_sql_tag_get_id(umpf_dbconn, tag);
 
 		for (size_t i = 0; i < msg->pf.nposs; i++) {
 			const char *sec = msg->pf.poss[i].ins->sym;

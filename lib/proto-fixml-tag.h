@@ -1,0 +1,46 @@
+#if !defined INCLUDED_proto_fixml_tag_h_
+#define INCLUDED_proto_fixml_tag_h_
+
+typedef struct umpf_tag_s *umpf_tag_t;
+
+/* all them tags we understand */
+typedef enum {
+	/* must be first */
+	UMPF_TAG_UNK,
+	/* alphabetic list of tags */
+	UMPF_TAG_ALLOC,
+	UMPF_TAG_ALLOC_INSTRCTN,
+	UMPF_TAG_ALLOC_INSTRCTN_ACK,
+	UMPF_TAG_AMT,
+	UMPF_TAG_APPL_ID_REQ_GRP,
+
+	UMPF_TAG_APPL_ID_REQ_ACK_GRP,
+	UMPF_TAG_APPL_ID_RPT_GRP,
+	UMPF_TAG_APPL_MSG_REQ,
+	UMPF_TAG_APPL_MSG_REQ_ACK,
+	UMPF_TAG_APPL_MSG_RPT,
+
+	UMPF_TAG_BATCH,
+	UMPF_TAG_FIXML,
+	UMPF_TAG_GLUE,
+	UMPF_TAG_INSTRMT,
+	UMPF_TAG_POS_RPT,
+
+	UMPF_TAG_PTY,
+	UMPF_TAG_QTY,
+	UMPF_TAG_REQ_FOR_POSS,
+	UMPF_TAG_REQ_FOR_POSS_ACK,
+	UMPF_TAG_RG_DTL,
+
+	UMPF_TAG_RGST_INSTRCTNS,
+	UMPF_TAG_RGST_INSTRCTNS_RSP,
+	UMPF_TAG_SEC_DEF,
+	UMPF_TAG_SEC_DEF_REQ,
+	UMPF_TAG_SEC_DEF_UPD,
+
+	UMPF_TAG_SEC_XML,
+	UMPF_TAG_SUB,
+
+} umpf_tid_t;
+
+#endif	/* INCLUDED_proto_fixml_tag_h_ */

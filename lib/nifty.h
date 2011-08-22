@@ -92,4 +92,13 @@
 /* fixme, any chance we can get that one from the server? */
 extern void *umpf_logout;
 
+static inline void
+safe_xfree(void *ptr)
+{
+	if (ptr != NULL) {
+		xfree(ptr);
+	}
+	return;
+}
+
 #endif	/* INCLUDED_nifty_h_ */

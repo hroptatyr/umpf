@@ -224,6 +224,7 @@ extern size_t umpf_seria_msg(char **tgt, size_t tsz, umpf_msg_t);
  * Resize message to take NPOS additional positions. */
 extern umpf_msg_t umpf_msg_add_pos(umpf_msg_t msg, size_t npos);
 
+
 /**
  * Name space URI for FIXML 5.0 */
 extern const char fixml50_ns_uri[];
@@ -238,6 +239,13 @@ static inline void
 umpf_set_msg_type(umpf_msg_t msg, umpf_msg_type_t mt)
 {
 	msg->hdr.mt = mt * 2;
+	return;
+}
+
+static inline void
+umpf_set_msg_reply(umpf_msg_t msg, umpf_msg_type_t mt)
+{
+	msg->hdr.mt = mt * 2 + 1;
 	return;
 }
 
