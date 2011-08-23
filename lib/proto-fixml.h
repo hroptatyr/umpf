@@ -58,7 +58,14 @@ typedef unsigned int pfix_tid_t;
 typedef void *pfix_ctx_t;
 typedef void *umpf_fix_t;
 
+typedef enum {
+	GLUTY_UNK,
+	GLUTY_TEXT,
+	GLUTY_BIN,
+} gluty_t;
+
 struct pfix_glu_s {
+	gluty_t ty;
 	size_t dlen;
 	char *data;
 };

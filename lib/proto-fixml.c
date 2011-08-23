@@ -712,8 +712,17 @@ __eat_ws_ass(struct pfix_glu_s *g, const char *d, size_t l)
 # pragma warning (default:981)
 #endif	/* __INTEL_COMPILER */
 
-	g->dlen = unquotn(&g->data, p, l);
-	g->data[g->dlen] = '\0';
+	switch (g->ty) {
+	case GLUTY_UNK:
+	case GLUTY_TEXT:
+		g->dlen = unquotn(&g->data, p, l);
+		g->data[g->dlen] = '\0';
+		break;
+	case GLUTY_BIN:
+		g->dlen = unquot_b64(&g->data, p, l);
+		PFIXML_DEBUG("dec'd len %zu\n", g->dlen);
+		break;
+	}
 	return;
 }
 
@@ -1924,6 +1933,8 @@ sax_bo_AOU_elt(
 	switch (tid) {
 	case UMPF_TAG_GLUE: {
 		struct pfix_fixml_s *fix = ctx->fix;
+		struct pfix_glu_s *g;
+		gluty_t ty =  GLUTY_UNK;
 
 		/* actually this is the only one we support */
 		PFIXML_DEBUG("GLUE\n");
@@ -1932,30 +1943,39 @@ sax_bo_AOU_elt(
 			PFIXML_DEBUG("fix NULL, glue is meaningless\n");
 			break;
 		}
+
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			if (aid == UMPF_ATTR_CONTENT_TYPE) {
+				if (strcmp(attrs[j + 1], "text/plain") == 0) {
+					ty = GLUTY_TEXT;
+				} else {
+					ty = GLUTY_BIN;
+				}
+				break;
+			}
+		}
+
 		switch (get_state_otype(ctx)) {
 			/* all the nodes that have the glue */
 		case UMPF_TAG_PTY:
 		case UMPF_TAG_SUB: {
 			struct pfix_sub_s *s = get_state_object(ctx);
-			struct pfix_glu_s *g = &s->glu;
 
-			if (UNLIKELY(pfix_has_glu_p(g))) {
+			if (UNLIKELY(s == NULL ||
+				     pfix_has_glu_p(g = &s->glu))) {
 				/* someone else, prob us, was faster */
 				break;
 			}
-			/* the glue code wants a pointer to the satellite */
-			(void)push_state(ctx, UMPF_TAG_GLUE, g);
 			goto glue_setup;
 		}
 		case UMPF_TAG_SEC_XML: {
 			struct pfix_sec_xml_s *sx = get_state_object(ctx);
-			struct pfix_glu_s *g = &sx->glu;
 
-			if (UNLIKELY(sx == NULL || pfix_has_glu_p(g))) {
+			if (UNLIKELY(sx == NULL ||
+				     pfix_has_glu_p(g = &sx->glu))) {
 				break;
 			}
-			/* the glue code wants a pointer to the satellite */
-			(void)push_state(ctx, UMPF_TAG_GLUE, g);
 			goto glue_setup;
 		}
 		default:
@@ -1965,6 +1985,9 @@ sax_bo_AOU_elt(
 		break;
 
 		glue_setup:
+		/* the glue code wants a pointer to the satellite */
+		(void)push_state(ctx, UMPF_TAG_GLUE, g);
+		g->ty = ty;
 		/* libxml specific */
 		ctx->pp->sax->characters =
 			(charactersSAXFunc)sax_stuff_buf_AOU_push;
@@ -2199,16 +2222,30 @@ pfix_print_biz_dt(__ctx_t ctx, idate_t biz_dt)
 static void
 pfix_print_glu(__ctx_t ctx, struct pfix_glu_s *g, size_t indent)
 {
-	static const char hdr[] = "<aou:glue content-type=\"text/plain\">\n";
+	static const char thdr[] =
+		"<aou:glue content-type=\"text/plain\">\n";
+	static const char bhdr[] =
+		"<aou:glue content-type=\"application/octet-stream\">\n";
 	static const char ftr[] = "</aou:glue>\n";
 
 	print_indent(ctx, indent);
-	snputs(ctx, hdr, countof_m1(hdr));
 
-	snputs_enc(ctx, g->data, g->dlen);
+	switch (g->ty) {
+	case GLUTY_UNK:
+	case GLUTY_TEXT:
+		snputs(ctx, thdr, countof_m1(thdr));
+		snputs_enc(ctx, g->data, g->dlen);
 
-	if (g->data[g->dlen - 1] != '\n') {
+		if (g->data[g->dlen - 1] != '\n') {
+			sputc(ctx, '\n');
+		}
+		break;
+	default:
+	case GLUTY_BIN:
+		snputs(ctx, bhdr, countof_m1(bhdr));
+		snputs_b64(ctx, g->data, g->dlen);
 		sputc(ctx, '\n');
+		break;
 	}
 
 	print_indent(ctx, indent);
