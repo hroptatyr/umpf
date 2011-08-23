@@ -78,17 +78,34 @@ make_LST_TAG_msg(umpf_msg_t m, struct pfix_pty_s *p)
 	}
 	/* otherwise */
 	m->lst_tag.name = safe_strdup(p->prim.id);
+
+	if (pfix_has_glu_p(&p->prim.glu)) {
+		/* new tag format */
+		size_t ntags = p->prim.glu.dlen / sizeof(*m->lst_tag.tags);
+		size_t nlen = ntags * sizeof(*m->lst_tag.tags);
+
+		m = realloc(m, sizeof(*m) + nlen);
+		m->lst_tag.ntags = ntags;
+		memcpy(m->lst_tag.tags, p->prim.glu.data, nlen);
+		goto out;
+	}
+
+	/* old tag format */
 	for (size_t i = 0; i < p->nsub; i++) {
 		struct pfix_sub_s *s = p->sub + i;
-		if (m->lst_tag.ntags % 16 == 0) {
+		size_t idx = m->lst_tag.ntags;
+
+		if (idx % 16 == 0) {
 			m = realloc(
 				m,
 				sizeof(*m) +
 				(m->lst_tag.ntags + 16) *
 				sizeof(*m->lst_tag.tags));
 		}
-		m->lst_tag.tags[m->lst_tag.ntags++] = strtol(s->id, NULL, 10);
+		m->lst_tag.tags[idx].id = strtol(s->id, NULL, 10);
+		m->lst_tag.ntags++;
 	}
+out:
 	return m;
 }
 
@@ -130,16 +147,6 @@ make_umpf_msg(struct pfix_fixml_s *fix)
 		if (tid == UMPF_TAG_REQ_FOR_POSS) {
 			break;
 		}
-
-		if (rfp->npty > 0) {
-			struct pfix_pty_s *p = rfp->pty;
-			msg->pf.name = safe_strdup(p->prim.id);
-			if (p->nsub > 0) {
-				msg->pf.tag_id = strtoul(p->sub->id, NULL, 10);
-			}
-		}
-		msg->pf.stamp = rfp->txn_tm;
-		msg->pf.clr_dt = rfp->biz_dt;
 
 		/* otherwise fill in positions */
 		for (size_t i = 1; i < fix->nbatch; i++) {
@@ -427,7 +434,7 @@ make_umpf_fix(umpf_msg_t msg)
 		struct pfix_appl_msg_req_ack_s *amra = &b->appl_msg_req_ack;
 		struct pfix_appl_id_req_grp_s *rg;
 		struct pfix_pty_s *p;
-
+		size_t ntags;
 
 		switch (msg->hdr.mt) {
 		case UMPF_MSG_LST_TAG * 2:
@@ -446,10 +453,24 @@ make_umpf_fix(umpf_msg_t msg)
 		p->prim.id = safe_strdup(msg->lst_tag.name);
 
 		/* add tags */
+#if 0
+/* old tag format in Sub tags */
 		for (size_t i = 0; i < msg->lst_tag.ntags; i++) {
 			struct pfix_sub_s *s = pty_add_sub(p);
-			asprintf(&s->id, "%lu", msg->lst_tag.tags[i]);
+			asprintf(&s->id, "%lu", msg->lst_tag.tags[i].id);
 		}
+#else
+/* use glue */
+		if ((ntags = msg->lst_tag.ntags) > 0) {
+			size_t blen = ntags * sizeof(*msg->lst_tag.tags);
+			char *tbuf = malloc(blen);
+
+			memcpy(tbuf, msg->lst_tag.tags, blen);
+			p->prim.glu.ty = GLUTY_BIN;
+			p->prim.glu.data = tbuf;
+			p->prim.glu.dlen = blen;
+		}
+#endif
 		break;
 	}
 	default:

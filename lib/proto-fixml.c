@@ -428,6 +428,74 @@ dec_digit_to_val(char c)
 	}
 }
 
+static bool
+isb64(const char x)
+{
+	return (x >= 'A' && x <= 'Z') ||
+		(x >= 'a' && x <= 'z') ||
+		(x >= '0' && x <= 'z') ||
+		x == '+' || x == '/';
+}
+
+static char
+unb64(const char x)
+{
+	if (x >= 'A' && x <= 'Z') {
+		return x - 'A';
+	} else if (x >= 'a' && x <= 'z') {
+		return x - 'a' + 26;
+	} else if (x >= '0' && x <= '9') {
+		return x - '0' + 52;
+	} else if (x == '+') {
+		return 62;
+	} else if (x == '/') {
+		return 63;
+	}
+	return 0xff;
+}
+
+static size_t
+unquot_b64(char **tgt, const char *src, size_t len)
+{
+	const char *sp = src;
+	const char *ep = src + len;
+	char *rp;
+	size_t n = 0;
+
+	*tgt = rp = malloc(len * 3 / 4 + 3);
+
+	while (sp + 4 <= ep) {
+		if (!isb64(sp[0])) {
+			sp++;
+			continue;
+		}
+		rp[0] = (unb64(sp[0]) << 2);
+		rp[0] |= (unb64(sp[1]) >> 4);
+		rp[1] = (unb64(sp[1]) << 4) & 0xf0;
+		rp[1] |= (unb64(sp[2]) >> 2);
+		rp[2] = (unb64(sp[2]) << 6) & 0xc0;
+		rp[2] |= (unb64(sp[3]));
+		sp += 4;
+		rp += 3;
+		n += 3;
+	}
+	rp[0] = (unb64(sp[0]) << 2);
+	rp[0] |= (unb64(sp[1]) >> 4);
+	n++;
+	if (sp[2] == '=') {
+		/* finished */
+		;
+	} else if (sp[3] == '=') {
+		/* one more */
+		rp[1] = (unb64(sp[1]) << 4) & 0xf0;
+		rp[1] |= (unb64(sp[2]) >> 2);
+		n++;
+	} else {
+		/* weird */
+	}
+	return n;
+}
+
 static size_t
 unquotn(char **tgt, const char *src, size_t len)
 {
@@ -644,8 +712,17 @@ __eat_ws_ass(struct pfix_glu_s *g, const char *d, size_t l)
 # pragma warning (default:981)
 #endif	/* __INTEL_COMPILER */
 
-	g->dlen = unquotn(&g->data, p, l);
-	g->data[g->dlen] = '\0';
+	switch (g->ty) {
+	case GLUTY_UNK:
+	case GLUTY_TEXT:
+		g->dlen = unquotn(&g->data, p, l);
+		g->data[g->dlen] = '\0';
+		break;
+	case GLUTY_BIN:
+		g->dlen = unquot_b64(&g->data, p, l);
+		PFIXML_DEBUG("dec'd len %zu\n", g->dlen);
+		break;
+	}
 	return;
 }
 
@@ -783,6 +860,49 @@ sputc_encq(__ctx_t ctx, char s)
 		snputs(ctx, "&quot;", 6);
 		break;
 	}
+	return;
+}
+
+/* RFC1113 */
+static const char cb64[] =
+	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static void
+snputs_b64(__ctx_t ctx, const char *s, size_t z)
+{
+	const char *sp = s;
+	const char *ep = s + z;
+	size_t nout = 0;
+	char buf[4];
+
+#define U(x)	((unsigned char)x)
+	/* read 3 output 4 */
+	while (sp + 3 <= ep) {
+		buf[0] = cb64[(U(sp[0]) >> 2) & 0x3f];
+		buf[1] = cb64[(U(sp[0]) << 4 | U(sp[1]) >> 4) & 0x3f];
+		buf[2] = cb64[(U(sp[1]) << 2 | U(sp[2]) >> 6) & 0x3f];
+		buf[3] = cb64[(U(sp[2])) & 0x3f];
+
+		snputs(ctx, buf, countof(buf));
+		sp += 3;
+		if ((nout += 4) % 72 == 0) {
+			sputc(ctx, '\n');
+		}
+	}
+	/* pad */
+	buf[1] = '=';
+	buf[2] = '=';
+	buf[3] = '=';
+	switch (ep - sp) {
+	case 2:
+		buf[2] = cb64[((sp[1] & 0x0f) << 2) | ((sp[2] & 0xc0) >> 6)];
+	case 1:
+		buf[1] = cb64[((sp[0] & 0x03) << 4) | ((sp[1] & 0xf0) >> 4)];
+	case 0:
+		buf[0] = cb64[sp[0] >> 2];
+	}
+	snputs(ctx, buf, countof(buf));
+#undef U
 	return;
 }
 
@@ -1750,7 +1870,8 @@ __push_glue(__ctx_t ctx, const char *src, size_t len)
 	size_t cookie_len = ((size_t*)ctx->sbuf)[0];
 	size_t consum;
 
-	PFIXML_DEBUG("looking for %s %zu\n", cookie, cookie_len);
+	PFIXML_DEBUG("looking for %s %zu in a buffer of size %zu\n",
+		     cookie, cookie_len, len);
 	consum = __eat_glue(src, len, cookie, cookie_len);
 
 	/* maybe realloc first? */
@@ -1778,13 +1899,16 @@ sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int len)
 	/* libxml2 specific! */
 	size_t max_len = ctx->pp->input->end - ctx->pp->input->cur;
 
+	if ((size_t)len > max_len) {
+		max_len = len;
+	}
 	/* push what we've got */
 	consumed = __push_glue(ctx, ch, max_len);
 
 	/* libxml2 specific stuff,
 	 * HACK, cheat on our push parser */
 	PFIXML_DEBUG("eating %zu bytes from libxml's buffer\n", consumed);
-	if (consumed < max_len) {
+	if (consumed <= max_len) {
 		/* we mustn't wind too far */
 		ctx->pp->input->cur += consumed - len;
 	} else {
@@ -1809,6 +1933,8 @@ sax_bo_AOU_elt(
 	switch (tid) {
 	case UMPF_TAG_GLUE: {
 		struct pfix_fixml_s *fix = ctx->fix;
+		struct pfix_glu_s *g;
+		gluty_t ty =  GLUTY_UNK;
 
 		/* actually this is the only one we support */
 		PFIXML_DEBUG("GLUE\n");
@@ -1817,31 +1943,39 @@ sax_bo_AOU_elt(
 			PFIXML_DEBUG("fix NULL, glue is meaningless\n");
 			break;
 		}
+
+		for (size_t j = 0; attrs && attrs[j] != NULL; j += 2) {
+			const umpf_aid_t aid = check_attr(ctx, attrs[j]);
+			if (aid == UMPF_ATTR_CONTENT_TYPE) {
+				if (strcmp(attrs[j + 1], "text/plain") == 0) {
+					ty = GLUTY_TEXT;
+				} else {
+					ty = GLUTY_BIN;
+				}
+				break;
+			}
+		}
+
 		switch (get_state_otype(ctx)) {
 			/* all the nodes that have the glue */
 		case UMPF_TAG_PTY:
 		case UMPF_TAG_SUB: {
 			struct pfix_sub_s *s = get_state_object(ctx);
-			struct pfix_glu_s *g = &s->glu;
 
-			if (UNLIKELY(g->data != NULL)) {
+			if (UNLIKELY(s == NULL ||
+				     pfix_has_glu_p(g = &s->glu))) {
 				/* someone else, prob us, was faster */
 				break;
 			}
-			/* the glue code wants a pointer to the satellite */
-			(void)push_state(ctx, UMPF_TAG_GLUE, g);
 			goto glue_setup;
 		}
 		case UMPF_TAG_SEC_XML: {
 			struct pfix_sec_xml_s *sx = get_state_object(ctx);
-			struct pfix_glu_s *g;
 
 			if (UNLIKELY(sx == NULL ||
-				     (g = &sx->glu)->data != NULL)) {
+				     pfix_has_glu_p(g = &sx->glu))) {
 				break;
 			}
-			/* the glue code wants a pointer to the satellite */
-			(void)push_state(ctx, UMPF_TAG_GLUE, g);
 			goto glue_setup;
 		}
 		default:
@@ -1851,6 +1985,9 @@ sax_bo_AOU_elt(
 		break;
 
 		glue_setup:
+		/* the glue code wants a pointer to the satellite */
+		(void)push_state(ctx, UMPF_TAG_GLUE, g);
+		g->ty = ty;
 		/* libxml specific */
 		ctx->pp->sax->characters =
 			(charactersSAXFunc)sax_stuff_buf_AOU_push;
@@ -2085,16 +2222,30 @@ pfix_print_biz_dt(__ctx_t ctx, idate_t biz_dt)
 static void
 pfix_print_glu(__ctx_t ctx, struct pfix_glu_s *g, size_t indent)
 {
-	static const char hdr[] = "<aou:glue content-type=\"text/plain\">\n";
+	static const char thdr[] =
+		"<aou:glue content-type=\"text/plain\">\n";
+	static const char bhdr[] =
+		"<aou:glue content-type=\"application/octet-stream\">\n";
 	static const char ftr[] = "</aou:glue>\n";
 
 	print_indent(ctx, indent);
-	snputs(ctx, hdr, countof_m1(hdr));
 
-	snputs_enc(ctx, g->data, g->dlen);
+	switch (g->ty) {
+	case GLUTY_UNK:
+	case GLUTY_TEXT:
+		snputs(ctx, thdr, countof_m1(thdr));
+		snputs_enc(ctx, g->data, g->dlen);
 
-	if (g->data[g->dlen - 1] != '\n') {
+		if (g->data[g->dlen - 1] != '\n') {
+			sputc(ctx, '\n');
+		}
+		break;
+	default:
+	case GLUTY_BIN:
+		snputs(ctx, bhdr, countof_m1(bhdr));
+		snputs_b64(ctx, g->data, g->dlen);
 		sputc(ctx, '\n');
+		break;
 	}
 
 	print_indent(ctx, indent);
@@ -2239,7 +2390,7 @@ pfix_print_sec_xml(__ctx_t ctx, struct pfix_sec_xml_s *sx, size_t indent)
 	static const char hdr[] = "<SecXML>\n";
 	static const char ftr[] = "</SecXML>\n";
 
-	if (sx->glu.dlen > 0) {
+	if (pfix_has_glu_p(&sx->glu)) {
 		print_indent(ctx, indent);
 		snputs(ctx, hdr, countof_m1(hdr));
 
@@ -2524,7 +2675,7 @@ __print_sec_def_all(
 	pfix_print_biz_dt(ctx, sd->biz_dt);
 	pfix_print_txn_tm(ctx, sd->txn_tm);
 
-	if (sd->ninstrmt != 0 || sd->sec_xml->glu.dlen > 0) {
+	if (sd->ninstrmt != 0 || pfix_has_glu_p(&sd->sec_xml->glu)) {
 		/* finalise the tag */
 		snputs(ctx, ">\n", 2);
 

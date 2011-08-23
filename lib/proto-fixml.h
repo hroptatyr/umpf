@@ -40,6 +40,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <time.h>
 
 #if defined __cplusplus
@@ -57,7 +58,14 @@ typedef unsigned int pfix_tid_t;
 typedef void *pfix_ctx_t;
 typedef void *umpf_fix_t;
 
+typedef enum {
+	GLUTY_UNK,
+	GLUTY_TEXT,
+	GLUTY_BIN,
+} gluty_t;
+
 struct pfix_glu_s {
+	gluty_t ty;
 	size_t dlen;
 	char *data;
 };
@@ -317,6 +325,14 @@ ADDF(pos_rpt, struct pfix_qty_s, qty, 4);
 
 ADDF(pty, struct pfix_sub_s, sub, 4);
 ADDF(sec_def, struct pfix_instrmt_s, instrmt, 4);
+
+
+/* helpers */
+static inline bool
+pfix_has_glu_p(struct pfix_glu_s *g)
+{
+	return g->data != NULL;
+}
 
 #if defined __cplusplus
 }
