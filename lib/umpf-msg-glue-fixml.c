@@ -131,16 +131,6 @@ make_umpf_msg(struct pfix_fixml_s *fix)
 			break;
 		}
 
-		if (rfp->npty > 0) {
-			struct pfix_pty_s *p = rfp->pty;
-			msg->pf.name = safe_strdup(p->prim.id);
-			if (p->nsub > 0) {
-				msg->pf.tag_id = strtoul(p->sub->id, NULL, 10);
-			}
-		}
-		msg->pf.stamp = rfp->txn_tm;
-		msg->pf.clr_dt = rfp->biz_dt;
-
 		/* otherwise fill in positions */
 		for (size_t i = 1; i < fix->nbatch; i++) {
 			if (fix->batch[i].tag == UMPF_TAG_POS_RPT) {
