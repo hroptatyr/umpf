@@ -1824,7 +1824,7 @@ sax_bo_AOU_elt(
 			struct pfix_sub_s *s = get_state_object(ctx);
 			struct pfix_glu_s *g = &s->glu;
 
-			if (UNLIKELY(g->data != NULL)) {
+			if (UNLIKELY(pfix_has_glu_p(g))) {
 				/* someone else, prob us, was faster */
 				break;
 			}
@@ -1834,10 +1834,9 @@ sax_bo_AOU_elt(
 		}
 		case UMPF_TAG_SEC_XML: {
 			struct pfix_sec_xml_s *sx = get_state_object(ctx);
-			struct pfix_glu_s *g;
+			struct pfix_glu_s *g = &sx->glu;
 
-			if (UNLIKELY(sx == NULL ||
-				     (g = &sx->glu)->data != NULL)) {
+			if (UNLIKELY(sx == NULL || pfix_has_glu_p(g))) {
 				break;
 			}
 			/* the glue code wants a pointer to the satellite */
@@ -2239,7 +2238,7 @@ pfix_print_sec_xml(__ctx_t ctx, struct pfix_sec_xml_s *sx, size_t indent)
 	static const char hdr[] = "<SecXML>\n";
 	static const char ftr[] = "</SecXML>\n";
 
-	if (sx->glu.dlen > 0) {
+	if (pfix_has_glu_p(&sx->glu)) {
 		print_indent(ctx, indent);
 		snputs(ctx, hdr, countof_m1(hdr));
 
@@ -2524,7 +2523,7 @@ __print_sec_def_all(
 	pfix_print_biz_dt(ctx, sd->biz_dt);
 	pfix_print_txn_tm(ctx, sd->txn_tm);
 
-	if (sd->ninstrmt != 0 || sd->sec_xml->glu.dlen > 0) {
+	if (sd->ninstrmt != 0 || pfix_has_glu_p(&sd->sec_xml->glu)) {
 		/* finalise the tag */
 		snputs(ctx, ">\n", 2);
 
