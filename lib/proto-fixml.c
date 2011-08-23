@@ -428,6 +428,74 @@ dec_digit_to_val(char c)
 	}
 }
 
+static bool
+isb64(const char x)
+{
+	return (x >= 'A' && x <= 'Z') ||
+		(x >= 'a' && x <= 'z') ||
+		(x >= '0' && x <= 'z') ||
+		x == '+' || x == '/';
+}
+
+static char
+unb64(const char x)
+{
+	if (x >= 'A' && x <= 'Z') {
+		return x - 'A';
+	} else if (x >= 'a' && x <= 'z') {
+		return x - 'a' + 26;
+	} else if (x >= '0' && x <= '9') {
+		return x - '0' + 52;
+	} else if (x == '+') {
+		return 62;
+	} else if (x == '/') {
+		return 63;
+	}
+	return 0xff;
+}
+
+static size_t
+unquot_b64(char **tgt, const char *src, size_t len)
+{
+	const char *sp = src;
+	const char *ep = src + len;
+	char *rp;
+	size_t n = 0;
+
+	*tgt = rp = malloc(len * 3 / 4 + 3);
+
+	while (sp + 4 <= ep) {
+		if (!isb64(sp[0])) {
+			sp++;
+			continue;
+		}
+		rp[0] = (unb64(sp[0]) << 2);
+		rp[0] |= (unb64(sp[1]) >> 4);
+		rp[1] = (unb64(sp[1]) << 4) & 0xf0;
+		rp[1] |= (unb64(sp[2]) >> 2);
+		rp[2] = (unb64(sp[2]) << 6) & 0xc0;
+		rp[2] |= (unb64(sp[3]));
+		sp += 4;
+		rp += 3;
+		n += 3;
+	}
+	rp[0] = (unb64(sp[0]) << 2);
+	rp[0] |= (unb64(sp[1]) >> 4);
+	n++;
+	if (sp[2] == '=') {
+		/* finished */
+		;
+	} else if (sp[3] == '=') {
+		/* one more */
+		rp[1] = (unb64(sp[1]) << 4) & 0xf0;
+		rp[1] |= (unb64(sp[2]) >> 2);
+		n++;
+	} else {
+		/* weird */
+	}
+	return n;
+}
+
 static size_t
 unquotn(char **tgt, const char *src, size_t len)
 {
@@ -783,6 +851,49 @@ sputc_encq(__ctx_t ctx, char s)
 		snputs(ctx, "&quot;", 6);
 		break;
 	}
+	return;
+}
+
+/* RFC1113 */
+static const char cb64[] =
+	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static void
+snputs_b64(__ctx_t ctx, const char *s, size_t z)
+{
+	const char *sp = s;
+	const char *ep = s + z;
+	size_t nout = 0;
+	char buf[4];
+
+#define U(x)	((unsigned char)x)
+	/* read 3 output 4 */
+	while (sp + 3 <= ep) {
+		buf[0] = cb64[(U(sp[0]) >> 2) & 0x3f];
+		buf[1] = cb64[(U(sp[0]) << 4 | U(sp[1]) >> 4) & 0x3f];
+		buf[2] = cb64[(U(sp[1]) << 2 | U(sp[2]) >> 6) & 0x3f];
+		buf[3] = cb64[(U(sp[2])) & 0x3f];
+
+		snputs(ctx, buf, countof(buf));
+		sp += 3;
+		if ((nout += 4) % 72 == 0) {
+			sputc(ctx, '\n');
+		}
+	}
+	/* pad */
+	buf[1] = '=';
+	buf[2] = '=';
+	buf[3] = '=';
+	switch (ep - sp) {
+	case 2:
+		buf[2] = cb64[((sp[1] & 0x0f) << 2) | ((sp[2] & 0xc0) >> 6)];
+	case 1:
+		buf[1] = cb64[((sp[0] & 0x03) << 4) | ((sp[1] & 0xf0) >> 4)];
+	case 0:
+		buf[0] = cb64[sp[0] >> 2];
+	}
+	snputs(ctx, buf, countof(buf));
+#undef U
 	return;
 }
 
