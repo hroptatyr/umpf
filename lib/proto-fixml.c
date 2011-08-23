@@ -1861,7 +1861,8 @@ __push_glue(__ctx_t ctx, const char *src, size_t len)
 	size_t cookie_len = ((size_t*)ctx->sbuf)[0];
 	size_t consum;
 
-	PFIXML_DEBUG("looking for %s %zu\n", cookie, cookie_len);
+	PFIXML_DEBUG("looking for %s %zu in a buffer of size %zu\n",
+		     cookie, cookie_len, len);
 	consum = __eat_glue(src, len, cookie, cookie_len);
 
 	/* maybe realloc first? */
@@ -1889,13 +1890,16 @@ sax_stuff_buf_AOU_push(__ctx_t ctx, const char *ch, int len)
 	/* libxml2 specific! */
 	size_t max_len = ctx->pp->input->end - ctx->pp->input->cur;
 
+	if ((size_t)len > max_len) {
+		max_len = len;
+	}
 	/* push what we've got */
 	consumed = __push_glue(ctx, ch, max_len);
 
 	/* libxml2 specific stuff,
 	 * HACK, cheat on our push parser */
 	PFIXML_DEBUG("eating %zu bytes from libxml's buffer\n", consumed);
-	if (consumed < max_len) {
+	if (consumed <= max_len) {
 		/* we mustn't wind too far */
 		ctx->pp->input->cur += consumed - len;
 	} else {
