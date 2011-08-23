@@ -45,6 +45,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <time.h>
 #include <ctype.h>
 #include <math.h>
@@ -583,7 +584,9 @@ pretty_print(umpf_msg_t msg)
 		break;
 	case UMPF_MSG_LST_TAG:
 		for (size_t i = 0; i < msg->lst_tag.ntags; i++) {
-			fprintf(stdout, "%lu\n", msg->lst_tag.tags[i]);
+			fprintf(stdout, "%lu\t%" PRIu64 "\n",
+				msg->lst_tag.tags[i].id,
+				msg->lst_tag.tags[i].stamp);
 		}
 		break;
 	default:

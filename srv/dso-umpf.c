@@ -114,11 +114,12 @@ lst_pf_cb(char *mnemo, void *clo)
 }
 
 static int
-lst_tag_cb(uint64_t tid, time_t UNUSED(tm), void *clo)
+lst_tag_cb(uint64_t tid, time_t tm, void *clo)
 {
 	umpf_msg_t *msg = clo;
+	size_t idx = (*msg)->lst_tag.ntags;
 
-	if (((*msg)->lst_tag.ntags % 512) == 0) {
+	if ((idx % 512) == 0) {
 		/* resize */
 		*msg = realloc(
 			*msg,
@@ -126,7 +127,9 @@ lst_tag_cb(uint64_t tid, time_t UNUSED(tm), void *clo)
 			((*msg)->lst_tag.ntags + 512) *
 			sizeof(*(*msg)->lst_tag.tags));
 	}
-	(*msg)->lst_tag.tags[(*msg)->lst_tag.ntags++] = tid;
+	(*msg)->lst_tag.tags[idx].id = tid;
+	(*msg)->lst_tag.tags[idx].stamp = tm;
+	(*msg)->lst_tag.ntags++;
 	/* don't stop on our kind, request more grub */
 	return 0;
 }

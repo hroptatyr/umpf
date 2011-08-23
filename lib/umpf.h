@@ -39,6 +39,7 @@
 #define INCLUDED_umpf_h_
 
 #include <stddef.h>
+#include <stdint.h>
 #include <time.h>
 
 #if defined __cplusplus
@@ -99,6 +100,11 @@ struct __qty_s {
 struct __qsd_s {
 	double pos;
 	qside_t sd;
+};
+
+struct __tag_info_s {
+	tag_t id;
+	uint64_t stamp;
 };
 
 struct __ins_qty_s {
@@ -166,7 +172,7 @@ struct umpf_msg_lst_tag_s {
 	char *name;
 
 	size_t ntags;
-	tag_t tags[];
+	struct __tag_info_s tags[];
 };
 
 union umpf_msg_u {
