@@ -15,6 +15,7 @@ umpf_SOURCES =
 umpf_SOURCES += umpf.c
 umpf_LDFLAGS = -static
 umpf_LDADD = $(top_builddir)/lib/libumpf.la
+umpf_LDADD += -lm
 umpf_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/lib
 endif ## BUILD_CLIAPPS
 
