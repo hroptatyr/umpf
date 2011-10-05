@@ -7,7 +7,8 @@ bin_PROGRAMS =
 noinst_PROGRAMS =
 noinst_HEADERS =
 BUILT_SOURCES =
-CLEANFILES = $(BUILT_SOURCES)
+GGO_HELPERS =
+EXTRA_DIST = $(BUILT_SOURCES) $(GGO_HELPERS)
 
 if BUILD_CLIAPPS
 bin_PROGRAMS += umpf
@@ -17,8 +18,25 @@ umpf_LDFLAGS = -static
 umpf_LDADD = $(top_builddir)/lib/libumpf.la
 umpf_LDADD += -lm
 umpf_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/lib
+
+bin_PROGRAMS += umpp
+umpp_SOURCES = umpp.c
+umpp_SOURCES += umpp-clo.ggo
+umpp_SOURCES += umpp-meld-clo.ggo umpp-meld-clo.c
+umpp_LDFLAGS = -static
+umpp_LDADD = -lm
+umpp_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/lib
+BUILT_SOURCES += umpp-clo.c umpp-clo.h
+BUILT_SOURCES += umpp-meld-clo.c umpp-meld-clo.h
 endif ## BUILD_CLIAPPS
 
+GGO_HELPERS += __gengetopt-no-failure.sed
+
+## ggo rule
+%.c %.h: %.ggo $(GGO_HELPERS)
+	gengetopt -l -F $* -i $<
+## patch the getopt error handling
+	sed -i -f $(srcdir)/__gengetopt-no-failure.sed -- $*.c
 
 # 
 # Help the developers get nice post-processed source files
