@@ -1,0 +1,13 @@
+args "--unamed-opts --long-help --no-handle-error --no-handle-help"
+package "umpp"
+usage "umpp [OPTION]... CMD [CMD-OPTIONS]..."
+description "Perform general preprocessing tasks."
+
+## options used for various subcommands
+option "date" d
+	"stamp the portfolio as of DATE"
+	optional string typestr="DATE" hidden
+
+option "pf" p
+	"use portfolio name NAME"
+	optional string typestr="NAME" hidden

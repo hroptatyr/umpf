@@ -1,0 +1,12 @@
+args "--unamed-opts --long-help --no-handle-error -a meld_args_info -f meld_parser"
+package "umpp_meld"
+usage "umpp [OPTION]... meld [CMD-OPTIONS]..."
+description "Meld several position portfolios into one."
+
+option "date" d
+	"stamp the portfolio as of DATE"
+	optional string typestr="DATE"
+
+option "pf" p
+	"use portfolio name NAME"
+	optional string typestr="NAME"
