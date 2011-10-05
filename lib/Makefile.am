@@ -28,6 +28,7 @@ libumpf_la_SOURCES += proto-fixml.c proto-fixml.h proto-fixml-tag.h
 libumpf_la_SOURCES += umpf-msg-glue-fixml.c
 libumpf_la_CPPFLAGS = $(AM_CPPFLAGS) $(LIBXML2_CFLAGS)
 libumpf_la_LDFLAGS = $(AM_LDFLAGS) $(LIBXML2_LIBS)
+libumpf_la_LDFLAGS += -version-info 1:0:0
 BUILT_SOURCES += proto-fixml-tag.c proto-fixml-attr.c
 BUILT_SOURCES += proto-fixml-ns.c
 EXTRA_libumpf_la_SOURCES += proto-fixml-tag.gperf proto-fixml-attr.gperf
