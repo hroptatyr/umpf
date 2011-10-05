@@ -42,6 +42,7 @@ fi
 AC_PROG_CC([icc gcc cc])
 AC_PROG_CC_C99
 AC_PROG_CC_C_O
+SXE_CHECK_CFLAGS
 LT_INIT
 
 AC_CHECK_HEADERS([stdbool.h])
