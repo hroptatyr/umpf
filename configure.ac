@@ -5,7 +5,7 @@ dnl -------------------------------------------------------------------------
 AC_PREREQ([2.63])
 m4_define([GIT_VERSION_GEN], [dnl
 pushdef([version], [m4_esyscmd([./git-version-gen])])dnl
-ifelse([]version[], [], [0.4.4], []version[])[]dnl
+ifelse([]version[], [], [0.5.0], []version[])[]dnl
 popdef([version])dnl
 ])
 AC_INIT([umpf], [GIT_VERSION_GEN], [https://trac.ga-group.nl/freundt_devel/])
