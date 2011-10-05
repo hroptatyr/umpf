@@ -30,6 +30,7 @@ AC_COPYRIGHT(
 ])
 
 AM_INIT_AUTOMAKE([foreign])
+m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
 ## initialise our cool message nest levels
 SXE_INIT_MSG_LEVEL
@@ -39,8 +40,10 @@ if test -z "${CFLAGS}"; then
 fi
 
 ## the build chain
-AC_PROG_CC(["icc -static-intel" icc gcc cc])
+AC_PROG_CC([icc gcc cc])
 AC_PROG_CC_C99
+AC_PROG_CC_C_O
+SXE_CHECK_CFLAGS
 LT_INIT
 
 AC_CHECK_HEADERS([stdbool.h])
