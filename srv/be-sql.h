@@ -95,6 +95,12 @@ DECLF dbobj_t be_sql_get_tag(dbconn_t, const char *mnemo, time_t stamp);
 DECLF void be_sql_free_tag(dbconn_t, dbobj_t tag);
 
 /**
+ * Corresponds to the first part of UMPF_MSG_GET_PF.
+ * \param MNEMO is the mnemonic of the portfolio.
+ * \param STAMP is the time stamp at which positions have been recorded. */
+DECLF tag_t be_sql_tag_get_id(dbconn_t, dbobj_t tag);
+
+/**
  * Corresponds to the iteration part of UMPF_MSG_SET_PF.
  * \param TAG is the portfolio tag as obtained by `be_sql_new_tag()'.
  * \param MNEMO is the mnemonic of the security.
@@ -153,10 +159,17 @@ be_sql_get_sec(dbconn_t, const char *pf_mnemo, const char *sec_mnemo);
 
 /**
  * Frees any resources used by get_sec/set_sec calls. */
-DEFUN void be_sql_free_sec(dbconn_t, dbobj_t sec);
+DECLF void be_sql_free_sec(dbconn_t, dbobj_t sec);
 
 /**
  * Corresponds to UMPF_MSG_LST_PF */
-DEFUN void be_sql_lst_pf(dbconn_t conn, int(*cb)(char*, void*), void *clo);
+DECLF void be_sql_lst_pf(dbconn_t conn, int(*cb)(char*, void*), void *clo);
+
+/**
+ * Corresponds to UMPF_MSG_LST_TAG */
+DECLF void
+be_sql_lst_tag(
+	dbconn_t conn, const char *pf,
+	int(*cb)(uint64_t, time_t, void*), void *clo);
 
 #endif	/* INCLUDED_be_sql_h_ */

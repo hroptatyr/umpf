@@ -3,7 +3,7 @@ LC_ALL = C
 
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = lib cli srv
+SUBDIRS = lib cli srv sql
 
 if BUILD_LIBRARY
 pkgconfigdir = @libdir@/pkgconfig
@@ -11,8 +11,6 @@ pkgconfig_DATA = libumpf.pc
 endif
 
 EXTRA_DIST = .version git-version-gen
-EXTRA_DIST += sql/install-mysql.sql sql/uninstall-mysql.sql
-EXTRA_DIST += sql/install-sqlite3.sql sql/uninstall-sqlite3.sql
 
 # Version string management.  There are two files to be aware of:
 # .tarball-version - present only in a distribution tarball, and not in

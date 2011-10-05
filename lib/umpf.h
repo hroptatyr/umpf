@@ -39,6 +39,7 @@
 #define INCLUDED_umpf_h_
 
 #include <stddef.h>
+#include <stdint.h>
 #include <time.h>
 
 #if defined __cplusplus
@@ -48,12 +49,14 @@ extern "C" {
 typedef void *umpf_ctx_t;
 typedef struct __umpf_s *umpf_doc_t;
 typedef union umpf_msg_u *umpf_msg_t;
+typedef long unsigned int tag_t;
 
 /* message types */
 typedef enum {
 	UMPF_MSG_UNK,
 	/* portfolio transactions */
 	UMPF_MSG_LST_PF,
+	UMPF_MSG_CLO_PF,
 	UMPF_MSG_NEW_PF,
 	UMPF_MSG_GET_PF,
 	UMPF_MSG_SET_PF,
@@ -69,6 +72,9 @@ typedef enum {
 	 * patch takes a portfolio and a stream of od/uschi msgs */
 	UMPF_MSG_DIFF,
 	UMPF_MSG_PATCH,
+	/* tag transactions */
+	UMPF_MSG_LST_TAG,
+	UMPF_MSG_DEL_TAG,
 } umpf_msg_type_t;
 
 typedef enum {
@@ -94,6 +100,11 @@ struct __qty_s {
 struct __qsd_s {
 	double pos;
 	qside_t sd;
+};
+
+struct __tag_info_s {
+	tag_t id;
+	uint64_t stamp;
 };
 
 struct __ins_qty_s {
@@ -148,9 +159,20 @@ struct umpf_msg_pf_s {
 	char *name;
 	time_t stamp;
 	time_t clr_dt;
+	tag_t tag_id;
 
 	size_t nposs;
 	struct __ins_qty_s poss[];
+};
+
+/* X -> list-tag */
+struct umpf_msg_lst_tag_s {
+	struct umpf_msg_hdr_s hdr;
+
+	char *name;
+
+	size_t ntags;
+	struct __tag_info_s tags[];
 };
 
 union umpf_msg_u {
@@ -159,6 +181,7 @@ union umpf_msg_u {
 	struct umpf_msg_new_pf_s new_pf;
 	struct umpf_msg_new_sec_s new_sec;
 	struct umpf_msg_lst_pf_s lst_pf;
+	struct umpf_msg_lst_tag_s lst_tag;
 };
 
 
@@ -207,6 +230,7 @@ extern size_t umpf_seria_msg(char **tgt, size_t tsz, umpf_msg_t);
  * Resize message to take NPOS additional positions. */
 extern umpf_msg_t umpf_msg_add_pos(umpf_msg_t msg, size_t npos);
 
+
 /**
  * Name space URI for FIXML 5.0 */
 extern const char fixml50_ns_uri[];
@@ -221,6 +245,13 @@ static inline void
 umpf_set_msg_type(umpf_msg_t msg, umpf_msg_type_t mt)
 {
 	msg->hdr.mt = mt * 2;
+	return;
+}
+
+static inline void
+umpf_set_msg_reply(umpf_msg_t msg, umpf_msg_type_t mt)
+{
+	msg->hdr.mt = mt * 2 + 1;
 	return;
 }
 

@@ -40,10 +40,12 @@
 #endif	/* HAVE_CONFIG_H */
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <time.h>
 #include <ctype.h>
 #include <math.h>
@@ -89,6 +91,7 @@ typedef enum {
 	UMPF_CMD_NEW_PF,
 	UMPF_CMD_GET_PF,
 	UMPF_CMD_SET_PF,
+	UMPF_CMD_CLO_PF,
 	UMPF_CMD_NEW_SEC,
 	UMPF_CMD_GET_SEC,
 	UMPF_CMD_SET_SEC,
@@ -96,6 +99,8 @@ typedef enum {
 	UMPF_CMD_SET_POSS,
 	UMPF_CMD_APPLY,
 	UMPF_CMD_DIFF,
+	UMPF_CMD_LIST_TAG,
+	UMPF_CMD_DEL_TAG,
 } umpf_cmd_t;
 
 /* new_pf specific options */
@@ -143,9 +148,30 @@ struct __apply_clo_s {
 	const char *poss;
 };
 
+struct __clo_pf_clo_s {
+	const char *old;
+	const char *new;
+	const char *file;
+	const char *descr;
+	int movep;
+};
+
+struct __del_tag_clo_s {
+	const char *mnemo;
+	const char *tag;
+	long unsigned int tag_id;
+};
+
+struct __ls_tag_clo_s {
+	const char *mnemo;
+};
+
 /* command line options */
 struct __clo_s {
-	int helpp;
+	int helpp:1;
+	int dryp:1;
+	int rawp:1;
+	int verbosep:1;
 
 	conn_meth_t meth;
 	const char *host;
@@ -161,6 +187,9 @@ struct __clo_s {
 		struct __get_poss_clo_s get_poss[1];
 		struct __set_poss_clo_s set_poss[1];
 		struct __apply_clo_s apply[1];
+		struct __clo_pf_clo_s clo_pf[1];
+		struct __del_tag_clo_s del_tag[1];
+		struct __ls_tag_clo_s ls_tag[1];
 	};
 };
 
@@ -181,6 +210,11 @@ Options common to all commands:\n\
                         Can also point to a unix domain socket in\n\
                         which case a file name is expected.\n\
                         Also the form `hostname:port' is supported.\n\
+  -n, --dry-run         Textually print the message that would have\n\
+                        been sent to the server.\n\
+  -r, --raw             Print messages received from the server in\n\
+                        raw form, i.e. without interpreting them.\n\
+  -v, --verbose         Print outgoing and incoming messages.\n\
 \n\
 Supported commands:\n\
 \n\
@@ -196,6 +230,12 @@ Supported commands:\n\
     -d, --descr=STRING       Set description from STRING\n\
     -f, --file=FILE          File with description to pass on\n\
                              Use - for stdin\n\
+\n\
+  clo-pf [OPTIONS] OLD NEW   Copy or rename a portfolio OLD to NEW.\n\
+    -d, --descr=STRING       Set description from STRING\n\
+    -f, --file=FILE          File with description to pass on\n\
+                             Use - for stdin\n\
+    -m, --move               Delete the old portfolio OLD as well.\n\
 \n\
   new-sec [OPTIONS] NAME     Register a new security NAME\n\
     -p, --pf=STRING          Name of the portfolio to register the\n\
@@ -222,6 +262,9 @@ Supported commands:\n\
   apply [OPTIONS] [NAME]     Apply order to portfolio NAME\n\
     -d, --date=DATE          Set the portfolio as of DATE\n\
     -f, --file=FILE          Use positions in FILE, - for stdin\n\
+\n\
+  list-tag NAME              List all tags in portfolio NAME\n\
+  del-tag NAME TAG           Delete TAG from portfolio NAME\n\
 \n\
 ";
 
@@ -351,7 +394,7 @@ epoll_guts(epoll_guts_action_t action)
 static char gbuf[4096];
 
 static umpf_msg_t
-read_reply(void **closure, volatile int fd)
+read_reply(void **closure, volatile int fd, bool rawp)
 {
 	ssize_t nrd;
 	umpf_msg_t rpl = NULL;
@@ -363,7 +406,9 @@ read_reply(void **closure, volatile int fd)
 #if defined DEBUG_FLAG
 		fprintf(stderr, "read %zd\n", nrd);
 #endif	/* DEBUG_FLAG */
-		if ((rpl = umpf_parse_blob(closure, gbuf, nrd)) != NULL) {
+		if (UNLIKELY(rawp)) {
+			fwrite(gbuf, nrd, 1, stdout);
+		} else if ((rpl = umpf_parse_blob(closure, gbuf, nrd)) != NULL) {
 			/* bingo, reset closure */
 			*closure = NULL;
 			break;
@@ -444,16 +489,29 @@ from_zulu(const char *buf)
 }
 
 static void
+__prpr_pf(const char *mnemo, FILE *whither)
+{
+	fputs(":portfolio \"", whither);
+	fputs(mnemo, whither);
+	fputs("\"\n", whither);
+	return;
+}
+
+static void
 pretty_print(umpf_msg_t msg)
 {
 	switch (umpf_get_msg_type(msg)) {
+	case UMPF_MSG_LST_PF: {
+		for (size_t i = 0; i < msg->lst_pf.npfs; i++) {
+			__prpr_pf(msg->lst_pf.pfs[i], stdout);
+		}
+		break;
+	}
 	case UMPF_MSG_NEW_PF:
 	case UMPF_MSG_SET_DESCR: {
 		const char *data;
 
-		fputs(":portfolio \"", stdout);
-		fputs(msg->new_pf.name, stdout);
-		fputs("\"\n", stdout);
+		__prpr_pf(msg->new_pf.name, stdout);
 
 		if (LIKELY((data = msg->new_pf.satellite->data) != NULL)) {
 			const size_t size = msg->new_pf.satellite->size;
@@ -503,6 +561,8 @@ pretty_print(umpf_msg_t msg)
 		fput_zulu(msg->pf.stamp, stdout);
 		fputs(" :clear ", stdout);
 		fput_date(msg->pf.clr_dt, stdout);
+		fputs(" :tag ", stdout);
+		fprintf(stdout, "%lu", msg->pf.tag_id);
 		fputc('\n', stdout);
 
 		for (size_t i = 0; i < msg->pf.nposs; i++) {
@@ -519,10 +579,19 @@ pretty_print(umpf_msg_t msg)
 		fput_zulu(msg->pf.stamp, stdout);
 		fputs(" :clear ", stdout);
 		fput_date(msg->pf.clr_dt, stdout);
+		fprintf(stdout, " :tag %lu", msg->pf.tag_id);
 		fputc('\n', stdout);
 		break;
+	case UMPF_MSG_LST_TAG:
+		for (size_t i = 0; i < msg->lst_tag.ntags; i++) {
+			fprintf(stdout, "%lu\t%" PRIu64 "\n",
+				msg->lst_tag.tags[i].id,
+				msg->lst_tag.tags[i].stamp);
+		}
+		break;
 	default:
-		fputs("cannot interpret response\n", stderr);
+		fprintf(stderr, "cannot interpret response (%u)\n",
+			umpf_get_msg_type(msg));
 		break;
 	}
 	return;
@@ -530,14 +599,11 @@ pretty_print(umpf_msg_t msg)
 
 /* main loop */
 static int
-umpf_repl(umpf_msg_t msg, volatile int sock)
+umpf_repl(const char *buf, size_t bsz, volatile int sock, bool verbp, bool rawp)
 {
-#define SRV_TIMEOUT	(4000/*millis*/)
+	const int timeout = 2000;
 	ep_ctx_t epg;
 	int nfds;
-	/* serialise the message */
-	char *buf = gbuf;
-	size_t nsz = umpf_seria_msg(&buf, -countof(gbuf), msg);
 	/* track the number of bytes written */
 	size_t wrt = 0;
 	void *closure = NULL;
@@ -547,7 +613,7 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 	/* setup event waiter */
 	ep_prep_et_rdwr(epg, sock);
 
-	while ((nfds = ep_wait(epg, SRV_TIMEOUT)) > 0) {
+	while ((nfds = ep_wait(epg, timeout)) > 0) {
 		typeof(epg->ev[0].events) ev = epg->ev[0].events;
 		int fd = epg->ev[0].data.fd;
 
@@ -556,13 +622,13 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 
 		if (LIKELY(ev & EPOLLIN)) {
 			/* read what's on the wire */
-			umpf_msg_t rpl = read_reply(&closure, fd);
+			umpf_msg_t rpl = read_reply(&closure, fd, rawp);
 
 			if (LIKELY(rpl != NULL)) {
 				/* everything's brill */
-#if defined DEBUG_FLAG
-				umpf_print_msg(STDERR_FILENO, rpl);
-#endif	/* DEBUG_FLAG */
+				if (UNLIKELY(verbp)) {
+					umpf_print_msg(STDERR_FILENO, rpl);
+				}
 				pretty_print(rpl);
 				umpf_free_msg(rpl);
 				nfds = 0;
@@ -572,9 +638,9 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 
 		} else if (ev & EPOLLOUT) {
 			/* have we got stuff to write out? */
-			if (wrt < nsz) {
+			if (wrt < bsz) {
 				/* write a bit of the message */
-				wrt += write_request(fd, buf + wrt, nsz - wrt);
+				wrt += write_request(fd, buf + wrt, bsz - wrt);
 			}
 
 		} else {
@@ -588,11 +654,6 @@ umpf_repl(umpf_msg_t msg, volatile int sock)
 	/* stop waiting for events */
 	ep_fini(epg, sock);
 	(void)epoll_guts(GUTS_FREE);
-
-	/* free serialisation resources */
-	if (buf != gbuf) {
-		free(buf);
-	}
 	return nfds;
 }
 
@@ -938,12 +999,23 @@ out:
 	return res;
 }
 
+static umpf_msg_t
+make_umpf_ls_tag_msg(const char *mnemo)
+{
+	umpf_msg_t res = make_umpf_msg();
+	umpf_set_msg_type(res, UMPF_MSG_LST_TAG);
+	res->lst_tag.name = strdup(mnemo);
+	return res;
+}
+
 static int
 umpf_process(struct __clo_s *clo)
 {
 	int res = -1;
 	umpf_msg_t msg = make_umpf_msg();
 	volatile int sock;
+	char *buf;
+	size_t bsz;
 
 	switch (clo->cmd) {
 	case UMPF_CMD_LIST_PF: {
@@ -1007,19 +1079,45 @@ umpf_process(struct __clo_s *clo)
 		if ((msg = make_umpf_apply_msg(mnemo, stamp, file))) {
 			break;
 		}
-		/* otherwise fall through to default case */
+		return -1;
+	}
+	case UMPF_CMD_CLO_PF: {
+		return -1;
+	}
+	case UMPF_CMD_LIST_TAG: {
+		const char *mnemo = clo->ls_tag->mnemo;
+		if ((msg = make_umpf_ls_tag_msg(mnemo))) {
+			break;
+		}
+		return -1;
 	}
 	default:
 		/* don't even try the connect */
 		return -1;
 	}
 
+	/* serialise the message */
+	buf = gbuf;
+	bsz = umpf_seria_msg(&buf, -countof(gbuf), msg);
+
 	/* get ourselves a connection */
-	if (LIKELY((sock = umpf_connect(clo)) >= 0)) {
+	if (LIKELY(!clo->dryp && (sock = umpf_connect(clo)) >= 0)) {
+		bool verbp = clo->verbosep;
+		bool rawp = clo->rawp;
+
+		if (UNLIKELY(verbp)) {
+			fwrite(buf, bsz, 1, stderr);
+		}
 		/* main loop */
-		res = umpf_repl(msg, sock);
+		res = umpf_repl(buf, bsz, sock, verbp, rawp);
 		/* close socket */
 		close(sock);
+	} else if (UNLIKELY(clo->dryp)) {
+		fwrite(buf, bsz, 1, stdout);
+	}
+	/* free serialisation resources */
+	if (buf != gbuf) {
+		free(buf);
 	}
 	/* we don't need this message object anymore */
 	umpf_free_msg(msg);
@@ -1163,6 +1261,66 @@ parse_set_poss_args(struct __clo_s *clo, int argc, char *argv[])
 }
 
 static void
+parse_clo_pf_args(struct __clo_s *clo, int argc, char *argv[])
+{
+	for (int i = 0; i < argc; i++) {
+		char *p = argv[i];
+
+		if (*p++ == '-') {
+			/* could be -d/--descr, -f/--file or -m/--move */
+			if (*p == 'd') {
+				clo->clo_pf->descr = __get_val(&i, 2, argv);
+			} else if (strncmp(p, "-descr", 6) == 0) {
+				clo->clo_pf->descr = __get_val(&i, 7, argv);
+			} else if (*p == 'f') {
+				clo->clo_pf->file = __get_val(&i, 2, argv);
+			} else if (strncmp(p, "-file", 5) == 0) {
+				clo->clo_pf->file = __get_val(&i, 6, argv);
+			}
+		} else if (clo->clo_pf->old == NULL) {
+			/* must be the old name then */
+			clo->clo_pf->old = argv[i];
+			argv[i] = NULL;
+		} else if (clo->clo_pf->new == NULL) {
+			/* must be the new name then */
+			clo->clo_pf->new = argv[i];
+			argv[i] = NULL;
+		}
+	}
+	return;
+}
+
+static void
+parse_ls_tag_args(struct __clo_s *clo, int argc, char *argv[])
+{
+	for (int i = 0; i < argc; i++) {
+		if (clo->ls_tag->mnemo == NULL) {
+			/* must be name then */
+			clo->ls_tag->mnemo = argv[i];
+			argv[i] = NULL;
+		}
+	}
+	return;
+}
+
+static void
+parse_del_tag_args(struct __clo_s *clo, int argc, char *argv[])
+{
+	for (int i = 0; i < argc; i++) {
+		if (clo->del_tag->mnemo == NULL) {
+			/* must be the name then */
+			clo->del_tag->mnemo = argv[i];
+			argv[i] = NULL;
+		} else if (clo->del_tag->tag == NULL) {
+			/* must be the tag identifier then */
+			clo->del_tag->tag = argv[i];
+			argv[i] = NULL;
+		}
+	}
+	return;
+}
+
+static void
 parse_args(struct __clo_s *clo, int argc, char *argv[])
 {
 	for (int i = 0; i < argc; i++) {
@@ -1188,6 +1346,15 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 				} else if (strcmp(p, "version") == 0) {
 					clo->cmd = UMPF_CMD_VERSION;
 					return;
+				} else if (strcmp(p, "dry-run") == 0) {
+					clo->dryp = 1;
+					return;
+				} else if (strcmp(p, "raw") == 0) {
+					clo->rawp = 1;
+					return;
+				} else if (strcmp(p, "verbose") == 0) {
+					clo->verbosep = 1;
+					return;
 				}
 				break;
 			case 'V':
@@ -1201,6 +1368,27 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 				if (*p == '\0') {
 					/* it's -h */
 					clo->helpp = 1;
+					continue;
+				}
+				break;
+			case 'n':
+				if (*p == '\0') {
+					/* it's -n */
+					clo->dryp = 1;
+					continue;
+				}
+				break;
+			case 'r':
+				if (*p == '\0') {
+					/* it's -r */
+					clo->rawp = 1;
+					continue;
+				}
+				break;
+			case 'v':
+				if (*p == '\0') {
+					/* it's -v */
+					clo->verbosep = 1;
 					continue;
 				}
 				break;
@@ -1268,12 +1456,40 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 			break;
 		}
 		case 'l':
-			/* list-pf */
-			if (strcmp(p, "ist-pf") == 0) {
+			/* list-pf/list-tag */
+			if (strcmp(p, "ist-pf") == 0 ||
+			    strcmp(p, "ist-pfs") == 0) {
 				clo->cmd = UMPF_CMD_LIST_PF;
+				continue;
+			} else if (strcmp(p, "ist-tag") == 0 ||
+				   strcmp(p, "ist-tags") == 0) {
+				int new_argc = argc - i - 1;
+				char **new_argv = argv + i + 1;
+				clo->cmd = UMPF_CMD_LIST_TAG;
+				parse_ls_tag_args(clo, new_argc, new_argv);
 				continue;
 			}
 			break;
+		case 'c':
+			/* clo-pf */
+			if (strcmp(p, "lo-pf") == 0) {
+				int new_argc = argc - i - 1;
+				char **new_argv = argv + i + 1;
+				clo->cmd = UMPF_CMD_CLO_PF;
+				parse_clo_pf_args(clo, new_argc, new_argv);
+				continue;
+			}
+			break;
+		case 'd':
+			/* del-tag */
+			if (strcmp(p, "el-tag") == 0) {
+				int new_argc = argc - i - 1;
+				char **new_argv = argv + i + 1;
+				clo->cmd = UMPF_CMD_DEL_TAG;
+				parse_del_tag_args(clo, new_argc, new_argv);
+				continue;
+			}
+			break;			
 		default:
 			break;
 		}
@@ -1352,6 +1568,44 @@ check__poss_args(struct __clo_s *clo)
 	return 0;
 }
 
+static int
+check__clo_pf_args(struct __clo_s *clo)
+{
+	if (clo->clo_pf->old == NULL || clo->clo_pf->new == NULL) {
+		fputs("portfolio mnemonic must not be NULL\n", stderr);
+		return -1;
+	}
+	return 0;
+}
+
+
+static int
+check__ls_tag_args(struct __clo_s *clo)
+{
+	if (clo->ls_tag->mnemo == NULL) {
+		fputs("portfolio mnemonic must not be NULL\n", stderr);
+		return -1;
+	}
+	return 0;
+}
+
+static int
+check__del_tag_args(struct __clo_s *clo)
+{
+	if (clo->del_tag->mnemo == NULL) {
+		fputs("portfolio mnemonic must not be NULL\n", stderr);
+		return -1;
+	} else if (clo->del_tag->tag == NULL) {
+		fputs("tag identifier must not be NULL\n", stderr);
+		return -1;
+	} else if ((clo->del_tag->tag_id =
+		    strtoul(clo->del_tag->tag, NULL, 10)) == 0) {
+		fputs("tag identifier must be numeric\n", stderr);
+		return -1;
+	}
+	return 0;
+}
+
 
 int
 main(int argc, char *argv[])
@@ -1380,32 +1634,43 @@ main(int argc, char *argv[])
 		return 0;
 	case UMPF_CMD_LIST_PF:
 		if (check__ls_pf_args(&argi)) {
-			print_usage(argi.cmd);
-			return 1;
+			goto usage_out;
 		}
 		break;
 	case UMPF_CMD_NEW_PF:
 	case UMPF_CMD_GET_PF:
 	case UMPF_CMD_SET_PF:
 		if (check__pf_args(&argi)) {
-			print_usage(argi.cmd);
-			return 1;
+			goto usage_out;
 		}
 		break;
 	case UMPF_CMD_NEW_SEC:
 	case UMPF_CMD_GET_SEC:
 	case UMPF_CMD_SET_SEC:
 		if (check__sec_args(&argi)) {
-			print_usage(argi.cmd);
-			return 1;
+			goto usage_out;
 		}
 		break;
 	case UMPF_CMD_GET_POSS:
 	case UMPF_CMD_SET_POSS:
 	case UMPF_CMD_APPLY:
 		if (check__poss_args(&argi)) {
-			print_usage(argi.cmd);
-			return 1;
+			goto usage_out;
+		}
+		break;
+	case UMPF_CMD_CLO_PF:
+		if (check__clo_pf_args(&argi)) {
+			goto usage_out;
+		}
+		break;
+	case UMPF_CMD_LIST_TAG:
+		if (check__ls_tag_args(&argi)) {
+			goto usage_out;
+		}
+		break;
+	case UMPF_CMD_DEL_TAG:
+		if (check__del_tag_args(&argi)) {
+			goto usage_out;
 		}
 		break;
 	}
@@ -1415,6 +1680,9 @@ main(int argc, char *argv[])
 		return 1;
 	}
 	return 0;
+usage_out:
+	print_usage(argi.cmd);
+	return 1;
 }
 
 /* umpf.c ends here */

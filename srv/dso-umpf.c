@@ -95,7 +95,7 @@ get_cb(char *mnemo, double l, double s, void *clo)
 }
 
 static int
-lst_cb(char *mnemo, void *clo)
+lst_pf_cb(char *mnemo, void *clo)
 {
 	umpf_msg_t *msg = clo;
 
@@ -109,6 +109,27 @@ lst_cb(char *mnemo, void *clo)
 			sizeof(*(*msg)->lst_pf.pfs));
 	}
 	(*msg)->lst_pf.pfs[(*msg)->lst_pf.npfs++] = mnemo;
+	/* don't stop on our kind, request more grub */
+	return 0;
+}
+
+static int
+lst_tag_cb(uint64_t tid, time_t tm, void *clo)
+{
+	umpf_msg_t *msg = clo;
+	size_t idx = (*msg)->lst_tag.ntags;
+
+	if ((idx % 512) == 0) {
+		/* resize */
+		*msg = realloc(
+			*msg,
+			sizeof(**msg) +
+			((*msg)->lst_tag.ntags + 512) *
+			sizeof(*(*msg)->lst_tag.tags));
+	}
+	(*msg)->lst_tag.tags[idx].id = tid;
+	(*msg)->lst_tag.tags[idx].stamp = tm;
+	(*msg)->lst_tag.ntags++;
 	/* don't stop on our kind, request more grub */
 	return 0;
 }
@@ -165,7 +186,7 @@ interpret_msg(char **buf, umpf_msg_t msg)
 	}
 	case UMPF_MSG_LST_PF:
 		UMPF_INFO_LOG("lst_pf();\n");
-		be_sql_lst_pf(umpf_dbconn, lst_cb, &msg);
+		be_sql_lst_pf(umpf_dbconn, lst_pf_cb, &msg);
 
 		/* reuse the message to send the answer */
 		msg->hdr.mt++;
@@ -184,11 +205,14 @@ interpret_msg(char **buf, umpf_msg_t msg)
 
 		tag = be_sql_get_tag(umpf_dbconn, mnemo, stamp);
 		if (LIKELY(tag != NULL)) {
+			tag_t tid = be_sql_tag_get_id(umpf_dbconn, tag);
+
 			/* set correct tag stamp */
 			msg->pf.stamp = be_sql_get_stamp(umpf_dbconn, tag);
+			msg->pf.tag_id = tid;
 			/* get the number of positions */
 			npos = be_sql_get_npos(umpf_dbconn, tag);
-			UMPF_DEBUG("found %zu positions\n", npos);
+			UMPF_DEBUG("found %zu positions for %lu\n", npos, tid);
 
 			msg = umpf_msg_add_pos(msg, npos);
 			msg->pf.nposs = 0;
@@ -216,6 +240,7 @@ interpret_msg(char **buf, umpf_msg_t msg)
 #else  /* !UMPF_AUTO_SPARSE */
 		tag = be_sql_new_tag(umpf_dbconn, mnemo, stamp);
 #endif	/* UMPF_AUTO_SPARSE */
+		msg->pf.tag_id = be_sql_tag_get_id(umpf_dbconn, tag);
 
 		for (size_t i = 0; i < msg->pf.nposs; i++) {
 			const char *sec = msg->pf.poss[i].ins->sym;
@@ -351,6 +376,15 @@ interpret_msg(char **buf, umpf_msg_t msg)
 		be_sql_free_tag(umpf_dbconn, tag);
 		break;
 	}
+	case UMPF_MSG_LST_TAG:
+		UMPF_INFO_LOG("lst_tag();\n");
+		be_sql_lst_tag(
+			umpf_dbconn, msg->lst_tag.name, lst_tag_cb, &msg);
+
+		/* reuse the message to send the answer */
+		msg->hdr.mt++;
+		len = umpf_seria_msg(buf, 0, msg);
+		break;
 	default:
 		UMPF_DEBUG("unknown message %u\n", msg->hdr.mt);
 		umpf_set_msg_type(msg, UMPF_MSG_UNK);
