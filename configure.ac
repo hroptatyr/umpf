@@ -39,7 +39,7 @@ if test -z "${CFLAGS}"; then
 fi
 
 ## the build chain
-AC_PROG_CC(["icc -static-intel" icc gcc cc])
+AC_PROG_CC([icc gcc cc])
 AC_PROG_CC_C99
 LT_INIT
 
