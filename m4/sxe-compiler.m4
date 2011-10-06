@@ -202,7 +202,10 @@ AC_DEFUN([SXE_OPTIFLAGS], [dnl
 
 AC_DEFUN([SXE_FEATFLAGS], [dnl
 	## default flags for needed features
-	dnl none at the moment
+	SXE_CHECK_COMPILER_FLAGS([-static-intel], [
+		ldflags="${ldflags} -XCClinker -static-intel"])
+	SXE_CHECK_COMPILER_FLAGS([-static-libgcc], [
+		ldflags="${ldflags} -XCClinker -static-libgcc"])
 ])dnl SXE_FEATFLAGS
 
 
@@ -256,7 +259,7 @@ AC_DEFUN([SXE_CHECK_CFLAGS], [dnl
 
 	CFLAGS="$SXE_CFLAGS ${ac_cv_env_CFLAGS_value}"
 	AC_MSG_CHECKING([for preferred CFLAGS])
-	AC_MSG_RESULT([${SXE_CFLAGS}])
+	AC_MSG_RESULT([${CFLAGS}])
 
 	AC_MSG_NOTICE([
 If you wish to ADD your own flags you want to stop here and rerun the
@@ -270,6 +273,10 @@ or
   make CFLAGS=<your-own-flags> [target]
 respectively
 		])
+
+	LDFLAGS="${ldflags} ${ac_cv_env_LDFLAGS_value}"
+	AC_MSG_CHECKING([for preferred LDFLAGS])
+	AC_MSG_RESULT([${LDFLAGS}])
 
 ])dnl SXE_CHECK_CFLAGS
 
