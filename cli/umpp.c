@@ -80,18 +80,24 @@ __frob_poss_line(struct __ins_qty_s *iq, const char *line, const size_t llen)
 	const char *sym = line;
 	const char *lo;
 	const char *sh;
+	double dlo = 0.0;
+	double dsh = 0.0;
 
 	if (UNLIKELY(llen < 3)) {
 		return -1;
 	} else if ((lo = strchr(sym + 1, '\t')) == NULL) {
 		return -1;
-	} else if ((sh = strchr(lo + 1, '\t')) == NULL) {
-		return -1;
+	} else {
+		dlo = strtod(lo + 1, NULL);
+	}
+	/* the rest of the guys are optional */
+	if ((sh = strchr(lo + 1, '\t'))) {
+		dsh = strtod(sh + 1, NULL);
 	}
 
 	iq->ins->sym = strndup(sym, lo - sym);
-	iq->qty->_long = strtod(lo + 1, NULL);
-	iq->qty->_shrt = strtod(sh + 1, NULL);
+	iq->qty->_long = dlo;
+	iq->qty->_shrt = dsh;
 	return 0;
 }
 
