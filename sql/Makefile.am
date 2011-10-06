@@ -4,13 +4,21 @@ M4=m4
 if BUILD_SERVER
 umpfdir = $(datadir)/umpf
 
-BUILT_SOURCES = install-mysql.sql install-sqlite3.sql
-umpf_DATA = install-mysql.sql install-sqlite3.sql
+BUILT_SOURCES =
+EXTRA_DIST = $(BUILT_SOURCES)
+EXTRA_DIST += mysql.m4
+EXTRA_DIST += sqlite3.m4
 
-install-mysql.sql: mysql.m4 uninstall.sql.in install.sql.in
+SQL_TMPL = uninstall.sql.in install.sql.in
+EXTRA_DIST += $(SQL_TMPL)
+
+umpf_DATA = install-mysql.sql install-sqlite3.sql
+BUILT_SOURCES += $(umpf_DATA)
+
+install-mysql.sql: mysql.m4 $(SQL_TMPL)
 	$(M4) $^ > $@
 
-install-sqlite3.sql: sqlite3.m4 uninstall.sql.in install.sql.in
+install-sqlite3.sql: sqlite3.m4 $(SQL_TMPL)
 	$(M4) $^ > $@
 endif
 
