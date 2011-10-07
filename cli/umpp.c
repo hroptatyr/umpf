@@ -44,6 +44,7 @@
 #include <stdbool.h>
 
 #include "umpf.h"
+extern const char* meld_args_info_description;
 
 #if !defined UNUSED
 # define UNUSED(_x)	__attribute__((unused)) _x##_unused
