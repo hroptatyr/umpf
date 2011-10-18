@@ -762,11 +762,17 @@ INSERT INTO aou_umpf_portfolio (short) VALUES (?)";
 	be_sql_bind(conn, stmt, b, countof(b));
 	/* execute */
 	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
+#if defined __C1X
 		struct __bind_s rb[1] = {{
 				.type = BE_BIND_TYPE_INT64,
 				/* default value */
 				.i64 = 0UL,
 			}};
+#else
+		struct __bind_s rb[1];
+		rb[0].type = BE_BIND_TYPE_INT64;
+		rb[0].i64 = 0UL;
+#endif
 		be_sql_fetch(conn, stmt, rb, countof(rb));
 		pf_id = rb[0].i64;
 	}
@@ -801,6 +807,7 @@ WHERE aou_umpf_portfolio.short = ? AND aou_umpf_security.short = ?";
 	uint64_t sec_id = 0UL;
 	dbstmt_t stmt;
 	/* for our parameter binding later on */
+#if defined __C1X
 	struct __bind_s b[2] = {{
 			.type = BE_BIND_TYPE_TEXT,
 			.txt = pf_mnemo,
@@ -810,7 +817,15 @@ WHERE aou_umpf_portfolio.short = ? AND aou_umpf_security.short = ?";
 			.txt = sec_mnemo,
 			.len = sec_mnlen,
 		}};
-
+#else
+	struct __bind_s b[2];
+	b[0].type = BE_BIND_TYPE_TEXT;
+	b[0].txt = pf_mnemo;
+	b[0].len = pf_mnlen;
+	b[1].type = BE_BIND_TYPE_TEXT;
+	b[1].txt = sec_mnemo;
+	b[1].len = sec_mnlen;
+#endif
 	if ((stmt = be_sql_prep(conn, qry, countof_m1(qry))) == NULL) {
 		return 0UL;
 	}
@@ -819,11 +834,17 @@ WHERE aou_umpf_portfolio.short = ? AND aou_umpf_security.short = ?";
 	be_sql_bind(conn, stmt, b, countof(b));
 	/* execute */
 	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
+#if defined __C1X
 		struct __bind_s rb[1] = {{
 				.type = BE_BIND_TYPE_INT64,
 				/* default value */
 				.i64 = 0UL,
 			}};
+#else
+		struct __bind_s rb[1];
+		rb[0].type = BE_BIND_TYPE_INT64;
+		rb[0].i64 = 0UL;
+#endif
 		be_sql_fetch(conn, stmt, rb, countof(rb));
 		sec_id = rb[0].i64;
 	}
@@ -864,11 +885,17 @@ INSERT INTO aou_umpf_security (portfolio_id, short) VALUES (?, ?)";
 	be_sql_bind(conn, stmt, b, countof(b));
 	/* execute */
 	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
+#if defined __C1X
 		struct __bind_s rb[1] = {{
 				.type = BE_BIND_TYPE_INT64,
 				/* default value */
 				.i64 = 0UL,
 			}};
+#else
+		struct __bind_s rb[1];
+		rb[0].type = BE_BIND_TYPE_INT64;
+		rb[0].i64 = 0UL;
+#endif
 		be_sql_fetch(conn, stmt, rb, countof(rb));
 		sec_id = rb[0].i64;
 	}
@@ -896,6 +923,7 @@ __new_tag_id(dbconn_t conn, uint64_t pf_id, time_t stamp)
 INSERT INTO aou_umpf_tag (portfolio_id, tag_stamp) VALUES (?, ?)";
 	uint64_t tag_id = 0UL;
 	dbstmt_t stmt;
+#if defined __C1X
 	struct __bind_s b[2] = {{
 			.type = BE_BIND_TYPE_INT64,
 			.i64 = pf_id,
@@ -903,7 +931,13 @@ INSERT INTO aou_umpf_tag (portfolio_id, tag_stamp) VALUES (?, ?)";
 			.type = BE_BIND_TYPE_STAMP,
 			.tm = stamp,
 		}};
-
+#else
+	struct __bind_s b[2];
+	b[0].type = BE_BIND_TYPE_INT64;
+	b[0].i64 = pf_id;
+	b[1].type = BE_BIND_TYPE_STAMP;
+	b[1].tm = stamp;
+#endif
 	if ((stmt = be_sql_prep(conn, qry, countof_m1(qry))) == NULL) {
 		return 0UL;
 	}
@@ -929,6 +963,7 @@ ORDER BY tag_stamp DESC, tag_id DESC \
 LIMIT 1";
 	uint64_t tag_id = 0UL;
 	dbstmt_t stmt;
+#if defined __C1X
 	struct __bind_s b[2] = {{
 			.type = BE_BIND_TYPE_INT64,
 			.i64 = pf_id,
@@ -936,7 +971,13 @@ LIMIT 1";
 			.type = BE_BIND_TYPE_STAMP,
 			.tm = stamp,
 		}};
-
+#else
+	struct __bind_s b[2];
+	b[0].type = BE_BIND_TYPE_INT64;
+	b[0].i64 = pf_id;
+	b[1].type = BE_BIND_TYPE_STAMP;
+	b[1].tm = stamp;
+#endif
 	if ((stmt = be_sql_prep(conn, qry, countof_m1(qry))) == NULL) {
 		return 0UL;
 	}
@@ -945,11 +986,17 @@ LIMIT 1";
 	be_sql_bind(conn, stmt, b, countof(b));
 	/* execute */
 	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
+#if defined __C1X
 		struct __bind_s rb[1] = {{
 				.type = BE_BIND_TYPE_INT64,
 				/* default value */
 				.i64 = 0UL,
 			}};
+#else
+		struct __bind_s rb[1];
+		rb[0].type = BE_BIND_TYPE_INT64;
+		rb[0].i64 = 0UL,
+#endif
 		be_sql_fetch(conn, stmt, rb, countof(rb));
 		tag_id = rb[0].i64;
 	}
@@ -968,6 +1015,7 @@ WHERE portfolio_id = ? AND tag_stamp <= ? \
 ORDER BY tag_stamp DESC, tag_id DESC \
 LIMIT 1";
 	dbstmt_t stmt;
+#if defined __C1X
 	struct __bind_s b[2] = {{
 			.type = BE_BIND_TYPE_INT64,
 			.i64 = pf_id,
@@ -975,6 +1023,13 @@ LIMIT 1";
 			.type = BE_BIND_TYPE_STAMP,
 			.tm = stamp,
 		}};
+#else
+	struct __bind_s b[2];
+	b[0].type = BE_BIND_TYPE_INT64;
+	b[0].i64 = pf_id;
+	b[1].type = BE_BIND_TYPE_STAMP;
+	b[1].tm = stamp;
+#endif
 	int res = -1;
 
 	if ((stmt = be_sql_prep(conn, qry, countof_m1(qry))) == NULL) {
@@ -1032,6 +1087,7 @@ UPDATE aou_umpf_portfolio SET description = ? WHERE portfolio_id = ?";
 
 	/* bind the params */
 	{
+#if defined __C1X
 		struct __bind_s b[2] = {{
 				.type = BE_BIND_TYPE_TEXT,
 				.txt = descr.data,
@@ -1040,6 +1096,14 @@ UPDATE aou_umpf_portfolio SET description = ? WHERE portfolio_id = ?";
 				.type = BE_BIND_TYPE_INT64,
 				.i64 = pf_id,
 			}};
+#else
+		struct __bind_s b[2];
+		b[0].type = BE_BIND_TYPE_TEXT;
+		b[0].txt = descr.data;
+		b[0].len = descr.size;
+		b[1].type = BE_BIND_TYPE_INT64;
+		b[1].i64 = pf_id;
+#endif
 		be_sql_bind(conn, stmt, b, countof(b));
 		be_sql_exec_stmt(conn, stmt);
 		be_sql_fin(conn, stmt);
@@ -1069,19 +1133,33 @@ SELECT description FROM aou_umpf_portfolio WHERE short = ?";
 
 	/* bind the params */
 	{
+#if defined __C1X
 		struct __bind_s b[1] = {{
 				.type = BE_BIND_TYPE_TEXT,
 				.txt = pf_mnemo,
 				.len = strlen(pf_mnemo)
 			}};
+#else
+		struct __bind_s b[1];
+		b[0].type = BE_BIND_TYPE_TEXT;
+		b[0].txt = pf_mnemo;
+		b[0].len = strlen(pf_mnemo);
+#endif
 		/* bind + exec */
 		be_sql_bind(conn, stmt, b, countof(b));
 		if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
+#if defined __C1X
 			struct __bind_s rb[1] = {{
 					.type = BE_BIND_TYPE_TEXT,
 					/* default value */
 					.ptr = NULL,
 				}};
+#else
+			struct __bind_s rb[1];
+			rb[0].type = BE_BIND_TYPE_TEXT;
+			/* default value */
+			rb[0].ptr = NULL;
+#endif
 			be_sql_fetch(conn, stmt, rb, countof(rb));
 			res.data = rb[0].ptr;
 			res.size = rb[0].len;
@@ -1166,6 +1244,7 @@ WHERE tag_id = ?" UMPF_PRUNE_SEXP;
 	*tag = tmp;
 	/* copy the positions */
 	{
+#if defined __C1X
 		struct __bind_s b[2] = {{
 				.type = BE_BIND_TYPE_INT64,
 				.i64 = tag->tag_id,
@@ -1173,6 +1252,13 @@ WHERE tag_id = ?" UMPF_PRUNE_SEXP;
 				.type = BE_BIND_TYPE_INT64,
 				.i64 = tag_id_old,
 			}};
+#else
+		struct __bind_s b[2];
+		b[0].type = BE_BIND_TYPE_INT64;
+		b[0].i64 = tag->tag_id;
+		b[1].type = BE_BIND_TYPE_INT64;
+		b[1].i64 = tag_id_old;
+#endif
 		be_sql_bind(conn, stmt, b, countof(b));
 		/* execute */
 		be_sql_exec_stmt(conn, stmt);
@@ -1242,6 +1328,7 @@ VALUES (?, ?, ?, ?)";
 	}
 	/* bind the params */
 	{
+#if defined __C1X
 		struct __bind_s b[4] = {{
 				.type = BE_BIND_TYPE_INT64,
 				.i64 = t->tag_id,
@@ -1255,6 +1342,17 @@ VALUES (?, ?, ?, ?)";
 				.type = BE_BIND_TYPE_DOUBLE,
 				.dbl = s,
 			}};
+#else
+		struct __bind_s b[4];
+		b[0].type = BE_BIND_TYPE_INT64;
+		b[0].i64 = t->tag_id;
+		b[1].type = BE_BIND_TYPE_INT64;
+		b[1].i64 = sec_id;
+		b[2].type = BE_BIND_TYPE_DOUBLE;
+		b[2].dbl = l;
+		b[3].type = BE_BIND_TYPE_DOUBLE;
+		b[3].dbl = s;
+#endif
 		be_sql_bind(c, stmt, b, countof(b));
 		/* execute */
 		be_sql_exec_stmt(c, stmt);
@@ -1340,10 +1438,16 @@ be_sql_get_npos(dbconn_t conn, dbobj_t tag)
 	static const char qry[] = "\
 SELECT COUNT(security_id) FROM aou_umpf_position \
 WHERE tag_id = ?";
+#if defined __C1X
 	struct __bind_s b[1] = {{
 			.type = BE_BIND_TYPE_INT64,
 			.i64 = t->tag_id,
 		}};
+#else
+	struct __bind_s b[1];
+	b[0].type = BE_BIND_TYPE_INT64;
+	b[0].i64 = t->tag_id;
+#endif
 	size_t npos = 0UL;
 
 	if ((stmt = be_sql_prep(conn, qry, countof_m1(qry))) == NULL) {
@@ -1353,11 +1457,17 @@ WHERE tag_id = ?";
 	be_sql_bind(conn, stmt, b, countof(b));
 	/* execute */
 	if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
+#if defined __C1X
 		struct __bind_s rb[1] = {{
 				.type = BE_BIND_TYPE_INT64,
 				/* default value */
 				.i64 = 0UL,
 			}};
+#else
+		struct __bind_s rb[1];
+		rb[0].type = BE_BIND_TYPE_INT64;
+		rb[0].i64 = 0UL;
+#endif
 		be_sql_fetch(conn, stmt, rb, countof(rb));
 		npos = rb[0].i64;
 	}
@@ -1376,11 +1486,16 @@ be_sql_get_pos(
 SELECT short, long_qty, short_qty FROM aou_umpf_position \
 LEFT JOIN aou_umpf_security USING (security_id) \
 WHERE tag_id = ?";
+#if defined __C1X
 	struct __bind_s b[1] = {{
 			.type = BE_BIND_TYPE_INT64,
 			.i64 = t->tag_id,
 		}};
-
+#else
+	struct __bind_s b[1];
+	b[0].type = BE_BIND_TYPE_INT64;
+	b[0].i64 = t->tag_id;
+#endif
 	if ((stmt = be_sql_prep(conn, qry, countof_m1(qry))) == NULL) {
 		return;
 	}
@@ -1437,6 +1552,7 @@ UPDATE aou_umpf_security SET description = ? WHERE security_id = ?";
 
 	/* bind the params */
 	{
+#if defined __C1X
 		struct __bind_s b[2] = {{
 				.type = BE_BIND_TYPE_TEXT,
 				.txt = descr.data,
@@ -1445,6 +1561,14 @@ UPDATE aou_umpf_security SET description = ? WHERE security_id = ?";
 				.type = BE_BIND_TYPE_INT64,
 				.i64 = sec_id,
 			}};
+#else
+		struct __bind_s b[2];
+		b[0].type = BE_BIND_TYPE_TEXT,
+		b[0].txt = descr.data,
+		b[0].len = descr.size,
+		b[1].type = BE_BIND_TYPE_INT64,
+		b[1].i64 = sec_id,
+#endif
 		be_sql_bind(conn, stmt, b, countof(b));
 		be_sql_exec_stmt(conn, stmt);
 		be_sql_fin(conn, stmt);
@@ -1481,6 +1605,7 @@ UPDATE aou_umpf_security SET description = ? WHERE security_id = ?";
 
 	/* bind the params */
 	{
+#if defined __C1X
 		struct __bind_s b[2] = {{
 				.type = BE_BIND_TYPE_TEXT,
 				.txt = descr.data,
@@ -1489,6 +1614,14 @@ UPDATE aou_umpf_security SET description = ? WHERE security_id = ?";
 				.type = BE_BIND_TYPE_INT64,
 				.i64 = sec_id,
 			}};
+#else
+		struct __bind_s b[2];
+		b[0].type = BE_BIND_TYPE_TEXT;
+		b[0].txt = descr.data;
+		b[0].len = descr.size;
+		b[1].type = BE_BIND_TYPE_INT64;
+		b[1].i64 = sec_id;
+#endif
 		be_sql_bind(conn, stmt, b, countof(b));
 		be_sql_exec_stmt(conn, stmt);
 		be_sql_fin(conn, stmt);
@@ -1524,18 +1657,30 @@ SELECT description FROM aou_umpf_security WHERE security_id = ?";
 
 	/* bind the params */
 	{
+#if defined __C1X
 		struct __bind_s b[1] = {{
 				.type = BE_BIND_TYPE_INT64,
 				.i64 = sec_id,
 			}};
+#else
+		struct __bind_s b[1];
+		b[0].type = BE_BIND_TYPE_INT64;
+		b[0].i64 = sec_id;
+#endif
 		/* bind + exec */
 		be_sql_bind(conn, stmt, b, countof(b));
 		if (LIKELY(be_sql_exec_stmt(conn, stmt) == 0)) {
+#if defined __C1X
 			struct __bind_s rb[1] = {{
 					.type = BE_BIND_TYPE_TEXT,
 					/* default value */
 					.ptr = NULL,
 				}};
+#else
+			struct __bind_s rb[1];
+			rb[0].type = BE_BIND_TYPE_TEXT;
+			rb[0].ptr = NULL;
+#endif
 			be_sql_fetch(conn, stmt, rb, countof(rb));
 			res.data = rb[0].ptr;
 			res.size = rb[0].len;
