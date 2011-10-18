@@ -46,6 +46,18 @@ AC_PROG_CC_C_O
 SXE_CHECK_CFLAGS
 LT_INIT
 
+## check for working c1x features
+SXE_CHECK_ANON_STRUCTS([
+	AC_DEFINE([__C1X], [1], [Whether c1x work])
+	], [
+	AC_MSG_WARN([C compiler unusable
+
+Your compiler does not fully support c1x anonymous structs/unions.
+Change either the CFLAGS or the compiler.
+Good day.
+])
+])
+
 AC_CHECK_HEADERS([stdbool.h])
 AC_CHECK_HEADERS([fcntl.h])
 
