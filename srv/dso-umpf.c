@@ -47,6 +47,7 @@
 #include <unserding/unserding-cfg.h>
 #include <unserding/module.h>
 #include <unserding/tcp-unix.h>
+#include <unserding/logger.h>
 
 #include "umpf.h"
 #include "nifty.h"
