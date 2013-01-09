@@ -1,8 +1,8 @@
 /*** dso-umpf.c -- portfolio daemon
  *
- * Copyright (C) 2011 Sebastian Freundt
+ * Copyright (C) 2011-2013  Sebastian Freundt
  *
- * Author:  Sebastian Freundt <sebastian.freundt@ga-group.nl>
+ * Author:  Sebastian Freundt <freundt@ga-group.nl>
  *
  * This file is part of the army of unserding daemons.
  * 
