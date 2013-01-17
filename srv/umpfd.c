@@ -1,4 +1,4 @@
-/*** dso-umpf.c -- portfolio daemon
+/*** umpfd.c -- portfolio daemon
  *
  * Copyright (C) 2011-2013  Sebastian Freundt
  *
@@ -34,7 +34,6 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  ***/
-
 #if defined HAVE_CONFIG_H
 # include "config.h"
 #endif	/* HAVE_CONFIG_H */
@@ -42,15 +41,26 @@
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
-
-#include <unserding/unserding-ctx.h>
-#include <unserding/unserding-cfg.h>
-#include <unserding/module.h>
-#include <unserding/tcp-unix.h>
-#include <unserding/logger.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <netinet/in.h>
+#if defined HAVE_EV_H
+# include <ev.h>
+# undef EV_P
+# define EV_P  struct ev_loop *loop __attribute__((unused))
+#endif	/* HAVE_EV_H */
 
 #include "umpf.h"
+#include "logger.h"
+#include "configger.h"
+#include "ud-sock.h"
+#include "ud-sockaddr.h"
+#include "gq.h"
 #include "nifty.h"
+
+#if !defined IPPROTO_IPV6
+# error umpf needs ipv6 to work
+#endif	/* IPPROTO_IPV6 */
 
 /* get rid of sql guts */
 #if defined HARD_INCLUDE_be_sql
@@ -61,10 +71,27 @@
 #endif	/* HARD_INCLUDE_be_sql */
 #include "be-sql.h"
 
-/* we assume unserding with logger feature */
-#define UMPF_INFO_LOG(args...)	UD_SYSLOG(LOG_INFO, UMPF_MOD " " args)
-#define UMPF_ERR_LOG(args...)	UD_SYSLOG(LOG_ERR, UMPF_MOD " ERROR " args)
-#define UMPF_CRIT_LOG(args...)	UD_SYSLOG(LOG_CRIT, UMPF_MOD " CRITICAL " args)
+#define UMPF_MOD		"[mod/gand]"
+#define UMPF_INFO_LOG(args...)				\
+	do {						\
+		UMPF_SYSLOG(LOG_INFO, UMPF_MOD " " args);	\
+		UMPF_DEBUG("INFO " args);		\
+	} while (0)
+#define UMPF_ERR_LOG(args...)					\
+	do {							\
+		UMPF_SYSLOG(LOG_ERR, UMPF_MOD " ERROR " args);	\
+		UMPF_DEBUG("ERROR " args);			\
+	} while (0)
+#define UMPF_CRIT_LOG(args...)						\
+	do {								\
+		UMPF_SYSLOG(LOG_CRIT, UMPF_MOD " CRITICAL " args);	\
+		UMPF_DEBUG("CRITICAL " args);				\
+	} while (0)
+#define UMPF_NOTI_LOG(args...)						\
+	do {								\
+		UMPF_SYSLOG(LOG_NOTICE, UMPF_MOD " NOTICE " args);	\
+		UMPF_DEBUG("NOTICE " args);				\
+	} while (0)
 
 /* auto-sparsity assumes that positions set are just a subset of the whole
  * portfolio, and any positions not mentioned are taken over from the
@@ -75,8 +102,203 @@
  * for instance when interest rates or price data is captured */
 #define UMPF_AUTO_PRUNE		1
 
+
+/* the connection queue */
+typedef struct ev_io_q_s *ev_io_q_t;
+typedef struct ev_qio_s *ev_qio_t;
+
+struct ev_io_q_s {
+	struct gq_s q[1];
+};
+
+struct ev_qio_s {
+	struct gq_item_s i;
+	ev_io w[1];
+	/* ctx used for blob parser */
+	union {
+		umpf_ctx_t ctx;
+		size_t nwr;
+	};
+	/* reply buffer, pointer and size */
+	char *rsp;
+	size_t rsz;
+};
+
 /* global database connexion object */
 static dbconn_t umpf_dbconn;
+
+
+/* aux */
+#include "gq.c"
+
+static struct ev_io_q_s ioq = {0};
+
+static ev_qio_t
+make_qio(void)
+{
+	ev_qio_t res;
+
+	if (ioq.q->free->i1st == NULL) {
+		size_t nitems = ioq.q->nitems / sizeof(*res);
+
+		assert(ioq.q->free->ilst == NULL);
+		UMPF_DEBUG("IOQ RESIZE -> %zu\n", nitems + 16);
+		init_gq(ioq.q, sizeof(*res), nitems + 16);
+		/* we don't need to rebuild our items */
+	}
+	/* get us a new client and populate the object */
+	res = (void*)gq_pop_head(ioq.q->free);
+	memset(res, 0, sizeof(*res));
+	return res;
+}
+
+static void
+free_io(ev_qio_t io)
+{
+	gq_push_tail(ioq.q->free, (gq_item_t)io);
+	return;
+}
+
+static void
+ev_io_shut(EV_P_ ev_io *w)
+{
+	int fd = w->fd;
+
+	ev_io_stop(EV_A_ w);
+	shutdown(fd, SHUT_RDWR);
+	close(fd);
+	w->fd = -1;
+	return;
+}
+
+static void
+ev_qio_shut(EV_P_ ev_io *w)
+{
+/* attention, W *must* come from the ev io queue */
+	ev_qio_t qio = w->data;
+
+	ev_io_shut(EV_A_ w);
+	free_io(qio);
+	return;
+}
+
+static void
+log_conn(int fd, ud_const_sockaddr_t sa)
+{
+	static char abuf[INET6_ADDRSTRLEN];
+	short unsigned int p;
+
+	ud_sockaddr_ntop(abuf, sizeof(abuf), sa);
+	p = ud_sockaddr_port(sa);
+	UMPF_INFO_LOG(":sock %d connect :from [%s]:%d\n", fd, abuf, p);
+	return;
+}
+
+
+/* stuff from former unserding */
+static int
+make_unix_conn(const char *path)
+{
+	static struct sockaddr_un __s = {
+		.sun_family = AF_LOCAL,
+	};
+	volatile int s;
+	size_t sz;
+
+	if (UNLIKELY((s = socket(PF_LOCAL, SOCK_STREAM, 0)) < 0)) {
+		return s;
+	}
+
+	/* bind a name now */
+	strncpy(__s.sun_path, path, sizeof(__s.sun_path));
+	__s.sun_path[sizeof(__s.sun_path) - 1] = '\0';
+
+	/* The size of the address is
+	   the offset of the start of the filename,
+	   plus its length,
+	   plus one for the terminating null byte.
+	   Alternatively you can just do:
+	   size = SUN_LEN (&name); */
+	sz = offsetof(struct sockaddr_un, sun_path) + strlen(__s.sun_path) + 1;
+
+	/* just unlink the socket */
+	unlink(path);
+	/* we used to retry upon failure, but who cares */
+	if (bind(s, (struct sockaddr*)&__s, sz) < 0) {
+		goto fuck;
+	}
+	if (listen(s, 2) < 0) {
+		goto fuck;
+	}
+	/* allow the whole world to connect to us */
+	chmod(path, 0777);
+	return s;
+
+fuck:
+	close(s);
+	unlink(path);
+	return -1;
+}
+
+static int
+make_tcp_conn(uint16_t port)
+{
+	struct sockaddr_in6 __sa6 = {
+		.sin6_family = AF_INET6,
+		.sin6_addr = IN6ADDR_ANY_INIT,
+		.sin6_port = htons(port),
+	};
+	volatile int s;
+
+	if (UNLIKELY((s = socket(PF_INET6, SOCK_STREAM, 0)) < 0)) {
+		return -1;
+	}
+
+#if defined IPV6_V6ONLY
+	setsockopt_int(s, IPPROTO_IPV6, IPV6_V6ONLY, 0);
+#endif	/* IPV6_V6ONLY */
+#if defined IPV6_USE_MIN_MTU
+	/* use minimal mtu */
+	setsockopt_int(s, IPPROTO_IPV6, IPV6_USE_MIN_MTU, 1);
+#endif
+#if defined IPV6_DONTFRAG
+	/* rather drop a packet than to fragment it */
+	setsockopt_int(s, IPPROTO_IPV6, IPV6_DONTFRAG, 1);
+#endif
+#if defined IPV6_RECVPATHMTU
+	/* obtain path mtu to send maximum non-fragmented packet */
+	setsockopt_int(s, IPPROTO_IPV6, IPV6_RECVPATHMTU, 1);
+#endif
+	setsock_reuseaddr(s);
+	setsock_reuseport(s);
+
+	/* we used to retry upon failure, but who cares */
+	if (bind(s, (struct sockaddr*)&__sa6, sizeof(__sa6)) < 0 ||
+	    listen(s, 2) < 0) {
+		close(s);
+		return -1;
+	}
+	return s;
+}
+
+static void
+write_pidfile(const char *pidfile)
+{
+	char str[32];
+	pid_t pid;
+	size_t len;
+	int fd;
+
+	if ((pid = getpid()) &&
+	    (len = snprintf(str, sizeof(str) - 1, "%d\n", pid)) &&
+	    (fd = open(pidfile, O_RDWR | O_CREAT | O_TRUNC, 0644)) >= 0) {
+		write(fd, str, len);
+		close(fd);
+	} else {
+		UMPF_ERR_LOG("Could not write pid file %s\n", pidfile);
+	}
+	return;
+}
 
 
 /* connexion<->proto glue */
@@ -132,14 +354,6 @@ lst_tag_cb(uint64_t tid, time_t tm, void *clo)
 	(*msg)->lst_tag.tags[idx].stamp = tm;
 	(*msg)->lst_tag.ntags++;
 	/* don't stop on our kind, request more grub */
-	return 0;
-}
-
-static int
-wr_fin_cb(ud_conn_t UNUSED(c), char *buf, size_t UNUSED(bsz), void *UNUSED(d))
-{
-	UMPF_DEBUG("finished writing buf %p\n", buf);
-	free(buf);
 	return 0;
 }
 
@@ -401,9 +615,9 @@ interpret_msg(char **buf, umpf_msg_t msg)
  * Take the stuff in MSG of size MSGLEN coming from FD and process it.
  * Return values <0 cause the handler caller to close down the socket. */
 static int
-handle_data(ud_conn_t c, char *msg, size_t msglen, void *data)
+handle_data(ev_qio_t qio, char *msg, size_t msglen)
 {
-	umpf_ctx_t p = data;
+	umpf_ctx_t p = qio->ctx;
 	umpf_msg_t umsg;
 
 	UMPF_DEBUG("/ctx: %p %zu\n", c, msglen);
@@ -416,43 +630,46 @@ handle_data(ud_conn_t c, char *msg, size_t msglen, void *data)
 		/* definite success */
 		char *buf = NULL;
 		size_t len;
-		ud_conn_t wr = NULL;
 
 		/* serialise, put results in BUF*/
-		if ((len = interpret_msg(&buf, umsg)) &&
-		    (wr = ud_write_soon(c, buf, len, wr_fin_cb))) {
-			UMPF_DEBUG(
-				"installing buf wr'er %p %p\n",
-				wr, buf);
-			ud_conn_put_data(wr, buf);
-			return 0;
+		if ((len = interpret_msg(&buf, umsg))) {
+			qio->rsp = buf;
+			qio->rsz = len;
+			UMPF_DEBUG("requesting write buffer\n");
 		}
-		p = NULL;
+		qio->ctx = NULL;
+		/* request connection close and writing of data */
+		return 1;
 
 	} else if (/* umsg == NULL && */p == NULL) {
 		/* error occurred */
 		UMPF_DEBUG("ERROR\n");
-	} else {
-		UMPF_DEBUG("need more grub\n");
+		/* request connection close */
+		return -1;
 	}
-	ud_conn_put_data(c, p);
+	UMPF_DEBUG("need more grub\n");
+	qio->ctx = p;
 	return 0;
 }
 
 static int
-handle_close(ud_conn_t c, void *data)
+handle_close(ev_qio_t qio)
 {
+	umpf_ctx_t p = qio->ctx;
+
 	UMPF_DEBUG("forgetting about %p\n", c);
-	if (data) {
+	if (p != NULL) {
 		/* finalise the push parser to avoid mem leaks */
-		umpf_msg_t msg = umpf_parse_blob_r(&data, data, 0);
+		umpf_msg_t msg = umpf_parse_blob_r(&p, p, 0);
 
 		if (UNLIKELY(msg != NULL)) {
 			/* sigh */
 			umpf_free_msg(msg);
 		}
 	}
-	ud_conn_put_data(c, NULL);
+	if (qio->rsp != NULL) {
+		free(qio->rsp);
+	}
 	return 0;
 }
 
@@ -463,131 +680,573 @@ handle_close(ud_conn_t c, void *data)
 #endif	/* HARD_INCLUDE_be_sql */
 
 
-static const char *umpf_sock_path = NULL;
-
-static ud_conn_t
-umpf_init_uds_sock(ud_ctx_t ctx, void *settings)
+/* callbacks */
+static void
+dccp_dtwr_cb(EV_P_ ev_io *w, int UNUSED(re))
 {
-	udcfg_tbl_lookup_s(&umpf_sock_path, ctx, settings, "sock");
-	return make_unix_conn(umpf_sock_path, handle_data, handle_close, NULL);
-}
+	ev_qio_t qio = w->data;
+	ssize_t nwr;
+	const char *buf = qio->rsp + qio->nwr;
+	size_t bsz = qio->rsz - qio->nwr;
 
-static ud_conn_t
-umpf_init_net_sock(ud_ctx_t ctx, void *settings)
-{
-	int port;
-
-	port = udcfg_tbl_lookup_i(ctx, settings, "port");
-	return make_tcp_conn(port, handle_data, handle_close, NULL);
-}
-
-static dbconn_t
-umpf_init_be_sql(ud_ctx_t ctx, void *s)
-{
-	const char *host;
-	const char *user;
-	const char *pass;
-	const char *sch;
-	const char *db_file;
-	void *db;
-	dbconn_t conn;
-
-	if ((udcfg_tbl_lookup_s(&db_file, ctx, s, "db"), db_file) != NULL) {
-		/* must be sqlite then */
-		return be_sql_open(NULL, NULL, NULL, db_file);
-
-	} else if ((db = udcfg_tbl_lookup(ctx, s, "db")) == NULL) {
-		/* must be bollocks */
-		return NULL;
+	if (UNLIKELY((nwr = write(w->fd, buf, bsz)) <= 0) ||
+	    LIKELY((qio->nwr += nwr) >= qio->rsz)) {
+		/* something's fucked or everything's written */
+		qio->ctx = NULL;
+		goto clo;
 	}
-	/* otherwise it's a group of specs */
-	if ((udcfg_tbl_lookup_s(&db_file, ctx, db, "file"), db_file) != NULL) {
-		/* sqlite again */
-		conn = be_sql_open(NULL, NULL, NULL, db_file);
+	/* just keep a note of how much is left */
+	qio->nwr += nwr;
+	return;
 
-	} else if ((udcfg_tbl_lookup_s(&host, ctx, db, "host"), host) &&
-		   (udcfg_tbl_lookup_s(&user, ctx, db, "user"), user) &&
-		   (udcfg_tbl_lookup_s(&pass, ctx, db, "pass"), pass) &&
-		   (udcfg_tbl_lookup_s(&sch, ctx, db, "schema"), sch)) {
-		/* must be mysql */
-		conn = be_sql_open(host, user, pass, sch);
+clo:
+	handle_close(qio);
+	ev_qio_shut(EV_A_ w);
+	return;
+}
 
+static void
+dccp_data_cb(EV_P_ ev_io *w, int UNUSED(re))
+{
+	static char buf[4096];
+	ev_qio_t qio = w->data;
+	ssize_t nrd;
+	ssize_t nwr;
+
+	if (UNLIKELY((nrd = read(w->fd, buf, sizeof(buf))) <= 0)) {
+		goto clo;
+	} else if (LIKELY((size_t)nrd < sizeof(buf))) {
+		buf[nrd] = '\0';
 	} else {
-		/* must be utter bollocks */
-		conn = NULL;
+		/* uh oh, mega request, wtf? */
+		buf[sizeof(buf) - 1] = '\0';
 	}
-	/* free our settings */
-	udcfg_tbl_free(ctx, db);
-	return conn;
+
+	/* see what the handler makes of it */
+	if (handle_data(qio, buf, nrd) == 0) {
+		/* connection shall not be closed */
+		return;
+	}
+	/* check if we want stuff written */
+	if (qio->rsp != NULL &&
+	    (nwr = write(w->fd, qio->rsp, qio->rsz)) < (ssize_t)qio->rsz) {
+		ev_qio_t qwr = make_qio();
+
+		UMPF_DEBUG("instantiating write buffer\n");
+		ev_io_init(qwr->w, dccp_dtwr_cb, w->fd, EV_WRITE);
+		qwr->w->data = qwr;
+		ev_io_start(EV_A_ qwr->w);
+
+		/* we've done nwr bytes already */
+		qwr->nwr = nwr > 0 ? (size_t)nwr : 0U;
+		/* move rsp/rsz pair to qwr */
+		qwr->rsp = qio->rsp;
+		qwr->rsz = qio->rsz;
+		qio->rsp = NULL;
+		qio->rsz = 0UL;
+	} else if (qio->rsp != NULL) {
+		UMPF_DEBUG("no write buffer needed\n");
+	}
+
+clo:
+	/* notify the blob parser about the conn close */
+	handle_close(qio);
+	ev_qio_shut(EV_A_ w);
+	return;
+}
+
+static void
+dccp_cb(EV_P_ ev_io *w, int UNUSED(re))
+{
+	union ud_sockaddr_u sa;
+	socklen_t sasz = sizeof(sa);
+	ev_qio_t qio;
+	int s;
+
+	if ((s = accept(w->fd, &sa.sa, &sasz)) < 0) {
+		return;
+	}
+	log_conn(s, &sa);
+
+	qio = make_qio();
+	ev_io_init(qio->w, dccp_data_cb, s, EV_READ);
+	qio->w->data = qio;
+	ev_io_start(EV_A_ qio->w);
+	return;
+}
+
+static void
+sigint_cb(EV_P_ ev_signal *UNUSED(w), int UNUSED(revents))
+{
+	UMPF_NOTI_LOG("C-c caught, unrolling everything\n");
+	ev_unloop(EV_A_ EVUNLOOP_ALL);
+	return;
+}
+
+static void
+sigpipe_cb(EV_P_ ev_signal *UNUSED(w), int UNUSED(revents))
+{
+	UMPF_NOTI_LOG("SIGPIPE caught, doing nothing\n");
+	return;
+}
+
+static void
+sighup_cb(EV_P_ ev_signal *UNUSED(w), int UNUSED(revents))
+{
+	UMPF_NOTI_LOG("SIGHUP caught, doing nothing\n");
+	return;
 }
 
 
-/* unserding bindings */
-static ud_conn_t __cnet = NULL;
-static ud_conn_t __cuds = NULL;
+/* config glue */
+struct dbnfo_s {
+	enum {
+		DBNFO_UNK,
+		DBNFO_SQLITE,
+		DBNFO_MYSQL,
+	} t;
+	union {
+		char *h;
+		char *f;
+	};
+	char *u;
+	char *p;
+	char *s;
+};
+
+#define GLOB_CFG_PRE	"/etc/unserding"
+#if !defined MAX_PATH_LEN
+# define MAX_PATH_LEN	64
+#endif	/* !MAX_PATH_LEN */
+
+/* do me properly */
+static const char cfg_glob_prefix[] = GLOB_CFG_PRE;
+
+#if defined USE_LUA
+/* that should be pretty much the only mention of lua in here */
+static const char cfg_file_name[] = "umpf.lua";
+#endif	/* USE_LUA */
+
+static void
+umpf_expand_user_cfg_file_name(char *tgt)
+{
+	char *p;
+	const char *homedir = getenv("HOME");
+	size_t homedirlen = strlen(homedir);
+
+	/* get the user's home dir */
+	memcpy(tgt, homedir, homedirlen);
+	p = tgt + homedirlen;
+	*p++ = '/';
+	*p++ = '.';
+	strncpy(p, cfg_file_name, sizeof(cfg_file_name));
+	return;
+}
+
+static void
+umpf_expand_glob_cfg_file_name(char *tgt)
+{
+	char *p;
+
+	/* get the user's home dir */
+	strncpy(tgt, cfg_glob_prefix, sizeof(cfg_glob_prefix));
+	p = tgt + sizeof(cfg_glob_prefix);
+	*p++ = '/';
+	strncpy(p, cfg_file_name, sizeof(cfg_file_name));
+	return;
+}
+
+static cfg_t
+umpf_read_config(const char *user_cf)
+{
+	char cfgf[MAX_PATH_LEN];
+	cfg_t cfg;
+
+        UMPF_DEBUG("reading configuration from config file ...");
+
+	/* we prefer the user's config file, then fall back to the
+	 * global config file if that's not available */
+	if (user_cf != NULL && (cfg = configger_init(user_cf)) != NULL) {
+		UMPF_DBGCONT("done\n");
+		return cfg;
+	}
+
+	umpf_expand_user_cfg_file_name(cfgf);
+	if (cfgf != NULL && (cfg = configger_init(cfgf)) != NULL) {
+		UMPF_DBGCONT("done\n");
+		return cfg;
+	}
+
+	/* otherwise there must have been an error */
+	umpf_expand_glob_cfg_file_name(cfgf);
+	if (cfgf != NULL && (cfg = configger_init(cfgf)) != NULL) {
+		UMPF_DBGCONT("done\n");
+		return cfg;
+	}
+	UMPF_DBGCONT("failed\n");
+	return NULL;
+}
+
+static void
+umpf_free_config(cfg_t ctx)
+{
+	if (ctx != NULL) {
+		configger_fini(ctx);
+	}
+	return;
+}
+
+/* high level */
+static char*
+umpf_get_sock(cfg_t ctx)
+{
+	cfgset_t *cs;
+	size_t rsz;
+	const char *res = NULL;
+
+	if (UNLIKELY(ctx == NULL)) {
+		goto dflt;
+	}
+
+	/* start out with an empty target */
+	for (size_t i = 0, n = cfg_get_sets(&cs, ctx); i < n; i++) {
+		if ((rsz = cfg_tbl_lookup_s(&res, ctx, cs[i], "sock"))) {
+			goto out;
+		}
+	}
+
+	/* otherwise try the root domain */
+	if ((rsz = cfg_glob_lookup_s(&res, ctx, "sock"))) {
+		goto out;
+	}
+
+	/* otherwise we'll construct it from the trolfdir */
+dflt:
+	return NULL;
+
+out:
+	/* make sure the return value is freeable */
+	return strndup(res, rsz);
+}
+
+static uint16_t
+umpf_get_port(cfg_t ctx)
+{
+	cfgset_t *cs;
+	int res;
+
+	if (UNLIKELY(ctx == NULL)) {
+		goto dflt;
+	}
+
+	/* start out with an empty target */
+	for (size_t i = 0, n = cfg_get_sets(&cs, ctx); i < n; i++) {
+		if ((res = cfg_tbl_lookup_i(ctx, cs[i], "port"))) {
+			goto out;
+		}
+	}
+
+	/* otherwise try the root domain */
+	res = cfg_glob_lookup_i(ctx, "port");
+
+out:
+	if (res > 0 && res < 65536) {
+		return (uint16_t)res;
+	}
+dflt:
+	return 0U;
+}
+
+static struct dbnfo_s
+__get_dbnfo(cfg_t ctx, cfgset_t s)
+{
+	struct dbnfo_s res = {DBNFO_UNK};
+	const char *tmp;
+	void *db;
+
+	if ((cfg_tbl_lookup_s(&tmp, ctx, s, "db"), tmp) != NULL) {
+		/* must be sqlite then */
+		res.f = strdup(tmp);
+		res.t = DBNFO_SQLITE;
+		goto out;
+
+	} else if ((db = cfg_tbl_lookup(ctx, s, "db")) == NULL) {
+		/* must be bollocks */
+		goto out;
+
+	} else if ((cfg_tbl_lookup_s(&tmp, ctx, db, "file"), tmp) != NULL) {
+		/* sqlite again */
+		res.f = strdup(tmp);
+		res.t = DBNFO_SQLITE;
+
+	} else {
+		res.t = DBNFO_MYSQL;
+		if ((cfg_tbl_lookup_s(&tmp, ctx, db, "host"), tmp)) {
+			res.h = strdup(tmp);
+		}
+		if ((cfg_tbl_lookup_s(&tmp, ctx, db, "user"), tmp)) {
+			res.u = strdup(tmp);
+		}
+		if ((cfg_tbl_lookup_s(&tmp, ctx, db, "pass"), tmp)) {
+			res.p = strdup(tmp);
+		}
+		if ((cfg_tbl_lookup_s(&tmp, ctx, db, "schema"), tmp)) {
+			res.s = strdup(tmp);
+		}
+	}
+	/* free our settings */
+	cfg_tbl_free(ctx, db);
+
+out:
+	return res;
+}
+
+static struct dbnfo_s
+umpf_get_dbnfo(cfg_t ctx)
+{
+	struct dbnfo_s res = {DBNFO_UNK};
+	cfgset_t *cs;
+
+	for (size_t i = 0, n = cfg_get_sets(&cs, ctx); i < n; i++) {
+		if ((res = __get_dbnfo(ctx, cs[i]), res.t) != DBNFO_UNK) {
+			break;
+		}
+	}
+	return res;
+}
+
+
+#if defined __INTEL_COMPILER
+# pragma warning (disable:593)
+# pragma warning (disable:181)
+#endif	/* __INTEL_COMPILER */
+#include "umpfd-clo.h"
+#include "umpfd-clo.c"
+#if defined __INTEL_COMPILER
+# pragma warning (default:593)
+# pragma warning (default:181)
+#endif	/* __INTEL_COMPILER */
+
 void *umpf_logout;
 
-void
-init(void *clo)
+static int
+daemonise(void)
 {
-	ud_ctx_t ctx = clo;
-	void *settings;
+	int fd;
+	pid_t pid;
 
-	UMPF_INFO_LOG("loading aou-umpf module");
-
-	/* glue to lua settings */
-	if ((settings = udctx_get_setting(ctx)) == NULL) {
-		UMPF_ERR_LOG("settings could not be read\n");
-		return;
+	switch (pid = fork()) {
+	case -1:
+		return -1;
+	case 0:
+		break;
+	default:
+		UMPF_NOTI_LOG("Successfully bore a squaller: %d\n", pid);
+		exit(0);
 	}
-	/* obtain the unix domain sock from our settings */
-	__cuds = umpf_init_uds_sock(ctx, settings);
-	/* obtain port number for our network socket */
-	__cnet = umpf_init_net_sock(ctx, settings);
-	/* connect to our database */
-	umpf_dbconn = umpf_init_be_sql(ctx, settings);
 
-	UMPF_INFO_LOG("successfully loaded\n");
-
-#if defined DEBUG_FLAG
-	umpf_logout = stderr;
-#else  /* !DEBUG_FLAG */
+	if (setsid() == -1) {
+		return -1;
+	}
+	for (int i = getdtablesize(); i>=0; --i) {
+		/* close all descriptors */
+		close(i);
+	}
+	if (LIKELY((fd = open("/dev/null", O_RDWR, 0)) >= 0)) {
+		(void)dup2(fd, STDIN_FILENO);
+		(void)dup2(fd, STDOUT_FILENO);
+		(void)dup2(fd, STDERR_FILENO);
+		if (fd > STDERR_FILENO) {
+			(void)close(fd);
+		}
+	}
 	umpf_logout = fopen("/dev/null", "w");
-#endif	/* DEBUG_FLAG */
-
-	/* clean up */
-	udctx_set_setting(ctx, NULL);
-	return;
+	return 0;
 }
 
-void
-reinit(void *UNUSED(clo))
+int
+main(int argc, char *argv[])
 {
-	UMPF_INFO_LOG("reloading aou-umpf module ... done");
-	return;
-}
+	/* use the default event loop unless you have special needs */
+	struct ev_loop *loop;
+	static ev_signal ALGN16(sigint_watcher)[1];
+	static ev_signal ALGN16(sighup_watcher)[1];
+	static ev_signal ALGN16(sigterm_watcher)[1];
+	static ev_signal ALGN16(sigpipe_watcher)[1];
+	/* our communication sockets */
+	ev_io lstn[2];
+	/* prep timer */
+	ev_prepare prp[1];
+	/* args */
+	struct gengetopt_args_info argi[1];
+	/* our take on args */
+	int daemonisep = 0;
+	struct dbnfo_s db;
+	char *sock;
+	uint16_t port;
+	cfg_t cfg;
 
-void
-deinit(void *UNUSED(clo))
-{
-	UMPF_INFO_LOG("unloading aou-umpf module");
-	if (__cnet) {
-		ud_conn_fini(__cnet);
+	/* whither to log */
+	umpf_logout = stderr;
+
+	/* parse the command line */
+	if (cmdline_parser(argc, argv, argi)) {
+		exit(1);
 	}
-	if (__cuds) {
-		ud_conn_fini(__cuds);
+
+	/* evaluate argi */
+	daemonisep |= argi->daemon_flag;
+
+	/* try and read the context file */
+	if ((cfg = umpf_read_config(argi->config_arg)) == NULL) {
+		;
+	} else {
+		daemonisep |= cfg_glob_lookup_b(cfg, "daemonise");
 	}
-	/* unlink the unix domain socket */
-	if (umpf_sock_path != NULL) {
-		unlink(umpf_sock_path);
+
+	/* run as daemon, do me properly */
+	if (daemonisep && daemonise() < 0) {
+		perror("daemonisation failed");
+		exit(1);
 	}
+
+	/* start them log files */
+	umpf_openlog();
+
+	/* write a pid file? */
+	{
+		const char *pidf;
+
+		if ((argi->pidfile_given && (pidf = argi->pidfile_arg)) ||
+		    (cfg && cfg_glob_lookup_s(&pidf, cfg, "pidfile") > 0)) {
+			/* command line has precedence */
+			write_pidfile(pidf);
+		}
+	}
+
+	/* get the sock name and tcp host/port */
+	sock = umpf_get_sock(cfg);
+	port = umpf_get_port(cfg);
+	db = umpf_get_dbnfo(cfg);
+
+	/* free cmdline parser goodness */
+	cmdline_parser_free(argi);
+	/* kick the config context */
+	umpf_free_config(cfg);
+
+	/* initialise the main loop */
+	loop = ev_default_loop(EVFLAG_AUTO);
+
+	/* initialise a sig C-c handler */
+	ev_signal_init(sigint_watcher, sigint_cb, SIGINT);
+	ev_signal_start(EV_A_ sigint_watcher);
+	/* initialise a sig C-c handler */
+	ev_signal_init(sigpipe_watcher, sigpipe_cb, SIGPIPE);
+	ev_signal_start(EV_A_ sigpipe_watcher);
+	/* initialise a SIGTERM handler */
+	ev_signal_init(sigterm_watcher, sigint_cb, SIGTERM);
+	ev_signal_start(EV_A_ sigterm_watcher);
+	/* initialise a SIGHUP handler */
+	ev_signal_init(sighup_watcher, sighup_cb, SIGHUP);
+	ev_signal_start(EV_A_ sighup_watcher);
+
+	/* stuff that was formerly in dso_init() */
+	if (port) {
+		int s;
+
+		if ((s = make_tcp_conn(port)) < 0) {
+			perror("cannot bind tcp port");
+			lstn[0].fd = -1;
+		} else {
+			ev_io_init(lstn + 0, dccp_cb, s, EV_READ);
+			ev_io_start(EV_A_ lstn + 0);
+		}
+	}
+
+	if (sock != NULL) {
+		int s;
+
+		if ((s = make_unix_conn(sock)) < 0) {
+			perror("cannot bind unix socket");
+			lstn[1].fd = -1;
+		} else {
+			ev_io_init(lstn + 1, dccp_cb, s, EV_READ);
+			ev_io_start(EV_A_ lstn + 1);
+		}
+	}
+
+	/* connect to our database */
+	switch (db.t) {
+	case DBNFO_UNK:
+	default:
+		break;
+	case DBNFO_SQLITE:
+		umpf_dbconn = be_sql_open(NULL, NULL, NULL, db.f);
+		break;
+	case DBNFO_MYSQL:
+		umpf_dbconn = be_sql_open(db.h, db.u, db.p, db.s);
+		break;
+	}
+
+	UMPF_NOTI_LOG("umpfd ready\n");
+
+	/* now wait for events to arrive */
+	ev_loop(EV_A_ 0);
+
+	UMPF_NOTI_LOG("shutting down umpfd\n");
+
+	/* stop them post poll hooks */
+	ev_prepare_stop(EV_A_ prp);
+
+	/* destroy the default evloop */
+	ev_default_destroy();
+
+	/* stuff that was in dso_deinit() formerly */
+	if (lstn[0].fd >= 0) {
+		ev_io_shut(EV_A_ lstn + 0);
+	}
+	if (lstn[1].fd >= 0) {
+		ev_io_shut(EV_A_ lstn + 1);
+	}
+
 	/* close our db connection */
 	if (umpf_dbconn) {
 		be_sql_close(umpf_dbconn);
+		switch (db.t) {
+		case DBNFO_UNK:
+		default:
+			break;
+		case DBNFO_SQLITE:
+			free(db.f);
+			break;
+		case DBNFO_MYSQL:
+			if (db.h) {
+				free(db.h);
+			}
+			if (db.u) {
+				free(db.u);
+			}
+			if (db.p) {
+				free(db.p);
+			}
+			if (db.s) {
+				free(db.s);
+			}
+			break;
+		}
 	}
+	/* unlink the unix domain socket */
+	if (sock != NULL) {
+		unlink(sock);
+		free(sock);
+	}
+
+	/* close our log output */
+	fflush(umpf_logout);
 	fclose(umpf_logout);
-	UMPF_INFO_LOG("aou-umpf successfully unloaded");
-	return;
+	umpf_closelog();
+	/* unloop was called, so exit */
+	return 0;
 }
 
-/* dso-umpf.c ends here */
+/* umpfd.c ends here */
