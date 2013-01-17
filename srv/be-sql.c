@@ -49,13 +49,31 @@
 #include "nifty.h"
 #include "be-sql.h"
 
-#define BE_SQL		"/sql"
-#define BE_MOD		UMPF_MOD BE_SQL
+#if defined UMPF_MOD
+# define BE_SQL		"/sql"
+# define BE_MOD		UMPF_MOD BE_SQL
 
 /* we assume unserding with logger feature */
-#define BESQL_INFO_LOG(args...)	UD_SYSLOG(LOG_INFO, BE_MOD " " args)
-#define BESQL_ERR_LOG(args...)	UD_SYSLOG(LOG_ERR, BE_MOD " ERROR " args)
-#define BESQL_CRIT_LOG(args...)	UD_SYSLOG(LOG_CRIT, BE_MOD " CRITICAL " args)
+# define BESQL_INFO_LOG(args...)			\
+	do {						\
+		UMPF_SYSLOG(LOG_INFO, BE_MOD " " args);	\
+		UMPF_DEBUG("BE INFO " args);		\
+	} while (0)
+# define BESQL_ERR_LOG(args...)					\
+	do {							\
+		UMPF_SYSLOG(LOG_ERR, BE_MOD " ERROR " args);	\
+		UMPF_DEBUG("BE ERROR " args);			\
+	} while (0)
+# define BESQL_CRIT_LOG(args...)					\
+	do {								\
+		UMPF_SYSLOG(LOG_CRIT, BE_MOD " CRITICAL " args);	\
+		UMPF_DEBUG("BE CRITICAL " args);			\
+	} while (0)
+#else  /* !UMPF_MOD */
+# define BESQL_INFO_LOG(args...)
+# define BESQL_ERR_LOG(args...)
+# define BESQL_CRIT_LOG(args...)
+#endif	/* UMPF_MOD */
 
 typedef void *dbstmt_t;
 
