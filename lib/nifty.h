@@ -80,9 +80,9 @@
 #if defined DEBUG_FLAG
 # include <stdio.h>
 # define UMPF_DEBUG(args...)			\
-	fprintf(gand_logout, "[gand] " args)
+	fprintf(umpf_logout, "[gand] " args)
 # define UMPF_DBGCONT(args...)			\
-	fprintf(gand_logout, args)
+	fprintf(umpf_logout, args)
 #else  /* !DEBUG_FLAG */
 # define UMPF_DEBUG(args...)
 # define UMPF_DBGCONT(args...)
