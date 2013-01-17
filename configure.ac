@@ -44,7 +44,6 @@ AC_PROG_CC([icc gcc tcc cc])
 SXE_CHECK_CC([c11 c1x c99 gnu99])
 AC_C_BIGENDIAN
 SXE_CHECK_CFLAGS
-LT_INIT
 
 ## check for working c11 features
 SXE_CHECK_ANON_STRUCTS_DECL
@@ -72,6 +71,12 @@ popdef([use_libxml2])
 ## check for lua
 PKG_CHECK_MODULES([LUA], [lua >= 5.1.0])
 AM_CONDITIONAL([HAVE_LUA], [test -n "${LUA_LIBS}"])
+
+dnl must come after all AC_LINK_IFELSE clauses
+## check for the ldflags
+SXE_CHECK_LDFLAGS
+SXE_CHECK_LIBTOOL
+
 
 ## just so we know what to build
 AC_ARG_ENABLE([server], [
