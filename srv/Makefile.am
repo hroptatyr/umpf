@@ -30,6 +30,7 @@ umpfd_LDFLAGS += $(unserding_LIBS)
 umpfd_CPPFLAGS += $(libev_CFLAGS)
 umpfd_LDFLAGS += $(libev_LIBS)
 EXTRA_umpfd_SOURCES += be-sql.c be-sql.h
+EXTRA_umpfd_SOURCES += gq.c gq.h
 if HAVE_LUA
 umpfd_SOURCES += lua-config.c lua-config.h
 umpfd_CPPFLAGS += -DUSE_LUA $(lua_CFLAGS)
