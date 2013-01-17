@@ -21,6 +21,7 @@ noinst_HEADERS += nifty.h
 noinst_HEADERS += umpf-private.h
 noinst_HEADERS += epoll-helpers.h
 noinst_HEADERS += ud-sock.h
+noinst_HEADERS += ud-sockaddr.h
 libumpf_la_SOURCES =
 EXTRA_libumpf_la_SOURCES =
 libumpf_la_SOURCES += umpf.c umpf.h

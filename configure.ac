@@ -62,8 +62,8 @@ fi
 popdef([use_libxml2])
 
 ## check for lua
-PKG_CHECK_MODULES([LUA], [lua >= 5.1.0])
-AM_CONDITIONAL([HAVE_LUA], [test -n "${LUA_LIBS}"])
+PKG_CHECK_MODULES([lua], [lua >= 5.1.0])
+AM_CONDITIONAL([HAVE_LUA], [test -n "${lua_LIBS}"])
 
 dnl must come after all AC_LINK_IFELSE clauses
 ## check for the ldflags
