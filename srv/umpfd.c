@@ -1159,6 +1159,8 @@ main(int argc, char *argv[])
 			ev_io_init(lstn + 0, dccp_cb, s, EV_READ);
 			ev_io_start(EV_A_ lstn + 0);
 		}
+	} else {
+		lstn[0].fd = -1;
 	}
 
 	if (sock != NULL) {
@@ -1171,6 +1173,8 @@ main(int argc, char *argv[])
 			ev_io_init(lstn + 1, dccp_cb, s, EV_READ);
 			ev_io_start(EV_A_ lstn + 1);
 		}
+	} else {
+		lstn[1].fd = -1;
 	}
 
 	/* connect to our database */
