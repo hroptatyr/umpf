@@ -1,8 +1,8 @@
-dnl sxe-events.m4 -- Event queue and things like that
+dnl sxe-libev.m4 -- Event queue and things like that
 dnl
-dnl Copyright (C) 2005, 2006, 2007, 2008 Sebastian Freundt
+dnl Copyright (C) 2005-2013 Sebastian Freundt
 dnl
-dnl Author: Sebastian Freundt <hroptatyr@sxemacs.org>
+dnl Author: Sebastian Freundt <freundt@ga-group.nl>
 dnl
 dnl Redistribution and use in source and binary forms, with or without
 dnl modification, are permitted provided that the following conditions
@@ -31,46 +31,31 @@ dnl WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
 dnl OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 dnl IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 dnl
-dnl This file is part of SXEmacs.
+dnl This file is part of twsgluum
 
 AC_DEFUN([SXE_CHECK_LIBEV], [
-	## defines sxe_cv_feat_libev
-	SXE_CHECK_HEADERS([ev.h])
-	## we dont need a lib, so fuck this
-	dnl SXE_CHECK_LIB_FUNCS([ev], [ev_loop])
+dnl Usage: SXE_CHECK_LIBEV([ACTION_IF_FOUND], [ACTION_IF_NOT_FOUND])
+dnl   def: sxe_cv_feat_libev yes|no
 
-	if test "$ac_cv_header_ev_h" = "yes"; then
-		AC_DEFINE([HAVE_LIBEV], [1], [Whether libev is fully functional])
-		sxe_cv_feat_libev="yes"
-		have_libev="yes"
-		LIBEV_CPPFLAGS=
-		LIBEV_LDFLAGS=
-		LIBEV_LIBS=""
-	else
+	AC_CACHE_VAL([sxe_cv_feat_libev], [
 		sxe_cv_feat_libev="no"
-		have_libev="no"
-		LIBEV_CPPFLAGS=
-		LIBEV_LDFLAGS=
-		LIBEV_LIBS=
-	fi
+		PKG_CHECK_MODULES_HEADERS([libev], [libev >= 4.0], [ev.h], [
+			sxe_cv_feat_libev="yes"
+			$1
+		], [
+			## grrr, for all the distros without an libev.pc file
+			AC_CHECK_HEADERS([ev.h])
 
-	AC_SUBST([LIBEV_CPPFLAGS])
-	AC_SUBST([LIBEV_LDFLAGS])
-	AC_SUBST([LIBEV_LIBS])
+			if test "${ac_cv_header_ev_h}" = "yes"; then
+				## assume expat is out there somewhere
+				sxe_cv_feat_libev="yes"
+				libev_LIBS="-lev"
+				libev_CFLAGS=""
+			else
+				$2
+				AC_MSG_ERROR([lib headers not found])
+			fi
+		])
+	])
+
 ])dnl SXE_CHECK_LIBEV
-
-AC_DEFUN([SXE_CHECK_EVENTS], [dnl
-	SXE_MSG_CHECKING([for event drivers])
-
-	SXE_CHECK_LIBEV
-	SXE_CHECK_SUFFICIENCY([libev], [libev])
-
-	## assume we havent got any of prerequisites
-	have_events="no"
-
-	have_events="yes"
-
-	SXE_MSG_RESULT([$have_events])
-])dnl SXE_CHECK_EVENTS
-
-dnl sxe-events.m4 ends here
