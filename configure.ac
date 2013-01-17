@@ -40,23 +40,15 @@ if test -z "${CFLAGS}"; then
 fi
 
 ## the build chain
-AC_PROG_CC([icc gcc cc])
-AC_PROG_CC_C99
-AC_PROG_CC_C_O
+AC_PROG_CC([icc gcc tcc cc])
+SXE_CHECK_CC([c11 c1x c99 gnu99])
+AC_C_BIGENDIAN
 SXE_CHECK_CFLAGS
 LT_INIT
 
-## check for working c1x features
-SXE_CHECK_ANON_STRUCTS([
-	AC_DEFINE([__C1X], [1], [Whether c1x work])
-	], [
-	AC_MSG_WARN([C compiler unusable
-
-Your compiler does not fully support c1x anonymous structs/unions.
-Change either the CFLAGS or the compiler.
-Good day.
-])
-])
+## check for working c11 features
+SXE_CHECK_ANON_STRUCTS_DECL
+SXE_CHECK_ANON_STRUCTS_INIT
 
 AC_CHECK_HEADERS([stdbool.h])
 AC_CHECK_HEADERS([fcntl.h])
