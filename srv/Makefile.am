@@ -1,39 +1,54 @@
 ### Makefile.am
 
-AM_CPPFLAGS = -D_GNU_SOURCE -D_POSIX_C_SOURCE=201001L -D__USE_XOPEN2K8
+AM_CPPFLAGS = -D_GNU_SOURCE -D_POSIX_C_SOURCE=201001L -D_XOPEN_SOURCE=600
 AM_LDFLAGS =
 
 bin_PROGRAMS =
+sbin_PROGRAMS =
 noinst_PROGRAMS =
 noinst_HEADERS =
 BUILT_SOURCES =
-CLEANFILES = $(BUILT_SOURCES)
+EXTRA_DIST = $(BUILT_SOURCES)
+CLEANFILES =
 
 if BUILD_SERVER
-moddir = $(libdir)/unserding
-mod_LTLIBRARIES = dso-umpf.la
-dso_umpf_la_SOURCES =
-EXTRA_dso_umpf_la_SOURCES =
-dso_umpf_la_LDFLAGS = -module
-dso_umpf_la_LDFLAGS += $(unserding_LDFLAGS) $(LIBXML2_LIBS)
-dso_umpf_la_LDFLAGS += $(top_builddir)/lib/.libs/libumpf.a
-dso_umpf_la_CPPFLAGS = $(AM_CPPFLAGS) $(unserding_CFLAGS)
-dso_umpf_la_CPPFLAGS += -I$(top_srcdir)/lib
-dso_umpf_la_CPPFLAGS += $(LIBXML2_CFLAGS)
-dso_umpf_la_SOURCES += dso-umpf.c
-EXTRA_dso_umpf_la_SOURCES += be-sql.c be-sql.h
+sbin_PROGRAMS += umpfd
+umpfd_SOURCES = umpfd.c
+umpfd_SOURCES += umpfd-clo.ggo
+BUILT_SOURCES += umpfd-clo.c umpfd-clo.h
+EXTRA_umpfd_SOURCES =
+umpfd_CPPFLAGS = $(AM_CPPFLAGS)
+umpfd_LDFLAGS = $(AM_LDFLAGS)
+umpfd_CPPFLAGS += -I$(top_srcdir)/lib
+umpfd_LDFLAGS += $(top_builddir)/lib/.libs/libumpf.a
+umpfd_CPPFLAGS += $(LIBXML2_CFLAGS)
+umpfd_LDFLAGS += $(LIBXML2_LIBS)
+umpfd_CPPFLAGS += $(unserding_CFLAGS)
+umpfd_LDFLAGS += $(unserding_LIBS)
+umpfd_CPPFLAGS += $(libev_CFLAGS)
+umpfd_LDFLAGS += $(libev_LIBS)
+EXTRA_umpfd_SOURCES += be-sql.c be-sql.h
+if HAVE_LUA
+umpfd_SOURCES += lua-config.c lua-config.h
+umpfd_CPPFLAGS += -DUSE_LUA $(lua_CFLAGS)
+umpfd_LDFLAGS += $(lua_LIBS)
+endif  HAVE_LUA
 ## database goodness
 if USE_MYSQL
-dso_umpf_la_LDFLAGS += $(MYSQL_LDFLAGS)
-dso_umpf_la_CPPFLAGS +=  $(MYSQL_CPPFLAGS)
-endif
+umpfd_LDFLAGS += $(MYSQL_LDFLAGS)
+umpfd_CPPFLAGS +=  $(MYSQL_CPPFLAGS)
+endif  ## USE_MYSQL
 if USE_SQLITE
-dso_umpf_la_LDFLAGS += $(sqlite_LIBS)
-dso_umpf_la_CPPFLAGS +=  $(sqlite_CFLAGS)
-endif
-dso_umpf_la_CPPFLAGS += -DHARD_INCLUDE_be_sql
-endif ## BUILD_SERVER
+umpfd_LDFLAGS += $(sqlite_LIBS)
+umpfd_CPPFLAGS +=  $(sqlite_CFLAGS)
+endif  ## USE_SQLITE
+umpfd_CPPFLAGS += -DHARD_INCLUDE_be_sql
+endif  ## BUILD_SERVER
 
+
+## our rule for gengetopt
+%.c %.h: %.ggo
+	$(AM_V_GEN) gengetopt -l -i $< -F $*
 
 # 
 # Help the developers get nice post-processed source files
