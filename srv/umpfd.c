@@ -1075,8 +1075,6 @@ main(int argc, char *argv[])
 	static ev_signal ALGN16(sigpipe_watcher)[1];
 	/* our communication sockets */
 	ev_io lstn[2];
-	/* prep timer */
-	ev_prepare prp[1];
 	/* args */
 	struct gengetopt_args_info argi[1];
 	/* our take on args */
@@ -1194,9 +1192,6 @@ main(int argc, char *argv[])
 	ev_loop(EV_A_ 0);
 
 	UMPF_NOTI_LOG("shutting down umpfd\n");
-
-	/* stop them post poll hooks */
-	ev_prepare_stop(EV_A_ prp);
 
 	/* destroy the default evloop */
 	ev_default_destroy();
