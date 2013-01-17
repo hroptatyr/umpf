@@ -1197,9 +1197,6 @@ main(int argc, char *argv[])
 
 	UMPF_NOTI_LOG("shutting down umpfd\n");
 
-	/* destroy the default evloop */
-	ev_default_destroy();
-
 	/* stuff that was in dso_deinit() formerly */
 	if (lstn[0].fd >= 0) {
 		ev_io_shut(EV_A_ lstn + 0);
@@ -1207,6 +1204,9 @@ main(int argc, char *argv[])
 	if (lstn[1].fd >= 0) {
 		ev_io_shut(EV_A_ lstn + 1);
 	}
+
+	/* destroy the default evloop */
+	ev_default_destroy();
 
 	/* close our db connection */
 	if (umpf_dbconn) {
