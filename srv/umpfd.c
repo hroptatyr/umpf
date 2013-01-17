@@ -620,7 +620,7 @@ handle_data(ev_qio_t qio, char *msg, size_t msglen)
 	umpf_ctx_t p = qio->ctx;
 	umpf_msg_t umsg;
 
-	UMPF_DEBUG("/ctx: %p %zu\n", c, msglen);
+	UMPF_DEBUG("/ctx: %p %zu\n", p, msglen);
 #if defined DEBUG_FLAG
 	/* safely write msg to logerr now */
 	fwrite(msg, msglen, 1, umpf_logout);
@@ -657,7 +657,7 @@ handle_close(ev_qio_t qio)
 {
 	umpf_ctx_t p = qio->ctx;
 
-	UMPF_DEBUG("forgetting about %p\n", c);
+	UMPF_DEBUG("forgetting about %p\n", p);
 	if (p != NULL) {
 		/* finalise the push parser to avoid mem leaks */
 		umpf_msg_t msg = umpf_parse_blob_r(&p, p, 0);
