@@ -1,8 +1,8 @@
 /*** nifty.h -- generally handy macroes
  *
- * Copyright (C) 2009 Sebastian Freundt
+ * Copyright (C) 2009-2013 Sebastian Freundt
  *
- * Author:  Sebastian Freundt <sebastian.freundt@ga-group.nl>
+ * Author:  Sebastian Freundt <freundt@ga-group.nl>
  *
  * This file is part of unserding.
  *
@@ -77,11 +77,10 @@
 # define xfree(_x)	free(_x)
 #endif	/* !xfree */
 
-#define UMPF_MOD		"[mod/umpf]"
 #if defined DEBUG_FLAG
 # include <stdio.h>
 # define UMPF_DEBUG(args...)			\
-	fprintf(umpf_logout, UMPF_MOD " " args)
+	fprintf(umpf_logout, "[gand] " args)
 # define UMPF_DBGCONT(args...)			\
 	fprintf(umpf_logout, args)
 #else  /* !DEBUG_FLAG */
@@ -92,6 +91,18 @@
 /* fixme, any chance we can get that one from the server? */
 extern void *umpf_logout;
 
+/* just a service for mmap based allocators */
+#if !defined MAP_ANON && defined MAP_ANONYMOUS
+# define MAP_ANON	MAP_ANONYMOUS
+#endif	/* MAP_ANON && !MAP_ANONYMOUS */
+#if !defined MAP_MEM
+# define MAP_MEM	(MAP_PRIVATE | MAP_ANON)
+#endif	/* MAP_MEM */
+#if !defined PROT_MEM
+# define PROT_MEM	(PROT_READ | PROT_WRITE)
+#endif	/* PROT_MEM */
+
+
 static inline void
 safe_xfree(void *ptr)
 {
