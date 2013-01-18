@@ -666,6 +666,7 @@ handle_close(ev_qio_t qio)
 			/* sigh */
 			umpf_free_msg(msg);
 		}
+		qio->ctx = p;
 	}
 	if (qio->rsp != NULL) {
 		free(qio->rsp);
