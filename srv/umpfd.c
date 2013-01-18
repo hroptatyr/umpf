@@ -644,6 +644,7 @@ handle_data(ev_qio_t qio, char *msg, size_t msglen)
 	} else if (/* umsg == NULL && */p == NULL) {
 		/* error occurred */
 		UMPF_DEBUG("ERROR\n");
+		qio->ctx = NULL;
 		/* request connection close */
 		return -1;
 	}
@@ -666,6 +667,7 @@ handle_close(ev_qio_t qio)
 			/* sigh */
 			umpf_free_msg(msg);
 		}
+		qio->ctx = p;
 	}
 	if (qio->rsp != NULL) {
 		free(qio->rsp);
