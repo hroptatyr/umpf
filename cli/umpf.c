@@ -614,7 +614,7 @@ umpf_repl(const char *buf, size_t bsz, volatile int sock, bool verbp, bool rawp)
 	ep_prep_et_rdwr(epg, sock);
 
 	while ((nfds = ep_wait(epg, timeout)) > 0) {
-		typeof(epg->ev[0].events) ev = epg->ev[0].events;
+		const uint32_t ev = epg->ev[0].events;
 		int fd = epg->ev[0].data.fd;
 
 		/* we've only asked for one, so it would be peculiar */
