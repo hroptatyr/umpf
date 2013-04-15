@@ -15,7 +15,6 @@ if BUILD_SERVER
 sbin_PROGRAMS += umpfd
 umpfd_SOURCES = umpfd.c
 umpfd_SOURCES += umpfd-clo.ggo
-BUILT_SOURCES += umpfd-clo.c umpfd-clo.h
 EXTRA_umpfd_SOURCES =
 umpfd_SOURCES += logger.h
 umpfd_SOURCES += configger.c configger.h
@@ -46,6 +45,7 @@ endif  ## USE_SQLITE
 umpfd_CPPFLAGS += -DHARD_INCLUDE_be_sql
 endif  ## BUILD_SERVER
 
+BUILT_SOURCES += umpfd-clo.c umpfd-clo.h
 
 ## our rule for gengetopt
 %.c %.h: %.ggo
