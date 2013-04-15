@@ -11,6 +11,7 @@ EXTRA_DIST =
 EXTRA_DIST += mysql.m4
 EXTRA_DIST += sqlite3.m4
 EXTRA_DIST += $(SQL_TMPL)
+MAINTAINERCLEANFILES = $(SQL_OUT)
 
 SQL_TMPL = uninstall.sql.in install.sql.in
 SQL_OUT = install-mysql.sql install-sqlite3.sql
