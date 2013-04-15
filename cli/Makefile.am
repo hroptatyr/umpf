@@ -26,9 +26,10 @@ umpp_SOURCES += umpp-meld-clo.ggo umpp-meld-clo.c
 umpp_LDFLAGS = -static
 umpp_LDADD = -lm
 umpp_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/lib
+endif ## BUILD_CLIAPPS
+
 BUILT_SOURCES += umpp-clo.c umpp-clo.h
 BUILT_SOURCES += umpp-meld-clo.c umpp-meld-clo.h
-endif ## BUILD_CLIAPPS
 
 GGO_HELPERS += __gengetopt-no-failure.sed
 
