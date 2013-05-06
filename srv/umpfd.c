@@ -721,7 +721,7 @@ dccp_data_cb(EV_P_ ev_io *w, int UNUSED(re))
 		buf[nrd] = '\0';
 	} else {
 		/* uh oh, mega request, wtf? */
-		buf[sizeof(buf) - 1] = '\0';
+		;
 	}
 
 	/* see what the handler makes of it */
