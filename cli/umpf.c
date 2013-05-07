@@ -1348,7 +1348,7 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 					continue;
 				} else if (strcmp(p, "version") == 0) {
 					clo->cmd = UMPF_CMD_VERSION;
-					continue;
+					return;
 				} else if (strcmp(p, "dry-run") == 0) {
 					clo->dryp = 1;
 					continue;
