@@ -268,6 +268,8 @@ Supported commands:\n\
 \n\
 ";
 
+static int timeout = 2000;
+
 
 /* network bollocks */
 static void
@@ -601,7 +603,6 @@ pretty_print(umpf_msg_t msg)
 static int
 umpf_repl(const char *buf, size_t bsz, volatile int sock, bool verbp, bool rawp)
 {
-	const int timeout = 2000;
 	ep_ctx_t epg;
 	int nfds;
 	/* track the number of bytes written */
