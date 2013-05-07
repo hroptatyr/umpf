@@ -210,6 +210,7 @@ Options common to all commands:\n\
                         Can also point to a unix domain socket in\n\
                         which case a file name is expected.\n\
                         Also the form `hostname:port' is supported.\n\
+      --timeout=MSEC    Timeout for umpf connections in milliseconds.\n\
   -n, --dry-run         Textually print the message that would have\n\
                         been sent to the server.\n\
   -r, --raw             Print messages received from the server in\n\
@@ -267,6 +268,8 @@ Supported commands:\n\
   del-tag NAME TAG           Delete TAG from portfolio NAME\n\
 \n\
 ";
+
+static int timeout = 2000;
 
 
 /* network bollocks */
@@ -601,7 +604,6 @@ pretty_print(umpf_msg_t msg)
 static int
 umpf_repl(const char *buf, size_t bsz, volatile int sock, bool verbp, bool rawp)
 {
-	const int timeout = 2000;
 	ep_ctx_t epg;
 	int nfds;
 	/* track the number of bytes written */
@@ -1345,16 +1347,19 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 					continue;
 				} else if (strcmp(p, "version") == 0) {
 					clo->cmd = UMPF_CMD_VERSION;
-					return;
+					continue;
 				} else if (strcmp(p, "dry-run") == 0) {
 					clo->dryp = 1;
-					return;
+					continue;
 				} else if (strcmp(p, "raw") == 0) {
 					clo->rawp = 1;
-					return;
+					continue;
 				} else if (strcmp(p, "verbose") == 0) {
 					clo->verbosep = 1;
-					return;
+					continue;
+				} else if (strncmp(p, "timeout", 7U) == 0) {
+					timeout = strtol(argv[++i], NULL, 10);
+					continue;
 				}
 				break;
 			case 'V':
