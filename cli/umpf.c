@@ -210,6 +210,7 @@ Options common to all commands:\n\
                         Can also point to a unix domain socket in\n\
                         which case a file name is expected.\n\
                         Also the form `hostname:port' is supported.\n\
+      --timeout=MSEC    Timeout for umpf connections in milliseconds.\n\
   -n, --dry-run         Textually print the message that would have\n\
                         been sent to the server.\n\
   -r, --raw             Print messages received from the server in\n\
@@ -1356,6 +1357,9 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 				} else if (strcmp(p, "verbose") == 0) {
 					clo->verbosep = 1;
 					return;
+				} else if (strncmp(p, "timeout", 7U) == 0) {
+					timeout = strtol(argv[++i], NULL, 10);
+					continue;
 				}
 				break;
 			case 'V':
