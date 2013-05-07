@@ -211,6 +211,7 @@ Options common to all commands:\n\
                         which case a file name is expected.\n\
                         Also the form `hostname:port' is supported.\n\
       --timeout=MSEC    Timeout for umpf connections in milliseconds.\n\
+                        Default: 20000 ms.\n\
   -n, --dry-run         Textually print the message that would have\n\
                         been sent to the server.\n\
   -r, --raw             Print messages received from the server in\n\
@@ -269,7 +270,7 @@ Supported commands:\n\
 \n\
 ";
 
-static int timeout = 2000;
+static int timeout = 20000;
 
 
 /* network bollocks */
