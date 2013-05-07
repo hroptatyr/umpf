@@ -1347,16 +1347,16 @@ parse_args(struct __clo_s *clo, int argc, char *argv[])
 					continue;
 				} else if (strcmp(p, "version") == 0) {
 					clo->cmd = UMPF_CMD_VERSION;
-					return;
+					continue;
 				} else if (strcmp(p, "dry-run") == 0) {
 					clo->dryp = 1;
-					return;
+					continue;
 				} else if (strcmp(p, "raw") == 0) {
 					clo->rawp = 1;
-					return;
+					continue;
 				} else if (strcmp(p, "verbose") == 0) {
 					clo->verbosep = 1;
-					return;
+					continue;
 				} else if (strncmp(p, "timeout", 7U) == 0) {
 					timeout = strtol(argv[++i], NULL, 10);
 					continue;
